@@ -69,23 +69,23 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
     ]
     return (
         <div className='h-full w-full md:w-3/4 flex justify-center'>
-            <div className='scroll h-full w-full bg-neutral-600 rounded-2xl overflow-y-auto p-5 relative'>
+            <div className='scroll h-full w-full border border-orange-500 rounded-2xl overflow-y-auto overflow-x-hidden p-5 relative'>
                 <button
                     onClick={onClose}
-                    className='fixed right-10 md:right-33 lg:top-7 lg:right-60 bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 z-10'
+                    className='fixed right-10 md:right-33 lg:top-7 lg:right-60 text-white px-3 py-1 text-2xl  hover:text-orange-500 transition-all duration-300 font-semibold cursor-pointer rounded z-10'
                 >
                     X
                 </button>
                 <div className='py-7 pr-5'>
                     {exercisesData.map((group, idx) => (
                         <div key={idx} className='flex flex-col font-mono mb-5'>
-                            <h1 className='font-bold text-3xl px-5'>{group.category}</h1>
-                            <div className='px-10 pt-3 font-bold text-lg cursor-pointer'>
+                            <h1 className='font-bold text-3xl text-orange-600'>{group.category}</h1>
+                            <div className='pt-3 font-bold text-lg cursor-pointer'>
                                 {group.items.map((exercise, idx2) => (
                                     <h3
                                         key={idx2}
                                         onClick={() => onSelectExercise(exercise)}
-                                        className='hover:bg-neutral-700 hover:shadow-lg transition-all px-3 py-2 rounded-lg  whitespace-nowrap'
+                                        className='hover:bg-orange-500/10 hover:text-orange-400 hover:border-l-2 hover:border-orange-500 hover:pl-4 transition-all duration-200 px-3 py-2 rounded-lg whitespace-nowrap cursor-pointer'
                                     >
                                         {exercise}
                                     </h3>

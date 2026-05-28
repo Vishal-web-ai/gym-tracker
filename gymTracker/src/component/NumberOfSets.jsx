@@ -13,7 +13,7 @@ const NumberOfSets = ({ reps, setReps, idx }) => {
                 value={reps}
                 onChange={handleChange}
                 placeholder='R'
-                className='w-7 h-7 bg-green-500 text-black rounded-lg text-center font-bold outline-none placeholder-neutral-500'
+                className='w-7 h-7 bg-black text-orange-500 rounded-lg text-center font-bold outline-none placeholder-orange-500'
             />
         </div>
     )

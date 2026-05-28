@@ -3,7 +3,7 @@ import HomeScreen from './component/HomeScreen'
 
 const App = () => {
   return (
-    <div className='w-screen h-screen bg-black'>
+    <div className='w-screen h-screen'>
       <HomeScreen />
     </div>
   )

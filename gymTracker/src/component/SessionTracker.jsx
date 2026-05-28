@@ -18,6 +18,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
         }))
     }
     const handleSave = () => {
+        if (exercises.length === 0) return
         const sessionData = {
             id: Date.now(),
             date: new Date().toLocaleDateString('en-US', {
@@ -44,16 +45,16 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                 <div className='px-7 py-7 rounded-2xl overflow-visible flex flex-col'>
                     <button
                         onClick={onAddExercises}
-                        className='lg:text-5xl text-3xl text-black bg-white text-center lg:px-3 lg:pt-3 lg:pb-4 px-3 py-2 lg:rounded-2xl rounded-xl font-semibold mb-7 cursor-pointer  active:bg-neutral-200 hover:bg-neutral-100 transition-colors'
+                        className='lg:text-5xl text-3xl text-center lg:px-3 lg:pt-3 lg:pb-4 px-3 py-2 lg:rounded-2xl rounded-xl font-bold mb-7 cursor-pointer border  border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-black transition-all duration-300'
                     >
                         Add Exercises
                     </button>
                     <div className='flex flex-col gap-3 font-semibold font-mono text-lg flex-1 scroll'>
                         {exercises.length > 0 ? (
                             exercises.map((exercise, idx) => (
-                                <div key={idx} className='flex flex-wrap items-center gap-3 bg-neutral-700 p-3 rounded-lg relative'>
-                                    <h2 className='text-white flex-1'>{exercise.name}</h2>
-                                    <div className='flex gap-3 mr-1.5 lg:gap-5 lg:mr-5'>
+                                <div key={idx} className='flex flex-col gap-3 bg-orange-500/10 border border-neutral-500 p-3 rounded-lg relative transition-all duration-300'>
+                                    <h2 className='text-orange-400 flex-1'>{exercise.name}</h2>
+                                    <div className='flex gap-5 mr-1.5 lg:gap-5 lg:mr-5'>
                                         <div>
                                             <WeightBar
                                                 id={idx}
@@ -83,20 +84,25 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                                     </div>
                                     <button
                                         onClick={() => onRemove(idx)}
-                                        className='absolute top-1 right-1 bg-red-700 text-black px-1 text-xs leading-tight rounded hover:bg-neutral-500/70 transition-colors cursor-pointer'
+                                        className='absolute top-1 right-1 px-2 py-1 text-s leading-tight rounded text-red-500 hover:text-black transition-all duration-300 cursor-pointer'
                                     >
                                         X
                                     </button>
                                 </div>
                             ))
                         ) : (
-                            <p className='text-neutral-400'>Click exercises to add them</p>
+                            <p className='text-orange-500/50 tracking-wide'>Click exercises to add them</p>
                         )}
                     </div>
                 </div>
                 <button
                     onClick={handleSave}
-                    className='bg-white text-black font-semibold px-5 py-3 text-2xl rounded-2xl cursor-pointer hover:bg-neutral-200 transition-colors active:bg-neutral-300 w-full'
+                    disabled={exercises.length === 0}
+                    className={`w-1/2 mx-auto block border border-orange-500 bg-orange-500 text-black font-bold px-5 py-3 text-5xl rounded-2xl transition-all duration-300 font-bebas
+    ${exercises.length === 0
+                            ? 'opacity-30 cursor-not-allowed'
+                            : 'cursor-pointer hover:scale-105 hover:bg-orange-400 hover:shadow-orange-500/50 hover:shadow-lg active:scale-95'
+                        }`}
                 >
                     Save
                 </button>
