@@ -15,10 +15,10 @@ const SavedSession = ({ sessions, onDelete }) => {
     return (
         <>
             {sessions.map((session) => (
-                <div key={session.id} className='mb-3'>
+                <div key={session._id} className='mb-3'>
                     <div
                         onClick={() =>
-                            setExpandedId(expandedId === session.id ? null : session.id)
+                            setExpandedId(expandedId === session._id ? null : session._id)
                         }
                         className='bg-orange-500/10 border border-orange-500/30 hover:border-orange-500/70 hover:bg-orange-500/15 p-4 rounded-xl cursor-pointer transition-all duration-300'
                     >
@@ -34,7 +34,7 @@ const SavedSession = ({ sessions, onDelete }) => {
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation()
-                                    onDelete(session.id)
+                                    onDelete(session._id)
                                 }}
                                 className='border border-red-500/40 text-red-400 hover:bg-red-500 hover:text-black p-2 rounded-lg transition-all duration-300'
                             >
@@ -43,7 +43,7 @@ const SavedSession = ({ sessions, onDelete }) => {
                         </div>
                     </div>
 
-                    {expandedId === session.id && (
+                    {expandedId === session._id && (
                         <div className='bg-orange-500/5 border border-orange-500/20 mt-1 rounded-xl p-4 space-y-3'>
                             {session.exercises.map((ex, i) => (
                                 <div key={i} className='bg-orange-500/10 border border-orange-500/20 hover:border-orange-500/50 p-3 rounded-lg transition-all duration-300'>

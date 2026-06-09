@@ -1,21 +1,39 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { RiCloseLine } from '@remixicon/react'
 import SavedSession from './SavedSession'
+import api from '../services/api'
+
 const Humberger = ({ isOpen, onClose }) => {
     const [sessions, setSessions] = useState([])
+    const [loading, setLoading] = useState(false)
+
     useEffect(() => {
         if (isOpen) {
-            setSessions(JSON.parse(localStorage.getItem('gymSessions') || '[]'))
+            fetchSessions()
         }
     }, [isOpen])
-    const refreshSessions = () => {
-        setSessions(JSON.parse(localStorage.getItem('gymSessions') || '[]'))
+
+    const fetchSessions = async () => {
+        setLoading(true)
+        try {
+            const res = await api.get('/sessions')
+            setSessions(res.data.sessions)
+        } catch (err) {
+            console.error('Failed to fetch sessions', err)
+        } finally {
+            setLoading(false)
+        }
     }
-    const handleDelete = (id) => {
-        const updated = sessions.filter(s => s.id !== id)
-        localStorage.setItem('gymSessions', JSON.stringify(updated))
-        refreshSessions()
+
+    const handleDelete = async (id) => {
+        try {
+            await api.delete(`/sessions/${id}`)
+            setSessions(prev => prev.filter(s => s._id !== id))
+        } catch (err) {
+            console.error('Failed to delete session', err)
+        }
     }
+
     return (
         <>
             {isOpen && (
@@ -36,10 +54,15 @@ const Humberger = ({ isOpen, onClose }) => {
                     />
                 </div>
                 <div className='flex-1 overflow-y-auto p-4 scroll'>
-                    <SavedSession sessions={sessions} onDelete={handleDelete} />
+                    {loading ? (
+                        <p className='text-orange-500/50 text-center font-mono'>Loading...</p>
+                    ) : (
+                        <SavedSession sessions={sessions} onDelete={handleDelete} />
+                    )}
                 </div>
             </div>
         </>
     )
 }
+
 export default Humberger
