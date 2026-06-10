@@ -6,7 +6,17 @@ const cors = require('cors')
 const app = express()
 
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: function (origin, callback) {
+        const allowedOrigins = [
+            'http://localhost:5173',
+            ...(process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean)
+        ]
+        if (!origin || allowedOrigins.some(o => origin === o || origin.endsWith('.gym-tracker-7dt.pages.dev'))) {
+            callback(null, true)
+        } else {
+            callback(null, false)
+        }
+    },
     credentials: true
 }))
 
