@@ -1,8 +1,15 @@
 const nodemailer = require('nodemailer')
+const dns = require('dns')
+
+const { promisify } = require('util')
+const resolve4 = promisify(dns.resolve4)
 
 async function sendEmail(to, subject, text) {
+    const addresses = await resolve4('smtp.gmail.com')
+    const smtpHost = addresses[0]
+
     const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
+        host: smtpHost,
         port: 587,
         secure: false,
         auth: {
