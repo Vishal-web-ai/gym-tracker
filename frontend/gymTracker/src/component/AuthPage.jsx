@@ -31,7 +31,7 @@ export default function AuthPage() {
         setError('')
         try {
             const res = await api.post('/auth/verify-otp', { email, otp })
-            login(res.data.user)
+            login(res.data.user, res.data.token)
         } catch (err) {
             setError(err.response?.data?.message || 'Invalid OTP')
         } finally {

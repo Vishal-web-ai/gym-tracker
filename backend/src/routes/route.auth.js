@@ -73,6 +73,7 @@ router.post('/verify-otp', async (req, res) => {
 
         res.json({
             message: 'Login successful',
+            token,                          // <-- ADD THIS
             user: { id: user._id, email: user.email, name: user.name }
         })
     } catch (err) {
