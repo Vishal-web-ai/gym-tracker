@@ -7,6 +7,10 @@ const sessionSchema = new mongoose.Schema({
         required: true,
         index: true
     },
+    name: {
+        type: String,
+        default: ''
+    },
     date: {
         type: String,
         required: true

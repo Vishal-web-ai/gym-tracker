@@ -4,6 +4,11 @@ import { Trash2 } from 'lucide-react'
 const SavedSession = ({ sessions, onDelete }) => {
     const [expandedId, setExpandedId] = useState(null)
 
+    const getDay = (dateStr) => {
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        return days[new Date(dateStr).getDay()]
+    }
+
     if (sessions.length === 0) {
         return (
             <p className='text-orange-500/50 text-center mt-10 font-mono tracking-wide'>
@@ -24,11 +29,11 @@ const SavedSession = ({ sessions, onDelete }) => {
                     >
                         <div className='flex items-center justify-between'>
                             <div>
-                                <h2 className='text-orange-400 font-semibold font-mono text-lg'>
-                                    {session.date}
+                                <h2 className='text-orange-400 font-bold font-mono text-lg'>
+                                    {session.name || 'Workout'}
                                 </h2>
-                                <p className='text-orange-500/50 font-mono text-sm mt-1'>
-                                    {session.exercises.map(e => e.name).join(', ')}
+                                <p className='text-orange-500/50 font-mono text-sm mt-0.5'>
+                                    {session.date}, {getDay(session.date)}
                                 </p>
                             </div>
                             <button

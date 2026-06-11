@@ -3,10 +3,9 @@ const router = express.Router()
 const Session = require('../model/model.session')
 const authenticate = require('../middlewares/auth')
 
-// Save a new session
 router.post('/', authenticate, async (req, res) => {
     try {
-        const { date, exercises } = req.body
+        const { date, name, exercises } = req.body
         if (!date || !exercises || !exercises.length) {
             return res.status(400).json({ message: 'Date and exercises are required' })
         }
@@ -14,6 +13,7 @@ router.post('/', authenticate, async (req, res) => {
         const session = await Session.create({
             user: req.user.id,
             date,
+            name: name || 'Workout',
             exercises
         })
 
@@ -24,7 +24,6 @@ router.post('/', authenticate, async (req, res) => {
     }
 })
 
-// Get all sessions for logged-in user (newest first)
 router.get('/', authenticate, async (req, res) => {
     try {
         const sessions = await Session.find({ user: req.user.id })
@@ -37,7 +36,6 @@ router.get('/', authenticate, async (req, res) => {
     }
 })
 
-// Delete a session
 router.delete('/:id', authenticate, async (req, res) => {
     try {
         const session = await Session.findOneAndDelete({
