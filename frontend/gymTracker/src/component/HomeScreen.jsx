@@ -14,6 +14,22 @@ const HomeScreen = () => {
     const [previewExercise, setPreviewExercise] = useState(null)
     const [isFromStart, setIsFromStart] = useState(false)
     const [isHamburgerOpen, setIsHamburgerOpen] = useState(false)
+    const [exerciseWeights, setExerciseWeights] = useState({})
+    const [exerciseSets, setExerciseSets] = useState({})
+
+    const setWeight = (idx, weight) => {
+        setExerciseWeights(prev => ({ ...prev, [idx]: weight }))
+    }
+
+    const setReps = (exerciseIdx, setIdx, value) => {
+        setExerciseSets(prev => ({
+            ...prev,
+            [exerciseIdx]: {
+                ...prev[exerciseIdx],
+                [setIdx]: value
+            }
+        }))
+    }
 
     const handleSelectExercise = (exercise) => {
         setPreviewExercise(exercise)
@@ -55,6 +71,8 @@ const HomeScreen = () => {
 
     const handleSessionSaved = () => {
         setSelectedExercises([])
+        setExerciseWeights({})
+        setExerciseSets({})
         setShowSession(false)
     }
 
@@ -117,6 +135,10 @@ const HomeScreen = () => {
                             onRemove={handleRemoveExercise}
                             onAddExercises={handleAddExercises}
                             onSessionSaved={handleSessionSaved}
+                            exerciseWeights={exerciseWeights}
+                            exerciseSets={exerciseSets}
+                            setWeight={setWeight}
+                            setReps={setReps}
                         />
                     )}
                 </div>

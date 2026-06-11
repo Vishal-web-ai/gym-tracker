@@ -3,24 +3,8 @@ import WeightBar from './WeightBar'
 import NumberOfSets from './NumberOfSets'
 import api from '../services/api'
 
-const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSaved }) => {
+const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSaved, exerciseWeights, exerciseSets, setWeight, setReps }) => {
     const [openDropdown, setOpenDropdown] = useState(null)
-    const [exerciseWeights, setExerciseWeights] = useState({})
-    const [exerciseSets, setExerciseSets] = useState({})
-
-    const setWeight = (idx, weight) => {
-        setExerciseWeights(prev => ({ ...prev, [idx]: weight }))
-    }
-
-    const setReps = (exerciseIdx, setIdx, value) => {
-        setExerciseSets(prev => ({
-            ...prev,
-            [exerciseIdx]: {
-                ...prev[exerciseIdx],
-                [setIdx]: value
-            }
-        }))
-    }
 
     const handleSave = async () => {
         if (exercises.length === 0) return
@@ -120,8 +104,8 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                         onClick={handleSave}
                         disabled={exercises.length === 0}
                         className={`w-full sm:w-1/2 mx-auto block border border-orange-500 bg-orange-500 text-black font-bold px-5 py-2.5 sm:py-3 text-3xl sm:text-4xl lg:text-5xl rounded-2xl transition-all duration-300 font-bebas ${exercises.length === 0
-                                ? 'opacity-30 cursor-not-allowed'
-                                : 'cursor-pointer hover:scale-105 hover:bg-orange-400 hover:shadow-orange-500/50 hover:shadow-lg active:scale-95'
+                            ? 'opacity-30 cursor-not-allowed'
+                            : 'cursor-pointer hover:scale-105 hover:bg-orange-400 hover:shadow-orange-500/50 hover:shadow-lg active:scale-95'
                             }`}
                     >
                         Save
