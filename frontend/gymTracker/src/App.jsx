@@ -15,7 +15,7 @@ function AppContent() {
     }
 
     if (!user) return <AuthPage />
-    if (!user.name) return <UserName onComplete={() => {}} />
+    if (!user.name) return <UserName onComplete={() => { }} />
     return <HomeScreen />
 }
 

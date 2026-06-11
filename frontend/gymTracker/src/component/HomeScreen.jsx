@@ -5,10 +5,9 @@ import ExercisesList from './ExercisesList'
 import SessionTracker from './SessionTracker'
 import Humberger from './Humberger'
 import ExerciseDetail from './ExerciseDetail'
-import { useAuth } from '../context/AuthContext'
+import GreetingUser from './GreetingUser'
 
 const HomeScreen = () => {
-    const { user } = useAuth()
     const [showSession, setShowSession] = useState(false)
     const [showExercisesList, setShowExercisesList] = useState(false)
     const [selectedExercises, setSelectedExercises] = useState([])
@@ -69,29 +68,25 @@ const HomeScreen = () => {
                 <div className='cursor-pointer' onClick={() => setIsHamburgerOpen(true)}>
                     <RiMenuLine color="white" size={36} className='sm:size-[50]' />
                 </div>
-                <div className='max-sm:mt-2 sm:mt-3 lg:mt-10'>
+                <div className='flex items-center mt-0'>
                     <Dumbbell size={40} className='sm:size-[60]' />
                 </div>
             </div>
 
             {!showSession ? (
                 /* Landing view */
-                <div className='flex-1 w-full flex flex-col items-center justify-center gap-6 sm:gap-8 px-6 relative z-10 pb-24 sm:pb-0'>
-                    {user?.name && (
-                        <p className='text-orange-400 text-xl sm:text-2xl lg:text-3xl font-mono mb-2'>
-                            Hello {user.name}
-                        </p>
-                    )}
+                <div className='flex-1 w-full flex flex-col items-center justify-center gap-6 sm:gap-8 px-6 relative z-10 pb-16 sm:pb-0'>
+                    <GreetingUser />
                     <h1 className='border border-orange-500 text-orange-500 tracking-wider text-center text-xl sm:text-3xl px-4 sm:px-6 py-2 rounded-2xl font-bebas'>
                         Gym Tracker
                     </h1>
-                    <h1 className='text-4xl sm:text-6xl lg:text-8xl font-inter text-center leading-tight'>
+                    <h1 className='text-4xl sm:text-6xl lg:text-7xl font-inter text-center leading-tight'>
                         What would you<br />like to do{' '}
                         <span className='font-bold text-orange-500'>today?</span>
                     </h1>
                     <button
                         onClick={handleStartClick}
-                        className='mt-4 sm:mt-8 px-6 sm:px-7 py-2 sm:py-3 text-2xl sm:text-3xl font-semibold rounded-2xl cursor-pointer border border-transparent hover:border-orange-500 hover:bg-orange-500/10 hover:text-orange-500 transition-all duration-300 flex items-center gap-3 group'
+                        className='mt-4 sm:mt-8 px-6 sm:px-7 py-2 sm:py-3 text-2xl sm:text-3xl font-semibold rounded-2xl cursor-pointer border border-orange-500 text-orange-500 transition-all duration-300 flex items-center gap-3 group'
                     >
                         Start Session
                         <span className='text-3xl sm:text-4xl font-semibold text-orange-500 tracking-[.4em] group-hover:translate-x-2 transition-transform duration-300'>
@@ -103,7 +98,7 @@ const HomeScreen = () => {
                 /* Session view */
                 <div
                     key={showExercisesList || previewExercise}
-                    className='scroll flex-1 w-full flex justify-center items-start sm:items-center p-4 sm:p-5 animate-slideUp overflow-y-auto relative z-10'
+                    className='scroll flex-1 w-full flex justify-center items-center p-4 sm:p-5 animate-slideUp overflow-y-auto relative z-10'
                 >
                     {previewExercise ? (
                         <ExerciseDetail

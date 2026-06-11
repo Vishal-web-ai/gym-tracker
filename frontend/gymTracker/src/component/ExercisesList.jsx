@@ -9,7 +9,7 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
                 { name: 'Incline Bench Press', muscle: 'Chest (Upper)', image: '/exercises/incline-bench-press.png' },
                 { name: 'Decline Bench Press', muscle: 'Chest (Lower)', image: '/exercises/decline-bench-press.png' },
                 { name: 'Machine Chest Press', muscle: 'Chest', image: '/exercises/machine-chest-press.png' },
-                { name: 'Pec Fly', muscle: 'Chest (Inner)', image: '/exercises/pec-fly.png' },
+                { name: 'Pec Fly', muscle: 'Chest', image: '/exercises/pec-fly.png' },
                 { name: 'Cable Crossover', muscle: 'Chest', image: '/exercises/cable-crossover.png' },
                 { name: 'Push-Up', muscle: 'Chest', image: '/exercises/push-up.png' },
                 { name: 'Chest Dip', muscle: 'Chest (Lower)', image: '/exercises/chest-dips.png' },
@@ -20,51 +20,45 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
         {
             category: 'Back',
             items: [
-                { name: 'Lat Pulldown', muscle: 'Lats', image: '' },
-                { name: 'Seated Cable Row', muscle: 'Middle Back', image: '' },
-                { name: 'Wide Row', muscle: 'Upper Back', image: '' },
-                { name: 'Deadlift', muscle: 'Full Back / Posterior Chain', image: '' },
-                { name: 'Barbell Row', muscle: 'Middle Back', image: '' },
-                { name: 'T-Bar Row', muscle: 'Middle Back', image: '' },
-                { name: 'Pull-Up', muscle: 'Lats', image: '' },
-                { name: 'Chin-Up', muscle: 'Lats / Biceps', image: '' },
-                { name: 'Single Arm Dumbbell Row', muscle: 'Middle Back', image: '' },
-                { name: 'Straight Arm Pulldown', muscle: 'Lats', image: '' }
+                { name: 'Lat Pulldown', muscle: 'Lats', image: '/exercises/latpull-down.png' },
+                { name: 'Seated Cable Row', muscle: 'Middle Back', image: '/exercises/seated-cable-row.png' },
+                { name: 'Wide Row', muscle: 'Upper Back', image: '/exercises/wide-back-row.png' },
+                { name: 'Deadlift', muscle: 'Full Back / Posterior Chain', image: '/exercises/deadlift.png' },
+                { name: 'Barbell Row', muscle: 'Middle Back', image: '/exercises/barbell-row.png' },
+                { name: 'T-Bar Row', muscle: 'Middle Back', image: '/exercises/t-bar-row.png' },
+                { name: 'Pull-Up', muscle: 'Lats', image: '/exercises/pull-up.png' },
+                { name: 'Single Arm Dumbbell Row', muscle: 'Middle Back', image: '/exercises/single-arm-dumbell-row.png' },
+                { name: 'Lats Pullover', muscle: 'Lats', image: '/exercises/latpull-over.png' }
             ]
         },
         {
             category: 'Biceps',
             items: [
-                { name: 'Barbell Curl', muscle: 'Biceps (Long Head)', image: '' },
-                { name: 'Dumbbell Curl', muscle: 'Biceps', image: '' },
-                { name: 'Hammer Curl', muscle: 'Brachialis / Brachioradialis', image: '' },
-                { name: 'Concentration Curl', muscle: 'Biceps (Short Head)', image: '' },
-                { name: 'Preacher Curl', muscle: 'Biceps (Lower)', image: '' },
-                { name: 'Cable Curl', muscle: 'Biceps', image: '' },
-                { name: 'Incline Dumbbell Curl', muscle: 'Biceps (Long Head)', image: '' },
-                { name: 'Spider Curl', muscle: 'Biceps', image: '' },
-                { name: 'Reverse Curl', muscle: 'Brachioradialis', image: '' }
+                { name: 'Barbell Curl', muscle: 'Biceps (Both Head)', image: '/exercises/biceps-barbellcurl.png' },
+                { name: 'Dumbbell Curl', muscle: 'Biceps (Both Head)', image: '/exercises/dumbell-curl.png' },
+                { name: 'Hammer Curl', muscle: 'Brachialis / Brachioradialis', image: '/exercises/hammer-curl.png' },
+                { name: 'Preacher Curl', muscle: 'Biceps (Short Head)', image: '/exercises/pecher-curl.png' },
+                { name: 'Cable Curl', muscle: 'Biceps', image: '/exercises/cable-curl.png' },
+                { name: 'Incline Dumbbell Curl', muscle: 'Biceps (Long Head)', image: '/exercises/incline-dumbell-curl.png' },
+                { name: 'Spider Curl', muscle: 'Biceps', image: '/exercises/spider-curl.png' },
             ]
         },
         {
             category: 'Triceps',
             items: [
-                { name: 'Tricep Pushdown', muscle: 'Triceps (Lateral Head)', image: '' },
-                { name: 'Skull Crusher', muscle: 'Triceps (Long Head)', image: '' },
-                { name: 'Overhead Tricep Extension', muscle: 'Triceps (Long Head)', image: '' },
-                { name: 'Close Grip Bench Press', muscle: 'Triceps', image: '' },
-                { name: 'Tricep Dips', muscle: 'Triceps (Lower)', image: '' },
-                { name: 'Cable Overhead Extension', muscle: 'Triceps (Long Head)', image: '' },
-                { name: 'Single Arm Pushdown', muscle: 'Triceps', image: '' },
-                { name: 'Tricep Kickback', muscle: 'Triceps', image: '' },
-                { name: 'JM Press', muscle: 'Triceps', image: '' }
+                { name: 'Tricep Extension', muscle: 'Triceps (All Heads)', image: '/exercises/triceps-pushdown.png' },
+                { name: 'Skull Crusher', muscle: 'Triceps (Long Head)', image: '/exercises/skull-crusher.png' },
+                { name: 'Overhead Tricep Extension', muscle: 'Triceps (Long Head)', image: '/exercises/overhead-tricep.png' },
+                { name: 'Single tricep Pushdown', muscle: 'Triceps', image: '/exercises/single-tricep-pushdown.png' },
             ]
         },
         {
             category: 'Arms',
             items: [
                 { name: 'Wrist Curl', muscle: 'Forearm Flexors', image: '' },
-                { name: 'Reverse Wrist Curl', muscle: 'Forearm Extensors', image: '' }
+                { name: 'Reverse Wrist Curl', muscle: 'Forearm Extensors', image: '' },
+                { name: 'Reverse Curl', muscle: 'Brachioradialis', image: '' }
+                
             ]
         },
         {
@@ -126,7 +120,7 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
             <div className='scroll h-full w-full border border-orange-500 rounded-2xl overflow-y-auto overflow-x-hidden p-5 relative'>
                 <button
                     onClick={onClose}
-                    className='fixed right-10 md:right-33 lg:top-7 lg:right-60 text-white px-3 py-1 text-2xl hover:text-orange-500 transition-all duration-300 font-semibold cursor-pointer rounded z-10'
+                    className='sticky top-0 right-0 ml-auto text-white px-3 py-1 text-2xl hover:text-orange-500 transition-all duration-300 font-semibold cursor-pointer rounded z-10 block'
                 >
                     X
                 </button>

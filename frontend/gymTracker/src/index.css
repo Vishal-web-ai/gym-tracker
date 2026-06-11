@@ -1,10 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Jost:ital,wght@0,100..900;1,100..900&family=Moon+Dance&family=Open+Sans:ital,wght@0,800;1,800&family=Oswald:wght@700&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Edu+NSW+ACT+Cursive:wght@400..700&family=Jost:ital,wght@0,100..900;1,100..900&family=Moon+Dance&family=Open+Sans:ital,wght@0,800;1,800&family=Oswald:wght@700&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');;
 @import "tailwindcss";
 
 @theme {
     --font-inter: 'Inter', sans-serif;
     --font-bebas: "Bebas Neue", sans-serif;
+    --font-cursive : "Edu NSW ACT Cursive", cursive;
 }
 
 .scroll::-webkit-scrollbar {
