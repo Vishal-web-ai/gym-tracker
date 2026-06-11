@@ -4,18 +4,31 @@ import { Dumbbell } from 'lucide-react'
 import ExercisesList from './ExercisesList'
 import SessionTracker from './SessionTracker'
 import Humberger from './Humberger'
+import ExerciseDetail from './ExerciseDetail'
+import { useAuth } from '../context/AuthContext'
 
 const HomeScreen = () => {
+    const { user } = useAuth()
     const [showSession, setShowSession] = useState(false)
     const [showExercisesList, setShowExercisesList] = useState(false)
     const [selectedExercises, setSelectedExercises] = useState([])
+    const [previewExercise, setPreviewExercise] = useState(null)
     const [isFromStart, setIsFromStart] = useState(false)
     const [isHamburgerOpen, setIsHamburgerOpen] = useState(false)
 
-    const handleSelectExercise = (exerciseName) => {
-        setSelectedExercises([...selectedExercises, { name: exerciseName }])
+    const handleSelectExercise = (exercise) => {
+        setPreviewExercise(exercise)
+    }
+
+    const handleConfirmExercise = (exercise) => {
+        setSelectedExercises([...selectedExercises, { name: exercise.name }])
+        setPreviewExercise(null)
         setShowExercisesList(false)
         setIsFromStart(false)
+    }
+
+    const handleCancelPreview = () => {
+        setPreviewExercise(null)
     }
 
     const handleRemoveExercise = (idx) => {
@@ -64,6 +77,11 @@ const HomeScreen = () => {
             {!showSession ? (
                 /* Landing view */
                 <div className='flex-1 w-full flex flex-col items-center justify-center gap-6 sm:gap-8 px-6 relative z-10 pb-24 sm:pb-0'>
+                    {user?.name && (
+                        <p className='text-orange-400 text-xl sm:text-2xl lg:text-3xl font-mono mb-2'>
+                            Hello {user.name}
+                        </p>
+                    )}
                     <h1 className='border border-orange-500 text-orange-500 tracking-wider text-center text-xl sm:text-3xl px-4 sm:px-6 py-2 rounded-2xl font-bebas'>
                         Gym Tracker
                     </h1>
@@ -84,10 +102,16 @@ const HomeScreen = () => {
             ) : (
                 /* Session view */
                 <div
-                    key={showExercisesList}
+                    key={showExercisesList || previewExercise}
                     className='scroll flex-1 w-full flex justify-center items-start sm:items-center p-4 sm:p-5 animate-slideUp overflow-y-auto relative z-10'
                 >
-                    {showExercisesList ? (
+                    {previewExercise ? (
+                        <ExerciseDetail
+                            exercise={previewExercise}
+                            onSelect={handleConfirmExercise}
+                            onBack={handleCancelPreview}
+                        />
+                    ) : showExercisesList ? (
                         <ExercisesList
                             onSelectExercise={handleSelectExercise}
                             onClose={handleCloseExercises}

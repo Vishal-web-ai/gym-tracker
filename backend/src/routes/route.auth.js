@@ -73,7 +73,7 @@ router.post('/verify-otp', async (req, res) => {
 
         res.json({
             message: 'Login successful',
-            token,                       
+            token,
             user: { id: user._id, email: user.email, name: user.name }
         })
     } catch (err) {
@@ -88,6 +88,24 @@ router.get('/me', authenticate, async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: 'User not found' })
         }
+        res.json({ user: { id: user._id, email: user.email, name: user.name } })
+    } catch (err) {
+        console.error(err)
+        res.status(500).json({ message: 'Server error' })
+    }
+})
+
+router.put('/username', authenticate, async (req, res) => {
+    try {
+        const { name } = req.body
+        if (!name || !name.trim()) {
+            return res.status(400).json({ message: 'Name is required' })
+        }
+        const user = await User.findByIdAndUpdate(
+            req.user.id,
+            { name: name.trim() },
+            { new: true }
+        )
         res.json({ user: { id: user._id, email: user.email, name: user.name } })
     } catch (err) {
         console.error(err)

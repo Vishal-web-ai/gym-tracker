@@ -17,6 +17,25 @@ const WeightBar = ({ id, openDropdown, setOpenDropdown, weight, setWeight }) => 
       </button>
       {isOpen && (
         <div className='scroll absolute top-full left-0 bg-orange-900 w-40 p-3 rounded-lg overflow-y-auto flex flex-col gap-2 mt-2 max-h-48 z-50 shadow-lg'>
+          <input
+            type='text'
+            inputMode='numeric'
+            placeholder='Custom weight...'
+            className='w-full bg-orange-700 text-white px-3 py-2 rounded-lg font-semibold outline-none placeholder-orange-300/50'
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.target.value) {
+                setWeight(id, e.target.value + 'kg')
+                setOpenDropdown(null)
+              }
+            }}
+            onBlur={(e) => {
+              if (e.target.value) {
+                setWeight(id, e.target.value + 'kg')
+                setOpenDropdown(null)
+              }
+            }}
+          />
+          <div className='border-t border-orange-700 my-1' />
           {weights.map((w) => (
             <button
               key={w}

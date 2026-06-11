@@ -9,7 +9,8 @@ const NumberOfSets = ({ reps, setReps, idx }) => {
     return (
         <div>
             <input
-                type='text'
+                type="text"
+                inputMode="numeric"
                 value={reps}
                 onChange={handleChange}
                 placeholder='R'
