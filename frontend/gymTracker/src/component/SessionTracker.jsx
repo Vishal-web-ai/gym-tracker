@@ -35,7 +35,8 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
             })
             if (onSessionSaved) onSessionSaved(workoutName.trim() || 'Workout')
         } catch (err) {
-            console.error('Failed to save session', err)
+            const msg = err.response?.data?.message || 'Failed to save session'
+            alert(msg)
         }
     }
 

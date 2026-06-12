@@ -31,7 +31,8 @@ const SavedSession = ({ sessions, onDelete, onUpdate }) => {
             if (onUpdate) onUpdate(res.data.session)
             setEditingId(null)
         } catch (err) {
-            console.error('Failed to update session name', err)
+            const msg = err.response?.data?.message || 'Failed to update name'
+            alert(msg)
         } finally {
             setSaving(false)
         }

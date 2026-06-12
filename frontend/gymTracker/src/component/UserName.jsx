@@ -16,8 +16,7 @@ export default function UserName({ onComplete }) {
         setError('')
         try {
             const res = await api.put('/auth/username', { name: name.trim() })
-            const token = localStorage.getItem('token')
-            login(res.data.user, token)
+            login(res.data.user)
             onComplete()
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to save name')
