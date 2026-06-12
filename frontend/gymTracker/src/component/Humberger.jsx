@@ -52,7 +52,8 @@ const Humberger = ({ isOpen, onClose }) => {
             updateUser(res.data.user)
             setShowNameModal(false)
         } catch (err) {
-            console.error('Failed to update name', err)
+            const msg = err.response?.data?.message || 'Failed to save name'
+            alert(msg)
         } finally {
             setSaving(false)
         }
