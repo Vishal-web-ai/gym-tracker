@@ -37,17 +37,6 @@ app.use(cookieParser())
 app.use(express.json({ limit: '1mb' }))
 app.use(express.urlencoded({ extended: false }))
 
-app.use((req, res, next) => {
-    const safeMethods = ['GET', 'HEAD', 'OPTIONS']
-    if (!safeMethods.includes(req.method)) {
-        const xrw = req.headers['x-requested-with']
-        if (xrw !== 'XMLHttpRequest' && xrw !== 'fetch') {
-            return res.status(403).json({ message: 'Forbidden' })
-        }
-    }
-    next()
-})
-
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' })
 })
