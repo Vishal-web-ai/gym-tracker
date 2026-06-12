@@ -55,62 +55,52 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
         {
             category: 'Arms',
             items: [
-                { name: 'Wrist Curl', muscle: 'Forearm Flexors', image: '' },
-                { name: 'Reverse Wrist Curl', muscle: 'Forearm Extensors', image: '' },
-                { name: 'Reverse Curl', muscle: 'Brachioradialis', image: '' }
+                { name: 'Wrist Curl', muscle: 'Back part of forearm', image: '/exercises/wrist-curl.png' },
+                { name: 'Reverse Wrist Curl', muscle: 'Front part of forearm', image: '/exercises/reverse-wrist-curl.png' },
+                { name: 'Reverse Curl', muscle: 'Brachioradialis', image: '/exercises/reverse-curl.png' }
                 
             ]
         },
         {
             category: 'Shoulders',
             items: [
-                { name: 'Overhead Press', muscle: 'Front / Side Delts', image: '' },
-                { name: 'Lateral Raises', muscle: 'Side Delts', image: '' },
-                { name: 'Rear Delt Fly', muscle: 'Rear Delts', image: '' },
-                { name: 'Arnold Press', muscle: 'All Delts', image: '' },
-                { name: 'Front Raise', muscle: 'Front Delts', image: '' },
-                { name: 'Upright Row', muscle: 'Side Delts / Traps', image: '' },
-                { name: 'Cable Lateral Raise', muscle: 'Side Delts', image: '' },
-                { name: 'Face Pull', muscle: 'Rear Delts', image: '' },
-                { name: 'Shrugs', muscle: 'Traps', image: '' },
-                { name: 'Machine Shoulder Press', muscle: 'Front / Side Delts', image: '' },
-                { name: 'Reverse Pec Deck', muscle: 'Rear Delts', image: '' }
+                { name: 'Front Raise', muscle: 'Front Delts', image: '/exercises/front-raises.png' },
+                { name: 'Overhead Press', muscle: 'Front / Side Delts', image: '/exercises/overhead-press.png' },
+                { name: 'Machine Shoulder Press', muscle: 'Front / Side Delts', image: '/exercises/machine-overhead-press.png' },
+                { name: 'Lateral Raises', muscle: 'Side Delts', image: '/exercises/lateral-raises-dumbell.png' },
+                { name: 'Cable Lateral Raises', muscle: 'Side Delts', image: '/exercises/lateral-raises-cable.png' },
+                { name: 'Upright Row', muscle: 'Side Delts / Traps', image: '/exercises/upright.png' },
+                { name: 'Rear Delt Fly', muscle: 'Rear Delts', image: '/exercises/rear-delt-fly.png' },
+                { name: 'Reverse Pec Deck', muscle: 'Rear Delts', image: '/exercises/reverse-pec-deck.png' },
+                { name: 'Face Pull', muscle: 'Rear Delts', image: '/exercises/face-pull.png' },
+                { name: 'Shrugs', muscle: 'Traps', image: '/exercises/shrugs.png' },
             ]
         },
         {
             category: 'Legs',
             items: [
-                { name: 'Leg Press', muscle: 'Quads / Glutes', image: '' },
-                { name: 'Squat', muscle: 'Quads / Glutes / Core', image: '' },
-                { name: 'Romanian Deadlift', muscle: 'Hamstrings / Glutes', image: '' },
-                { name: 'Hamstring Curl', muscle: 'Hamstrings', image: '' },
-                { name: 'Barbell Back Squat', muscle: 'Quads / Glutes', image: '' },
-                { name: 'Front Squat', muscle: 'Quads', image: '' },
-                { name: 'Bulgarian Split Squat', muscle: 'Quads / Glutes', image: '' },
-                { name: 'Leg Extension', muscle: 'Quads', image: '' },
-                { name: 'Calf Raise', muscle: 'Calves', image: '' },
-                { name: 'Hip Thrust', muscle: 'Glutes', image: '' },
-                { name: 'Sumo Squat', muscle: 'Adductors / Glutes', image: '' },
-                { name: 'Hack Squat', muscle: 'Quads', image: '' },
-                { name: 'Walking Lunges', muscle: 'Quads / Glutes', image: '' },
-                { name: 'Step-Up', muscle: 'Quads / Glutes', image: '' },
-                { name: 'Glute Kickback', muscle: 'Glutes', image: '' }
+                { name: 'Leg Press', muscle: 'Quads', image: '/exercises/leg-press.png' },
+                { name: 'Squat', muscle: 'Quads', image: '/exercises/squat.png' },
+                { name: 'Romanian Deadlift', muscle: 'Hamstrings / Glutes', image: '/exercises/rdl.png' },
+                { name: 'Hamstring Curl', muscle: 'Hamstrings', image: '/exercises/seated-ham-curl.png' },
+                { name: 'Pendulum Squat', muscle: 'Quads', image: '/exercises/pendulum-squat.png' },
+                { name: 'Bulgarian Split Squat', muscle: 'Quads', image: '/exercises/bss.png' },
+                { name: 'Leg Extension', muscle: 'Quads', image: '/exercises/leg-extention.png' },
+                { name: 'Calf Raise', muscle: 'Calves', image: '/exercises/calf-rasises.png' },
+                { name: 'Hip Thrust', muscle: 'Glutes', image: '/exercises/hip-thrust.png' },
+                { name: 'Hack Squat', muscle: 'Quads', image: '/exercises/hack-squat.png' },
+                { name: 'Walking Lunges', muscle: 'Quads / Glutes', image: '/exercises/walking-lunges.png' },
+                { name: 'Glute Kickback', muscle: 'Glutes', image: '/exercises/glutes-kickback.png' }
             ]
         },
         {
             category: 'Core',
             items: [
-                { name: 'Plank', muscle: 'Core (Overall)', image: '' },
-                { name: 'Crunch', muscle: 'Upper Abs', image: '' },
-                { name: 'Hanging Leg Raise', muscle: 'Lower Abs', image: '' },
-                { name: 'Cable Crunch', muscle: 'Upper Abs', image: '' },
-                { name: 'Ab Wheel Rollout', muscle: 'Full Core', image: '' },
-                { name: 'Russian Twist', muscle: 'Obliques', image: '' },
-                { name: 'Bicycle Crunch', muscle: 'Obliques / Abs', image: '' },
-                { name: 'Side Plank', muscle: 'Obliques', image: '' },
-                { name: 'Decline Sit-Up', muscle: 'Upper Abs', image: '' },
-                { name: 'Wood Chop', muscle: 'Obliques / Core', image: '' },
-                { name: 'Dead Bug', muscle: 'Deep Core', image: '' }
+                { name: 'Plank', muscle: 'Core (Overall)', image: '/exercises/plank.png' },
+                { name: 'Bench Crunch', muscle: 'Upper Abs', image: '/exercises/.png' },
+                { name: 'Hanging Leg Raise', muscle: 'Lower Abs', image: '/exercises/decline-situp.png' },
+                { name: 'Cable Crunch', muscle: 'Upper Abs', image: '/exercises/cable-crunch.png' },
+                { name: 'Wood Chop', muscle: 'Obliques / Core', image: '/exercises/wood-chopper.png' }
             ]
         }
     ]

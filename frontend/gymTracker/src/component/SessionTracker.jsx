@@ -33,7 +33,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                     ]
                 }))
             })
-            if (onSessionSaved) onSessionSaved()
+            if (onSessionSaved) onSessionSaved(workoutName.trim() || 'Workout')
         } catch (err) {
             console.error('Failed to save session', err)
         }
@@ -123,7 +123,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
             {/* Name Modal */}
             {showNameModal && (
                 <div className='fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4'>
-                    <div className='bg-neutral-800 border border-orange-500/40 rounded-2xl p-6 w-full max-w-sm shadow-2xl'>
+                    <div className='bg-neutral-800 border border-orange-500/40 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-popIn'>
                         <h2 className='text-white text-xl font-bold font-mono mb-4'>Name this workout</h2>
                         <input
                             type='text'

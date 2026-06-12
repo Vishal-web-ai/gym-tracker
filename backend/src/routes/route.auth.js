@@ -35,7 +35,7 @@ router.post('/send-otp', async (req, res) => {
 
 router.post('/verify-otp', async (req, res) => {
     try {
-        const { email, otp } = req.body
+        const { email, otp, mode } = req.body
         if (!email || !otp) {
             return res.status(400).json({ message: 'Email and OTP are required' })
         }
@@ -54,6 +54,12 @@ router.post('/verify-otp', async (req, res) => {
         await Otp.deleteOne({ _id: otpRecord._id })
 
         let user = await User.findOne({ email })
+        if (mode === 'login' && !user) {
+            return res.status(400).json({ message: 'No account found with this email' })
+        }
+        if (mode === 'signup' && user) {
+            return res.status(400).json({ message: 'An account with this email already exists' })
+        }
         if (!user) {
             user = await User.create({ email })
         }

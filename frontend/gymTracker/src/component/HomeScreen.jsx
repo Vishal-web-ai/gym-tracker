@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { RiMenuLine } from '@remixicon/react'
+import { RiMenuLine, RiCheckLine } from '@remixicon/react'
 import { Dumbbell } from 'lucide-react'
 import ExercisesList from './ExercisesList'
 import SessionTracker from './SessionTracker'
@@ -16,6 +16,8 @@ const HomeScreen = () => {
     const [isHamburgerOpen, setIsHamburgerOpen] = useState(false)
     const [exerciseWeights, setExerciseWeights] = useState({})
     const [exerciseSets, setExerciseSets] = useState({})
+    const [showSuccess, setShowSuccess] = useState(false)
+    const [savedWorkoutName, setSavedWorkoutName] = useState('')
 
     const setWeight = (idx, weight) => {
         setExerciseWeights(prev => ({ ...prev, [idx]: weight }))
@@ -69,11 +71,17 @@ const HomeScreen = () => {
         }
     }
 
-    const handleSessionSaved = () => {
+    const handleSessionSaved = (name) => {
         setSelectedExercises([])
         setExerciseWeights({})
         setExerciseSets({})
-        setShowSession(false)
+        setSavedWorkoutName(name)
+        setShowSuccess(true)
+        setTimeout(() => {
+            setShowSuccess(false)
+            setShowSession(false)
+            setSavedWorkoutName('')
+        }, 1800)
     }
 
     return (
@@ -91,9 +99,24 @@ const HomeScreen = () => {
                 </div>
             </div>
 
-            {!showSession ? (
+            {showSuccess ? (
+                /* Success overlay */
+                <div className='flex-1 w-full flex flex-col items-center justify-center gap-6 px-6 relative z-10 animate-fadeIn'>
+                    <div className='bg-orange-500 rounded-full p-5 animate-popIn'>
+                        <RiCheckLine color="black" size={48} />
+                    </div>
+                    <div className='animate-popIn text-center'>
+                        <p className='text-orange-500 text-4xl sm:text-5xl font-bold font-cursive'>
+                            {savedWorkoutName}
+                        </p>
+                    </div>
+                    <p className='text-white/70 text-xl font-mono tracking-wide'>
+                        Workout Saved!
+                    </p>
+                </div>
+            ) : !showSession ? (
                 /* Landing view */
-                <div className='flex-1 w-full flex flex-col items-center justify-center gap-6 sm:gap-8 px-6 relative z-10 pb-16 sm:pb-0'>
+                <div className='flex-1 w-full flex flex-col items-center justify-center gap-6 sm:gap-8 px-6 relative z-10 pb-16 sm:pb-0 animate-slideUp'>
                     <GreetingUser />
                     <h1 className='border border-orange-500 text-orange-500 tracking-wider text-center text-xl sm:text-3xl px-4 sm:px-6 py-2 rounded-2xl font-bebas'>
                         Gym Tracker

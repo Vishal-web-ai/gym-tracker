@@ -36,6 +36,27 @@ router.get('/', authenticate, async (req, res) => {
     }
 })
 
+router.put('/:id', authenticate, async (req, res) => {
+    try {
+        const { name } = req.body
+        if (!name || !name.trim()) {
+            return res.status(400).json({ message: 'Name is required' })
+        }
+        const session = await Session.findOneAndUpdate(
+            { _id: req.params.id, user: req.user.id },
+            { name: name.trim() },
+            { new: true }
+        ).select('-__v')
+        if (!session) {
+            return res.status(404).json({ message: 'Session not found' })
+        }
+        res.json({ session })
+    } catch (err) {
+        console.error(err)
+        res.status(500).json({ message: 'Server error' })
+    }
+})
+
 router.delete('/:id', authenticate, async (req, res) => {
     try {
         const session = await Session.findOneAndDelete({

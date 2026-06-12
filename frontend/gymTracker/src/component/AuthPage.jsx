@@ -7,7 +7,8 @@ export default function AuthPage() {
     const { login } = useAuth()
     const [email, setEmail] = useState('')
     const [otp, setOtp] = useState('')
-    const [step, setStep] = useState('email') // 'email' | 'otp'
+    const [step, setStep] = useState('email')
+    const [mode, setMode] = useState('login')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
 
@@ -16,7 +17,7 @@ export default function AuthPage() {
         setLoading(true)
         setError('')
         try {
-            await api.post('/auth/send-otp', { email })
+            await api.post('/auth/send-otp', { email, mode })
             setStep('otp')
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to send OTP')
@@ -30,7 +31,7 @@ export default function AuthPage() {
         setLoading(true)
         setError('')
         try {
-            const res = await api.post('/auth/verify-otp', { email, otp })
+            const res = await api.post('/auth/verify-otp', { email, otp, mode })
             login(res.data.user, res.data.token)
         } catch (err) {
             setError(err.response?.data?.message || 'Invalid OTP')
@@ -50,8 +51,39 @@ export default function AuthPage() {
                 </div>
                 <h1 className='text-3xl font-bold text-white text-center mb-2'>Gym Tracker</h1>
                 <p className='text-orange-500/70 text-center mb-8 font-mono'>
-                    {step === 'email' ? 'Enter your email to receive an OTP' : 'Enter the OTP sent to your email'}
+                    {step === 'email'
+                        ? (mode === 'login'
+                            ? 'Welcome back! Enter your email to receive an OTP'
+                            : 'Create your account. Enter your email to receive an OTP')
+                        : 'Enter the OTP sent to your email'}
                 </p>
+
+                {step === 'email' && (
+                    <div className='flex bg-black/30 rounded-xl p-1 mb-6'>
+                        <button
+                            type='button'
+                            onClick={() => { setMode('login'); setError('') }}
+                            className={`flex-1 py-3 rounded-lg font-mono text-sm font-bold transition-all cursor-pointer ${
+                                mode === 'login'
+                                    ? 'bg-orange-500 text-black'
+                                    : 'text-orange-500/50 hover:text-orange-400'
+                            }`}
+                        >
+                            Login
+                        </button>
+                        <button
+                            type='button'
+                            onClick={() => { setMode('signup'); setError('') }}
+                            className={`flex-1 py-3 rounded-lg font-mono text-sm font-bold transition-all cursor-pointer ${
+                                mode === 'signup'
+                                    ? 'bg-orange-500 text-black'
+                                    : 'text-orange-500/50 hover:text-orange-400'
+                            }`}
+                        >
+                            Create your profile
+                        </button>
+                    </div>
+                )}
 
                 {error && (
                     <p className='text-red-400 text-center mb-4 font-mono text-sm bg-red-500/10 border border-red-500/30 rounded-lg p-3'>

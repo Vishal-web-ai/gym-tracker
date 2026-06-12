@@ -3,7 +3,7 @@ import { Dumbbell, Target, ArrowLeft } from 'lucide-react'
 export default function ExerciseDetail({ exercise, onSelect, onBack }) {
     return (
         <div className='w-full md:w-3/4 h-full flex items-center justify-center p-4'>
-            <div className='w-full max-w-md bg-black/60 border border-orange-500/30 rounded-2xl overflow-hidden animate-slideUp'>
+            <div className='w-full max-w-md bg-black/60 border border-orange-500/30 rounded-2xl overflow-hidden animate-popIn'>
                 {/* Image Section */}
                 <div className='w-full h-48 sm:h-64 relative overflow-hidden bg-neutral-900 p-4'>
                     {exercise.image ? (
