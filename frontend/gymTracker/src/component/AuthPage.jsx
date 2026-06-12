@@ -1,16 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Mail, KeyRound, Dumbbell } from 'lucide-react'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
 
 export default function AuthPage() {
     const { login } = useAuth()
-    const [email, setEmail] = useState('')
+    const [email, setEmail] = useState(() => sessionStorage.getItem('pendingEmail') || '')
     const [otp, setOtp] = useState('')
-    const [step, setStep] = useState('email')
-    const [mode, setMode] = useState('login')
+    const [step, setStep] = useState(() => sessionStorage.getItem('pendingStep') || 'email')
+    const [mode, setMode] = useState(() => sessionStorage.getItem('pendingMode') || 'login')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
+
+    useEffect(() => {
+        if (step === 'otp') {
+            sessionStorage.setItem('pendingEmail', email)
+            sessionStorage.setItem('pendingMode', mode)
+            sessionStorage.setItem('pendingStep', 'otp')
+        } else {
+            sessionStorage.removeItem('pendingEmail')
+            sessionStorage.removeItem('pendingMode')
+            sessionStorage.removeItem('pendingStep')
+        }
+    }, [step, email, mode])
 
     const handleSendOtp = async (e) => {
         e.preventDefault()
@@ -32,12 +44,22 @@ export default function AuthPage() {
         setError('')
         try {
             const res = await api.post('/auth/verify-otp', { email, otp, mode })
-            login(res.data.user, res.data.token)
+            sessionStorage.removeItem('pendingEmail')
+            sessionStorage.removeItem('pendingMode')
+            sessionStorage.removeItem('pendingStep')
+            login(res.data.user)
         } catch (err) {
             setError(err.response?.data?.message || 'Invalid OTP')
         } finally {
             setLoading(false)
         }
+    }
+
+    const handleChangeEmail = () => {
+        setStep('email')
+        sessionStorage.removeItem('pendingEmail')
+        sessionStorage.removeItem('pendingMode')
+        sessionStorage.removeItem('pendingStep')
     }
 
     return (
@@ -119,7 +141,7 @@ export default function AuthPage() {
                         </p>
                         <button
                             type='button'
-                            onClick={() => setStep('email')}
+                            onClick={handleChangeEmail}
                             className='text-orange-500/50 hover:text-orange-400 text-sm font-mono transition-all cursor-pointer'
                         >
                             ← Change email
