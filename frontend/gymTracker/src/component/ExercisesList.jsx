@@ -97,8 +97,8 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
             category: 'Core',
             items: [
                 { name: 'Plank', muscle: 'Core (Overall)', image: '/exercises/plank.png' },
-                { name: 'Bench Crunch', muscle: 'Upper Abs', image: '/exercises/.png' },
-                { name: 'Hanging Leg Raise', muscle: 'Lower Abs', image: '/exercises/decline-situp.png' },
+                { name: 'Bench Crunch', muscle: 'Upper Abs', image: '/exercises/decline-situp.png' },
+                { name: 'Hanging Leg Raise', muscle: 'Lower Abs', image: '/exercises/leg-raises.png' },
                 { name: 'Cable Crunch', muscle: 'Upper Abs', image: '/exercises/cable-crunch.png' },
                 { name: 'Wood Chop', muscle: 'Obliques / Core', image: '/exercises/wood-chopper.png' }
             ]
