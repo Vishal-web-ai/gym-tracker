@@ -87,7 +87,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                                         <div className='flex items-center gap-1 sm:gap-1.5'>
                                             <NumberOfSets
                                                 reps={exerciseSets[idx]?.[0] || ''}
-                                                setReps={(_, val) => setReps(idx, 0, val)}
+                                                setReps={(_, val) => setReps(idx, 0, val)}  
                                                 idx={0}
                                             />
                                             <NumberOfSets

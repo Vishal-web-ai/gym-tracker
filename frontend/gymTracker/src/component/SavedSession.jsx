@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Trash2, Pencil } from 'lucide-react'
+import { Trash2, Pencil, StickyNote, X } from 'lucide-react'
 import api from '../services/api'
 
 const SavedSession = ({ sessions, onDelete, onUpdate }) => {
@@ -7,6 +7,7 @@ const SavedSession = ({ sessions, onDelete, onUpdate }) => {
     const [editingId, setEditingId] = useState(null)
     const [editName, setEditName] = useState('')
     const [saving, setSaving] = useState(false)
+    const [notesPopup, setNotesPopup] = useState({ open: false, text: '' })
 
     const getDay = (dateStr) => {
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -108,7 +109,17 @@ const SavedSession = ({ sessions, onDelete, onUpdate }) => {
                         <div className='bg-orange-500/5 border border-orange-500/20 mt-1 rounded-xl p-4 space-y-3'>
                             {session.exercises.map((ex, i) => (
                                 <div key={i} className='bg-orange-500/10 border border-orange-500/20 hover:border-orange-500/50 p-3 rounded-lg transition-all duration-300'>
-                                    <p className='text-orange-400 font-semibold font-mono'>{ex.name}</p>
+                                    <div className='flex items-center justify-between'>
+                                        <p className='text-orange-400 font-semibold font-mono'>{ex.name}</p>
+                                        {ex.notes && (
+                                            <button
+                                                onClick={() => setNotesPopup({ open: true, text: ex.notes })}
+                                                className='text-neutral-400 hover:text-orange-500 p-1 rounded-lg transition-all duration-300 cursor-pointer'
+                                            >
+                                                <StickyNote size={18} />
+                                            </button>
+                                        )}
+                                    </div>
                                     <p className='text-orange-500/60 font-mono text-sm mt-1'>
                                         Weight: {ex.weight}
                                     </p>
@@ -121,6 +132,28 @@ const SavedSession = ({ sessions, onDelete, onUpdate }) => {
                     )}
                 </div>
             ))}
+            {notesPopup.open && (
+                <div
+                    className='fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4'
+                    onClick={() => setNotesPopup({ open: false, text: '' })}
+                >
+                    <div
+                        className='bg-neutral-800 border border-orange-500/40 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-popIn'
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className='flex justify-between items-center mb-4'>
+                            <h2 className='text-orange-400 font-bold font-mono text-lg'>Notes</h2>
+                            <button
+                                onClick={() => setNotesPopup({ open: false, text: '' })}
+                                className='text-neutral-400 hover:text-white transition-all duration-300 cursor-pointer'
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <p className='text-white font-mono text-sm whitespace-pre-wrap'>{notesPopup.text}</p>
+                    </div>
+                </div>
+            )}
         </>
     )
 }
