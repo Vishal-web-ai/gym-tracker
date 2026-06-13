@@ -16,11 +16,16 @@ const HomeScreen = () => {
     const [isHamburgerOpen, setIsHamburgerOpen] = useState(false)
     const [exerciseWeights, setExerciseWeights] = useState({})
     const [exerciseSets, setExerciseSets] = useState({})
+    const [exerciseNotes, setExerciseNotes] = useState({})
     const [showSuccess, setShowSuccess] = useState(false)
     const [savedWorkoutName, setSavedWorkoutName] = useState('')
 
     const setWeight = (idx, weight) => {
         setExerciseWeights(prev => ({ ...prev, [idx]: weight }))
+    }
+
+    const setNotes = (idx, note) => {
+        setExerciseNotes(prev => ({ ...prev, [idx]: note }))
     }
 
     const setReps = (exerciseIdx, setIdx, value) => {
@@ -75,6 +80,7 @@ const HomeScreen = () => {
         setSelectedExercises([])
         setExerciseWeights({})
         setExerciseSets({})
+        setExerciseNotes({})
         setSavedWorkoutName(name)
         setShowSuccess(true)
         setTimeout(() => {
@@ -160,8 +166,10 @@ const HomeScreen = () => {
                             onSessionSaved={handleSessionSaved}
                             exerciseWeights={exerciseWeights}
                             exerciseSets={exerciseSets}
+                            exerciseNotes={exerciseNotes}
                             setWeight={setWeight}
                             setReps={setReps}
+                            setNotes={setNotes}
                         />
                     )}
                 </div>

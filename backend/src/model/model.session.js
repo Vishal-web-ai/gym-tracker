@@ -18,7 +18,8 @@ const sessionSchema = new mongoose.Schema({
     exercises: [{
         name: { type: String, required: true },
         weight: { type: String, default: '—' },
-        sets: [{ type: String }]
+        sets: [{ type: String }],
+        notes: { type: String, default: '' }
     }]
 }, { timestamps: true })
 

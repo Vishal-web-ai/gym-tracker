@@ -1,12 +1,14 @@
 import { useState } from 'react'
+import { RiFileEditLine } from '@remixicon/react'
 import WeightBar from './WeightBar'
 import NumberOfSets from './NumberOfSets'
 import api from '../services/api'
 
-const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSaved, exerciseWeights, exerciseSets, setWeight, setReps }) => {
+const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSaved, exerciseWeights, exerciseSets, exerciseNotes, setWeight, setReps, setNotes }) => {
     const [openDropdown, setOpenDropdown] = useState(null)
     const [showNameModal, setShowNameModal] = useState(false)
     const [workoutName, setWorkoutName] = useState('')
+    const [showNotes, setShowNotes] = useState({})
 
     const handleSaveClick = () => {
         setWorkoutName('')
@@ -30,7 +32,8 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                         exerciseSets[idx]?.[0] || '—',
                         exerciseSets[idx]?.[1] || '—',
                         exerciseSets[idx]?.[2] || '—'
-                    ]
+                    ],
+                    notes: exerciseNotes?.[idx] || ''
                 }))
             })
             if (onSessionSaved) onSessionSaved(workoutName.trim() || 'Workout')
@@ -58,12 +61,20 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                             exercises.map((exercise, idx) => (
                                 <div
                                     key={idx}
-                                    className='flex flex-col gap-3 bg-orange-500/10 border border-neutral-500 p-3 rounded-lg relative transition-all duration-300'
+                                    className='flex flex-col gap-3 bg-orange-500/10 border border-neutral-500 p-3 rounded-lg transition-all duration-300'
                                 >
-                                    <h2 className='text-orange-400 flex-1 text-sm sm:text-base'>
-                                        {exercise.name}
-                                    </h2>
-                                    <div className='flex gap-3 sm:gap-5 mr-1.5 lg:gap-5 lg:mr-5 flex-wrap'>
+                                    <div className='flex justify-between items-center'>
+                                        <h2 className='text-orange-400 text-sm sm:text-base'>
+                                            {exercise.name}
+                                        </h2>
+                                        <button
+                                            onClick={() => onRemove(idx)}
+                                            className='px-2 py-1 text-s leading-tight rounded text-red-500 hover:text-black transition-all duration-300 cursor-pointer'
+                                        >
+                                            X
+                                        </button>
+                                    </div>
+                                    <div className='flex gap-2 sm:gap-3 items-center flex-wrap'>
                                         <div>
                                             <WeightBar
                                                 id={idx}
@@ -73,7 +84,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                                                 setWeight={setWeight}
                                             />
                                         </div>
-                                        <div className='flex items-center gap-1.5 sm:gap-2'>
+                                        <div className='flex items-center gap-1 sm:gap-1.5'>
                                             <NumberOfSets
                                                 reps={exerciseSets[idx]?.[0] || ''}
                                                 setReps={(_, val) => setReps(idx, 0, val)}
@@ -90,13 +101,27 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                                                 idx={2}
                                             />
                                         </div>
+                                        <button
+                                            onClick={() => setShowNotes(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                            className={'ml-auto p-1.5 rounded-lg transition-all duration-300 cursor-pointer text-white'}
+                                            title="Notes"
+                                        >
+                                            <RiFileEditLine size={20} />
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => onRemove(idx)}
-                                        className='absolute top-1 right-1 px-2 py-1 text-xs leading-tight rounded text-red-500 hover:text-black transition-all duration-300 cursor-pointer'
-                                    >
-                                        X
-                                    </button>
+                                    {showNotes[idx] && (
+                                        <textarea
+                                            value={exerciseNotes?.[idx] || ''}
+                                            onChange={(e) => setNotes(idx, e.target.value)}
+                                            onInput={(e) => {
+                                                e.target.style.height = 'auto'
+                                                e.target.style.height = e.target.scrollHeight + 'px'
+                                            }}
+                                            placeholder="Notes..."
+                                            rows={1}
+                                            className='w-full bg-neutral-900 text-white text-sm border border-orange-500/30 rounded-lg px-3 py-2 outline-none focus:border-orange-500 placeholder-neutral-500 resize-none overflow-hidden transition-all duration-300'
+                                        />
+                                    )}
                                 </div>
                             ))
                         ) : (
