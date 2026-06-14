@@ -86,7 +86,7 @@ router.post('/verify-otp',
 
             let user = await User.findOne({ email })
             if (mode === 'login' && !user) {
-                return res.status(400).json({ message: 'No account found with this email' })
+                return res.status(400).json({ message: 'Invalid OTP' })
             }
             if (mode === 'signup' && user) {
                 return res.status(400).json({ message: 'An account with this email already exists' })
@@ -98,18 +98,19 @@ router.post('/verify-otp',
             const token = jwt.sign(
                 { id: user._id, email: user.email },
                 process.env.JWT_SECRET,
-                { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+                { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
             )
 
             res.cookie('token', token, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: 'none',
-                maxAge: 7 * 24 * 60 * 60 * 1000
+                maxAge: 24 * 60 * 60 * 1000
             })
 
             res.json({
                 message: 'Login successful',
+                token,
                 user: { id: user._id, email: user.email, name: user.name }
             })
         } catch (err) {

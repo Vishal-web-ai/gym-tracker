@@ -6,12 +6,28 @@ const helmet = require('helmet')
 
 const app = express()
 
+app.set('trust proxy', 1)
+
 app.use(helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+            defaultSrc: ["'self'"],
+            frameAncestors: ["'none'"]
+        }
+    },
     hsts: process.env.NODE_ENV === 'production'
         ? { maxAge: 31536000, includeSubDomains: true, preload: true }
         : false
 }))
+
+app.use((req, res, next) => {
+    if (req.headers['x-forwarded-proto'] === 'http') {
+        return res.redirect(301, `https://${req.headers.host}${req.originalUrl}`)
+    }
+    next()
+})
+
 app.use(cors({
     origin: function (origin, callback) {
         const allowedOrigins = [
@@ -38,6 +54,11 @@ app.use(express.json({ limit: '1mb' }))
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' })
+})
+
+app.post('/api/csp-violation', express.json({ type: 'application/csp-report' }), (req, res) => {
+    console.warn('CSP Violation:', JSON.stringify(req.body, null, 2))
+    res.status(204).end()
 })
 app.use('/api/auth', require('./routes/route.auth'))
 app.use('/api/sessions', require('./routes/route.session'))

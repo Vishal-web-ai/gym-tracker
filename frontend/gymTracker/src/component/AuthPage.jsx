@@ -47,7 +47,7 @@ export default function AuthPage() {
             sessionStorage.removeItem('pendingEmail')
             sessionStorage.removeItem('pendingMode')
             sessionStorage.removeItem('pendingStep')
-            login(res.data.user)
+            login(res.data.user, res.data.token)
         } catch (err) {
             setError(err.response?.data?.message || 'Invalid OTP')
         } finally {
