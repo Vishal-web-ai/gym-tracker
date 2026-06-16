@@ -34,9 +34,6 @@ app.use(cors({
             'http://localhost:5173',
             ...(process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean)
         ]
-        if (!origin) {
-            return callback(new Error('Not allowed by CORS'))
-        }
         if (allowedOrigins.includes(origin)) {
             return callback(null, true)
         }
@@ -62,6 +59,7 @@ app.post('/api/csp-violation', express.json({ type: 'application/csp-report' }),
 })
 app.use('/api/auth', require('./routes/route.auth'))
 app.use('/api/sessions', require('./routes/route.session'))
+app.use('/api/exercises', require('./routes/route.exercise'))
 
 app.use((err, req, res, next) => {
     console.error(err.stack)

@@ -7,12 +7,20 @@ const sendEmail = require('../utils/sendEmail')
 const jwt = require('jsonwebtoken')
 const crypto = require('crypto')
 const rateLimit = require('express-rate-limit')
+const { defaultKeyGenerator } = rateLimit
 const { body, validationResult } = require('express-validator')
 
-const otpLimiter = rateLimit({
+const sendOtpLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5,
-    keyGenerator: (req) => req.body.email || req.ip,
+    keyGenerator: (req) => req.body.email || defaultKeyGenerator(req),
+    message: { message: 'Too many requests' }
+})
+
+const verifyOtpLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    keyGenerator: (req) => req.body.email || defaultKeyGenerator(req),
     message: { message: 'Too many requests' }
 })
 
@@ -39,15 +47,16 @@ function validate(req, res, next) {
 router.post('/send-otp',
     body('email').isEmail().withMessage('Valid email is required'),
     validate,
-    otpLimiter,
+    sendOtpLimiter,
     async (req, res) => {
         try {
             const { email } = req.body
             const otp = crypto.randomInt(100000, 999999).toString()
+            const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex')
             const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
 
             await Otp.deleteMany({ email })
-            await Otp.create({ email, otp, expiresAt })
+            await Otp.create({ email, otp: hashedOtp, expiresAt })
 
             await sendEmail(
                 email,
@@ -67,11 +76,12 @@ router.post('/verify-otp',
     body('email').isEmail().withMessage('Valid email is required'),
     body('otp').matches(/^\d{6}$/).withMessage('OTP must be 6 digits'),
     validate,
-    otpLimiter,
+    verifyOtpLimiter,
     async (req, res) => {
         try {
-            const { email, otp, mode } = req.body
-            const otpRecord = await Otp.findOne({ email, otp })
+            const { email, otp } = req.body
+            const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex')
+            const otpRecord = await Otp.findOne({ email, otp: hashedOtp })
 
             if (!otpRecord) {
                 return res.status(400).json({ message: 'Invalid OTP' })
@@ -85,12 +95,7 @@ router.post('/verify-otp',
             await Otp.deleteOne({ _id: otpRecord._id })
 
             let user = await User.findOne({ email })
-            if (mode === 'login' && !user) {
-                return res.status(400).json({ message: 'Invalid OTP' })
-            }
-            if (mode === 'signup' && user) {
-                return res.status(400).json({ message: 'An account with this email already exists' })
-            }
+            const isNewUser = !user
             if (!user) {
                 user = await User.create({ email })
             }
@@ -104,14 +109,14 @@ router.post('/verify-otp',
             res.cookie('token', token, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: 'none',
+                sameSite: 'strict',
                 maxAge: 24 * 60 * 60 * 1000
             })
 
             res.json({
-                message: 'Login successful',
-                token,
-                user: { id: user._id, email: user.email, name: user.name }
+                message: isNewUser ? 'Account created' : 'Login successful',
+                user: { id: user._id, email: user.email, name: user.name },
+                isNewUser
             })
         } catch (err) {
             console.error(err)
@@ -136,8 +141,8 @@ router.get('/me', generalLimiter, authenticate, async (req, res) => {
 router.put('/username',
     body('name').trim().isLength({ min: 1, max: 50 }).withMessage('Name must be 1-50 characters'),
     validate,
-    usernameLimiter,
     authenticate,
+    usernameLimiter,
     async (req, res) => {
         try {
             const { name } = req.body
@@ -158,7 +163,7 @@ router.post('/logout', (req, res) => {
     res.clearCookie('token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none'
+        sameSite: 'strict'
     })
     res.json({ message: 'Logged out' })
 })

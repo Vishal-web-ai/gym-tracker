@@ -30,6 +30,10 @@ router.post('/',
     body('date').notEmpty().withMessage('Date is required'),
     body('exercises').isArray({ min: 1 }).withMessage('At least one exercise is required'),
     body('exercises.*.name').notEmpty().withMessage('Each exercise must have a name'),
+    body('exercises.*.mode').optional().isIn(['weight', 'timer']).withMessage('Mode must be weight or timer'),
+    body('exercises.*.weight').optional().isString().withMessage('Weight must be a string'),
+    body('exercises.*.sets').optional().isArray().withMessage('Sets must be an array'),
+    body('exercises.*.notes').optional().isString().withMessage('Notes must be a string'),
     validate,
     sessionLimiter,
     async (req, res) => {
@@ -85,7 +89,7 @@ router.put('/:id',
     }
 )
 
-router.delete('/:id', deleteLimiter, authenticate, async (req, res) => {
+router.delete('/:id', authenticate, deleteLimiter, async (req, res) => {
     try {
         const session = await Session.findOneAndDelete({
             _id: req.params.id,

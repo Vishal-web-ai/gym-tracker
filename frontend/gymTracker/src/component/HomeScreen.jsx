@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { RiMenuLine, RiCheckLine } from '@remixicon/react'
 import { Dumbbell } from 'lucide-react'
 import ExercisesList from './ExercisesList'
@@ -6,8 +6,18 @@ import SessionTracker from './SessionTracker'
 import Humberger from './Humberger'
 import ExerciseDetail from './ExerciseDetail'
 import GreetingUser from './GreetingUser'
+import { useAuth } from '../context/AuthContext'
 
 const HomeScreen = () => {
+    const { showWelcome, clearWelcome, user } = useAuth()
+
+    useEffect(() => {
+        if (showWelcome) {
+            const timer = setTimeout(clearWelcome, 3000)
+            return () => clearTimeout(timer)
+        }
+    }, [showWelcome, clearWelcome])
+
     const [showSession, setShowSession] = useState(false)
     const [showExercisesList, setShowExercisesList] = useState(false)
     const [selectedExercises, setSelectedExercises] = useState([])
@@ -95,6 +105,14 @@ const HomeScreen = () => {
             className='w-screen h-screen text-white flex flex-col overflow-hidden relative'
             style={{ background: 'linear-gradient(-225deg, #111111 45%, #9a3412 86%, #f97316 100%)' }}
         >
+            {showWelcome && (
+                <div className='fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-fadeIn'>
+                    <div className='bg-orange-500 text-black font-bold px-6 py-3 rounded-xl shadow-lg font-mono text-sm sm:text-base whitespace-nowrap'>
+                        👋 Welcome back, {user?.name || 'there'}!
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className='w-full flex items-center justify-between px-4 sm:px-5 h-16 sm:h-20 relative z-10 shrink-0'>
                 <div className='cursor-pointer' onClick={() => setIsHamburgerOpen(true)}>

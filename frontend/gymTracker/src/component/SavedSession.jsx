@@ -120,12 +120,20 @@ const SavedSession = ({ sessions, onDelete, onUpdate }) => {
                                             </button>
                                         )}
                                     </div>
-                                    <p className='text-orange-500/60 font-mono text-sm mt-1'>
-                                        Weight: {ex.weight}
-                                    </p>
-                                    <p className='text-orange-500/60 font-mono text-sm'>
-                                        Sets: {ex.sets.filter(s => s !== '—').join(' × ') || '—'}
-                                    </p>
+                                    {ex.mode === 'timer' ? (
+                                        <p className='text-orange-500/60 font-mono text-sm mt-1'>
+                                            Time: {ex.sets.filter(s => s !== '—').join(' × ') || '—'} min
+                                        </p>
+                                    ) : (
+                                        <>
+                                            <p className='text-orange-500/60 font-mono text-sm mt-1'>
+                                                Weight: {ex.weight}
+                                            </p>
+                                            <p className='text-orange-500/60 font-mono text-sm'>
+                                                Sets: {ex.sets.filter(s => s !== '—').join(' × ') || '—'}
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
                             ))}
                         </div>

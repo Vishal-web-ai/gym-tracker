@@ -8,28 +8,25 @@ export default function AuthPage() {
     const [email, setEmail] = useState(() => sessionStorage.getItem('pendingEmail') || '')
     const [otp, setOtp] = useState('')
     const [step, setStep] = useState(() => sessionStorage.getItem('pendingStep') || 'email')
-    const [mode, setMode] = useState(() => sessionStorage.getItem('pendingMode') || 'login')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
 
     useEffect(() => {
         if (step === 'otp') {
             sessionStorage.setItem('pendingEmail', email)
-            sessionStorage.setItem('pendingMode', mode)
             sessionStorage.setItem('pendingStep', 'otp')
         } else {
             sessionStorage.removeItem('pendingEmail')
-            sessionStorage.removeItem('pendingMode')
             sessionStorage.removeItem('pendingStep')
         }
-    }, [step, email, mode])
+    }, [step, email])
 
     const handleSendOtp = async (e) => {
         e.preventDefault()
         setLoading(true)
         setError('')
         try {
-            await api.post('/auth/send-otp', { email, mode })
+            await api.post('/auth/send-otp', { email })
             setStep('otp')
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to send OTP')
@@ -43,11 +40,10 @@ export default function AuthPage() {
         setLoading(true)
         setError('')
         try {
-            const res = await api.post('/auth/verify-otp', { email, otp, mode })
+            const res = await api.post('/auth/verify-otp', { email, otp })
             sessionStorage.removeItem('pendingEmail')
-            sessionStorage.removeItem('pendingMode')
             sessionStorage.removeItem('pendingStep')
-            login(res.data.user, res.data.token)
+            login(res.data.user, res.data.isNewUser)
         } catch (err) {
             setError(err.response?.data?.message || 'Invalid OTP')
         } finally {
@@ -58,7 +54,6 @@ export default function AuthPage() {
     const handleChangeEmail = () => {
         setStep('email')
         sessionStorage.removeItem('pendingEmail')
-        sessionStorage.removeItem('pendingMode')
         sessionStorage.removeItem('pendingStep')
     }
 
@@ -74,38 +69,9 @@ export default function AuthPage() {
                 <h1 className='text-3xl font-bold text-white text-center mb-2'>Gym Tracker</h1>
                 <p className='text-orange-500/70 text-center mb-8 font-mono'>
                     {step === 'email'
-                        ? (mode === 'login'
-                            ? 'Welcome back! Enter your email to receive an OTP'
-                            : 'Create your account. Enter your email to receive an OTP')
+                        ? 'Enter your email to receive an OTP'
                         : 'Enter the OTP sent to your email'}
                 </p>
-
-                {step === 'email' && (
-                    <div className='flex bg-black/30 rounded-xl p-1 mb-6'>
-                        <button
-                            type='button'
-                            onClick={() => { setMode('login'); setError('') }}
-                            className={`flex-1 py-3 rounded-lg font-mono text-sm font-bold transition-all cursor-pointer ${
-                                mode === 'login'
-                                    ? 'bg-orange-500 text-black'
-                                    : 'text-orange-500/50 hover:text-orange-400'
-                            }`}
-                        >
-                            Login
-                        </button>
-                        <button
-                            type='button'
-                            onClick={() => { setMode('signup'); setError('') }}
-                            className={`flex-1 py-3 rounded-lg font-mono text-sm font-bold transition-all cursor-pointer ${
-                                mode === 'signup'
-                                    ? 'bg-orange-500 text-black'
-                                    : 'text-orange-500/50 hover:text-orange-400'
-                            }`}
-                        >
-                            Create your profile
-                        </button>
-                    </div>
-                )}
 
                 {error && (
                     <p className='text-red-400 text-center mb-4 font-mono text-sm bg-red-500/10 border border-red-500/30 rounded-lg p-3'>

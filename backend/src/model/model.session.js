@@ -17,7 +17,9 @@ const sessionSchema = new mongoose.Schema({
     },
     exercises: [{
         name: { type: String, required: true },
+        mode: { type: String, enum: ['weight', 'timer'], default: 'weight' },
         weight: { type: String, default: '—' },
+        time: { type: String, default: '' },
         sets: [{ type: String }],
         notes: { type: String, default: '' }
     }]

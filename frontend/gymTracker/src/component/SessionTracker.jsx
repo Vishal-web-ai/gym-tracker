@@ -9,6 +9,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
     const [showNameModal, setShowNameModal] = useState(false)
     const [workoutName, setWorkoutName] = useState('')
     const [showNotes, setShowNotes] = useState({})
+    const [exerciseMode, setExerciseMode] = useState({})
 
     const handleSaveClick = () => {
         setWorkoutName('')
@@ -20,6 +21,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
         setShowNameModal(false)
         try {
             const now = new Date()
+            const isTimer = (idx) => exerciseMode[idx] === 'timer'
             await api.post('/sessions', {
                 date: now.toLocaleDateString('en-US', {
                     year: 'numeric', month: 'long', day: 'numeric'
@@ -27,7 +29,8 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                 name: workoutName.trim() || 'Workout',
                 exercises: exercises.map((exercise, idx) => ({
                     name: exercise.name,
-                    weight: exerciseWeights[idx] || '—',
+                    mode: isTimer(idx) ? 'timer' : 'weight',
+                    weight: isTimer(idx) ? '—' : (exerciseWeights[idx] || '—'),
                     sets: [
                         exerciseSets[idx]?.[0] || '—',
                         exerciseSets[idx]?.[1] || '—',
@@ -82,23 +85,36 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                                                 setOpenDropdown={setOpenDropdown}
                                                 weight={exerciseWeights[idx]}
                                                 setWeight={setWeight}
+                                                mode={exerciseMode[idx]}
+                                                onModeChange={(m) => {
+                                                    setExerciseMode(prev => ({ ...prev, [idx]: m }))
+                                                    setReps(idx, 0, '')
+                                                    setReps(idx, 1, '')
+                                                    setReps(idx, 2, '')
+                                                }}
                                             />
                                         </div>
                                         <div className='flex items-center gap-1 sm:gap-1.5'>
                                             <NumberOfSets
                                                 reps={exerciseSets[idx]?.[0] || ''}
-                                                setReps={(_, val) => setReps(idx, 0, val)}  
+                                                setReps={(_, val) => setReps(idx, 0, val)}
                                                 idx={0}
+                                                placeholder={exerciseMode[idx] === 'timer' ? 'T' : 'R'}
+                                                mode={exerciseMode[idx] || 'weight'}
                                             />
                                             <NumberOfSets
                                                 reps={exerciseSets[idx]?.[1] || ''}
                                                 setReps={(_, val) => setReps(idx, 1, val)}
                                                 idx={1}
+                                                placeholder={exerciseMode[idx] === 'timer' ? 'T' : 'R'}
+                                                mode={exerciseMode[idx] || 'weight'}
                                             />
                                             <NumberOfSets
                                                 reps={exerciseSets[idx]?.[2] || ''}
                                                 setReps={(_, val) => setReps(idx, 2, val)}
                                                 idx={2}
+                                                placeholder={exerciseMode[idx] === 'timer' ? 'T' : 'R'}
+                                                mode={exerciseMode[idx] || 'weight'}
                                             />
                                         </div>
                                         <button
