@@ -30,6 +30,9 @@ app.use((req, res, next) => {
 
 app.use(cors({
     origin: function (origin, callback) {
+        if (!origin) {
+            return callback(null, true)
+        }
         const allowedOrigins = [
             'http://localhost:5173',
             ...(process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean)
