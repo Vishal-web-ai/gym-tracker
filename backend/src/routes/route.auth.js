@@ -7,20 +7,19 @@ const sendEmail = require('../utils/sendEmail')
 const jwt = require('jsonwebtoken')
 const crypto = require('crypto')
 const rateLimit = require('express-rate-limit')
-const { defaultKeyGenerator } = rateLimit
 const { body, validationResult } = require('express-validator')
 
 const sendOtpLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5,
-    keyGenerator: (req) => req.body.email || defaultKeyGenerator(req),
+    keyGenerator: (req) => req.body?.email || req.ip,
     message: { message: 'Too many requests' }
 })
 
 const verifyOtpLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 20,
-    keyGenerator: (req) => req.body.email || defaultKeyGenerator(req),
+    keyGenerator: (req) => req.body?.email || req.ip,
     message: { message: 'Too many requests' }
 })
 
@@ -100,23 +99,30 @@ router.post('/verify-otp',
                 user = await User.create({ email })
             }
 
-            const token = jwt.sign(
+            const accessToken = jwt.sign(
                 { id: user._id, email: user.email },
                 process.env.JWT_SECRET,
-                { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
+                { expiresIn: '15m' }
             )
 
-            res.cookie('token', token, {
+            const refreshToken = jwt.sign(
+                { id: user._id, email: user.email },
+                process.env.JWT_SECRET,
+                { expiresIn: '7d' }
+            )
+
+            res.cookie('refreshToken', refreshToken, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 24 * 60 * 60 * 1000
+                sameSite: 'lax',
+                maxAge: 7 * 24 * 60 * 60 * 1000
             })
 
             res.json({
                 message: isNewUser ? 'Account created' : 'Login successful',
                 user: { id: user._id, email: user.email, name: user.name },
-                isNewUser
+                isNewUser,
+                accessToken
             })
         } catch (err) {
             console.error(err)
@@ -159,11 +165,30 @@ router.put('/username',
     }
 )
 
+router.post('/refresh', (req, res) => {
+    const refreshToken = req.cookies.refreshToken
+    if (!refreshToken) {
+        return res.status(401).json({ message: 'No refresh token' })
+    }
+
+    try {
+        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET)
+        const accessToken = jwt.sign(
+            { id: decoded.id, email: decoded.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '15m' }
+        )
+        res.json({ accessToken })
+    } catch (err) {
+        return res.status(401).json({ message: 'Invalid refresh token' })
+    }
+})
+
 router.post('/logout', (req, res) => {
-    res.clearCookie('token', {
+    res.clearCookie('refreshToken', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict'
+        sameSite: 'lax'
     })
     res.json({ message: 'Logged out' })
 })

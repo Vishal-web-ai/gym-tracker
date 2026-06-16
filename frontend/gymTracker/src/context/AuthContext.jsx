@@ -1,5 +1,5 @@
 import { createContext, useState, useContext, useEffect } from 'react'
-import api from '../services/api'
+import api, { setAccessToken, clearAccessToken } from '../services/api'
 
 const AuthContext = createContext()
 
@@ -9,13 +9,23 @@ export function AuthProvider({ children }) {
     const [showWelcome, setShowWelcome] = useState(false)
 
     useEffect(() => {
-        api.get('/auth/me')
-            .then(res => setUser(res.data.user))
-            .catch(() => setUser(null))
-            .finally(() => setLoading(false))
+        async function restore() {
+            try {
+                const { data } = await api.post('/auth/refresh')
+                setAccessToken(data.accessToken)
+                const me = await api.get('/auth/me')
+                setUser(me.data.user)
+            } catch {
+                setUser(null)
+            } finally {
+                setLoading(false)
+            }
+        }
+        restore()
     }, [])
 
-    function login(userData, isNewUser) {
+    function login(userData, token, isNewUser) {
+        if (token) setAccessToken(token)
         setUser(userData)
         if (isNewUser === false) {
             setShowWelcome(true)
@@ -29,9 +39,10 @@ export function AuthProvider({ children }) {
     async function logout() {
         try {
             await api.post('/auth/logout')
-        } catch (err) {
+        } catch {
             // ignore
         }
+        clearAccessToken()
         setUser(null)
     }
 

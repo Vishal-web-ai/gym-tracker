@@ -43,7 +43,7 @@ export default function AuthPage() {
             const res = await api.post('/auth/verify-otp', { email, otp })
             sessionStorage.removeItem('pendingEmail')
             sessionStorage.removeItem('pendingStep')
-            login(res.data.user, res.data.isNewUser)
+            login(res.data.user, res.data.accessToken, res.data.isNewUser)
         } catch (err) {
             setError(err.response?.data?.message || 'Invalid OTP')
         } finally {
