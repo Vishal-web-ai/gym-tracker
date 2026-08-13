@@ -9,28 +9,54 @@ const formatTime = (seconds) => {
 const NumberOfSets = ({ reps, setReps, idx, placeholder = 'R', mode = 'weight' }) => {
   const [running, setRunning] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [paused, setPaused] = useState(false)
   const intervalRef = useRef(null)
+  const lastClickRef = useRef(0)
+  const elapsedRef = useRef(0)
 
   useEffect(() => {
-    if (running) {
+    elapsedRef.current = elapsed
+  }, [elapsed])
+
+  useEffect(() => {
+    if (running && !paused) {
       intervalRef.current = setInterval(() => {
         setElapsed(prev => prev + 1)
       }, 1000)
     }
-    return () => clearInterval(intervalRef.current)
-  }, [running])
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }, [running, paused])
 
   const handleClick = () => {
     if (mode !== 'timer') return
 
-    if (running) {
-      clearInterval(intervalRef.current)
+    const now = Date.now()
+    const isDoubleClick = now - lastClickRef.current < 300
+    lastClickRef.current = now
+
+    if (isDoubleClick) {
+      if (intervalRef.current) clearInterval(intervalRef.current)
       intervalRef.current = null
       setRunning(false)
-      setReps(idx, formatTime(elapsed))
-    } else {
+      setPaused(false)
       setElapsed(0)
+      setReps(idx, '')
+      return
+    }
+
+    if (running && !paused) {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      intervalRef.current = null
+      setPaused(true)
+      setReps(idx, formatTime(elapsedRef.current))
+    } else if (paused) {
+      setPaused(false)
+    } else {
       setRunning(true)
+      setPaused(false)
     }
   }
 
@@ -39,7 +65,7 @@ const NumberOfSets = ({ reps, setReps, idx, placeholder = 'R', mode = 'weight' }
       <div>
         <button
           onClick={handleClick}
-          className='w-14 h-7 bg-black text-orange-500 rounded-lg text-center font-bold outline-none cursor-pointer hover:bg-orange-500/10 transition-all'
+          className='w-[clamp(38px,12vw,56px)] h-[30px] bg-black text-orange-500 rounded-lg text-center text-sm font-bold outline-none cursor-pointer hover:bg-orange-500/10 transition-all'
         >
           {running ? formatTime(elapsed) : (reps || 'T')}
         </button>
@@ -60,7 +86,7 @@ const NumberOfSets = ({ reps, setReps, idx, placeholder = 'R', mode = 'weight' }
           }
         }}
         placeholder={placeholder}
-        className='w-7 h-7 bg-black text-orange-500 rounded-lg text-center font-bold outline-none placeholder-orange-500'
+        className='w-[clamp(34px,11vw,38px)] h-[30px] bg-black text-orange-500 rounded-lg text-center text-sm font-bold outline-none placeholder-orange-500'
       />
     </div>
   )

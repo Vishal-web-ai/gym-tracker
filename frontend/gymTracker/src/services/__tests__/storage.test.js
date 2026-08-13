@@ -1,0 +1,181 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import {
+    getSessions,
+    createSession,
+    renameSession,
+    deleteSession,
+    getCustomExercises,
+    createExercise,
+    updateExercise,
+    deleteExercise,
+    getName,
+    setName,
+    getPrs,
+    savePrs,
+    getUserProfile,
+    saveUserProfile,
+    getSchedule,
+    saveSchedule,
+    getDayKey,
+    getTodaysExercises,
+    computeMonthlyCount,
+    computeStreak
+} from '../storage'
+import { dbPut } from '../idb'
+import { resetDb } from '../../test/resetDb'
+
+beforeEach(resetDb)
+
+describe('storage', () => {
+    it('creates, renames, and deletes sessions', async () => {
+        const session = await createSession({ name: 'Chest Day' })
+        expect(session.id).toBeTruthy()
+        expect(session.createdAt).toBeTruthy()
+
+        const renamed = await renameSession(session.id, 'Push Day')
+        expect(renamed.name).toBe('Push Day')
+        await expect(renameSession('missing', 'X')).resolves.toBeNull()
+
+        await deleteSession(session.id)
+        expect(await getSessions()).toEqual([])
+    })
+
+    it('sorts sessions newest first', async () => {
+        await dbPut('sessions', { id: 'old', name: 'Old', createdAt: '2026-01-01T00:00:00Z' })
+        await dbPut('sessions', { id: 'new', name: 'New', createdAt: '2026-02-01T00:00:00Z' })
+        const sessions = await getSessions()
+        expect(sessions[0].name).toBe('New')
+        expect(sessions[1].name).toBe('Old')
+    })
+
+    it('creates, updates, and deletes exercises', async () => {
+        const exercise = await createExercise({ name: 'Squat', category: 'Legs' })
+        const updated = await updateExercise(exercise.id, { name: 'Front Squat' })
+        expect(updated.name).toBe('Front Squat')
+
+        const all = await getCustomExercises()
+        expect(all).toHaveLength(1)
+        expect(all[0].category).toBe('Legs')
+
+        await deleteExercise(exercise.id)
+        expect(await getCustomExercises()).toEqual([])
+    })
+
+    it('persists the user name', async () => {
+        expect(await getName()).toBe('Vishal')
+        await setName('Priya')
+        expect(await getName()).toBe('Priya')
+    })
+
+    it('persists personal records', async () => {
+        expect(await getPrs()).toEqual([])
+        const prs = [{ name: 'Deadlift', weight: '180', reps: '5' }]
+        await savePrs(prs)
+        expect(await getPrs()).toEqual(prs)
+        await savePrs([])
+        expect(await getPrs()).toEqual([])
+    })
+
+    it('returns an empty profile before onboarding', async () => {
+        expect(await getUserProfile()).toEqual({})
+    })
+
+    it('saves the profile and merges on each update', async () => {
+        await saveUserProfile({ age: '25' })
+        await saveUserProfile({ weight: '82', joinedAt: '2026-08-12T00:00:00Z' })
+        expect(await getUserProfile()).toEqual({
+            age: '25',
+            weight: '82',
+            joinedAt: '2026-08-12T00:00:00Z'
+        })
+    })
+
+    it('persists the weekly schedule', async () => {
+        expect(await getSchedule()).toEqual({})
+        const schedule = { monday: [{ name: 'Flat Bench Press' }], wednesday: [{ name: 'Squat' }] }
+        await saveSchedule(schedule)
+        expect(await getSchedule()).toEqual(schedule)
+    })
+
+    it('maps dates to day keys', () => {
+        expect(getDayKey(new Date('2026-08-10T12:00:00'))).toBe('monday')
+        expect(getDayKey(new Date('2026-08-16T12:00:00'))).toBe('sunday')
+    })
+
+    it('returns today\'s scheduled exercises', () => {
+        const schedule = { monday: [{ name: 'Squat' }], tuesday: [{ name: 'Deadlift' }, { name: 'Pull-Up' }] }
+        expect(getTodaysExercises(schedule, new Date('2026-08-11T12:00:00'))).toEqual([
+            { name: 'Deadlift' },
+            { name: 'Pull-Up' }
+        ])
+    })
+
+    it('returns an empty list on rest days and for missing schedules', () => {
+        expect(getTodaysExercises({ monday: [{ name: 'Squat' }] }, new Date('2026-08-12T12:00:00'))).toEqual([])
+        expect(getTodaysExercises(null, new Date('2026-08-10T12:00:00'))).toEqual([])
+        expect(getTodaysExercises({}, new Date('2026-08-10T12:00:00'))).toEqual([])
+    })
+})
+
+describe('stats', () => {
+    const at = (iso) => ({ createdAt: iso })
+
+    it('counts distinct workout days in the current month', () => {
+        const now = new Date('2026-03-15T12:00:00')
+        const sessions = [
+            at('2026-03-01T10:00:00'),
+            at('2026-03-01T18:00:00'),
+            at('2026-03-02T09:00:00'),
+            at('2026-02-28T09:00:00')
+        ]
+        expect(computeMonthlyCount(sessions, now)).toBe(2)
+    })
+
+    it('counts 0 workout days when there are no sessions this month', () => {
+        expect(computeMonthlyCount([at('2026-02-01T09:00:00')], new Date('2026-03-15T12:00:00'))).toBe(0)
+        expect(computeMonthlyCount([], new Date('2026-03-15T12:00:00'))).toBe(0)
+    })
+
+    it('counts a streak of consecutive days including today', () => {
+        const now = new Date('2026-03-10T12:00:00')
+        const sessions = [
+            at('2026-03-08T09:00:00'),
+            at('2026-03-09T09:00:00'),
+            at('2026-03-10T09:00:00')
+        ]
+        expect(computeStreak(sessions, now)).toBe(3)
+    })
+
+    it('keeps a streak alive when the last workout was yesterday', () => {
+        const now = new Date('2026-03-10T12:00:00')
+        const sessions = [
+            at('2026-03-08T09:00:00'),
+            at('2026-03-09T09:00:00')
+        ]
+        expect(computeStreak(sessions, now)).toBe(2)
+    })
+
+    it('resets the streak when the last workout was more than a day ago', () => {
+        const now = new Date('2026-03-10T12:00:00')
+        const sessions = [
+            at('2026-03-05T09:00:00'),
+            at('2026-03-06T09:00:00')
+        ]
+        expect(computeStreak(sessions, now)).toBe(0)
+    })
+
+    it('ignores duplicate days when counting the streak', () => {
+        const now = new Date('2026-03-10T12:00:00')
+        const sessions = [
+            at('2026-03-08T09:00:00'),
+            at('2026-03-08T18:00:00'),
+            at('2026-03-09T09:00:00'),
+            at('2026-03-10T09:00:00')
+        ]
+        expect(computeStreak(sessions, now)).toBe(3)
+    })
+
+    it('returns 0 for an empty history', () => {
+        expect(computeStreak([], new Date('2026-03-10T12:00:00'))).toBe(0)
+    })
+})
