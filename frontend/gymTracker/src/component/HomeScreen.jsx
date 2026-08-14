@@ -476,7 +476,7 @@ const HomeScreen = () => {
                     </div>
 
                     <motion.div variants={bottomVariants} initial="hidden" animate="show" className='flex flex-col items-center w-full flex-1 px-4 sm:px-10 pt-2'>
-                        <div className='w-full max-w-lg flex-1 min-h-0 -mt-[15px]'>
+                        <div className='w-full max-w-lg flex-1 min-h-0 -mt-[13px]'>
                             <HaloCard className='border border-orange-500/30'>
                                 <div className='px-4 py-2.5 h-full flex flex-col'>
                                     <div className='flex items-center gap-2 mb-1.5 shrink-0'>
