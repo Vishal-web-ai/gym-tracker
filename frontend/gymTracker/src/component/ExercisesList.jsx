@@ -1,41 +1,95 @@
-import { useState } from 'react'
-import { Plus, Pencil, Trash2, X, Check } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Plus, Pencil, Trash2, X, Check, ArrowLeft, ChevronRight, Search } from 'lucide-react'
 import { getCustomExercises, createExercise, updateExercise, deleteExercise } from '../services/storage'
 import { defaultExercises } from '../services/exercises'
+import ThemedSelect from './ThemedSelect'
 
 const CATEGORIES = ['Chest', 'Back', 'Biceps', 'Triceps', 'Arms', 'Shoulders', 'Legs', 'Core', 'Cardio']
 
-function groupByCategory(exercises) {
-    const map = {}
-    for (const ex of exercises) {
-        const category = ex.category || 'Other'
-        if (!map[category]) map[category] = []
-        map[category].push(ex)
-    }
-    return Object.entries(map).sort(([a], [b]) => CATEGORIES.indexOf(a) - CATEGORIES.indexOf(b))
-}
+const MODES = [
+    { key: 'weight', label: 'Weight (Strength)' },
+    { key: 'timer', label: 'Timer (Cardio)' }
+]
 
-const formInitial = { name: '', category: 'Chest', muscle: '' }
+const ModeTag = ({ mode }) => (
+    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-mono font-bold tracking-widest border ${
+        mode === 'timer'
+            ? 'bg-teal-500/10 text-teal-300 border-teal-500/30'
+            : 'bg-orange-500/10 text-orange-300 border-orange-500/30'
+    }`}>
+        {mode === 'timer' ? 'TIMER' : 'WEIGHT'}
+    </span>
+)
+
+const formInitial = { name: '', category: 'Chest', mode: 'weight', muscle: '' }
 
 const ExercisesList = ({ onSelectExercise, onClose }) => {
-    const [activeTab, setActiveTab] = useState('default')
     const [customExercises, setCustomExercises] = useState([])
+    const [query, setQuery] = useState('')
+    const [activeCategory, setActiveCategory] = useState('all')
     const [showForm, setShowForm] = useState(false)
     const [editingId, setEditingId] = useState(null)
     const [formData, setFormData] = useState(formInitial)
     const [saving, setSaving] = useState(false)
     const [saveError, setSaveError] = useState('')
-    const [loading, setLoading] = useState(false)
 
-    const fetchExercises = async () => {
-        setLoading(true)
-        try {
-            setCustomExercises(await getCustomExercises())
-        } catch {
-            // ignore
-        } finally {
-            setLoading(false)
+    useEffect(() => {
+        getCustomExercises().then(setCustomExercises).catch(() => {})
+    }, [])
+
+    const combined = useMemo(() => {
+        const list = []
+        for (const group of defaultExercises) {
+            for (const ex of group.items) list.push({ ...ex, category: group.category, custom: false })
         }
+        for (const ex of customExercises) list.push({ ...ex, custom: true })
+        return list
+    }, [customExercises])
+
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase()
+        return combined.filter(ex => {
+            if (activeCategory !== 'all' && ex.category !== activeCategory) return false
+            if (!q) return true
+            return (ex.name + ' ' + (ex.muscle || '') + ' ' + (ex.category || '')).toLowerCase().includes(q)
+        })
+    }, [combined, query, activeCategory])
+
+    const grouped = useMemo(() => {
+        const map = {}
+        for (const ex of filtered) {
+            const c = ex.category || 'Other'
+            if (!map[c]) map[c] = []
+            map[c].push(ex)
+        }
+        const rank = c => (CATEGORIES.indexOf(c) === -1 ? 99 : CATEGORIES.indexOf(c))
+        return Object.entries(map).sort(([a], [b]) => rank(a) - rank(b))
+    }, [filtered])
+
+    const searching = query.trim().length > 0
+
+    const openAdd = (name = '') => {
+        setEditingId(null)
+        setFormData({
+            name,
+            category: activeCategory === 'all' ? 'Chest' : activeCategory,
+            mode: 'weight',
+            muscle: ''
+        })
+        setSaveError('')
+        setShowForm(true)
+    }
+
+    const handleEdit = (ex) => {
+        setEditingId(ex.id)
+        setFormData({
+            name: ex.name,
+            category: ex.category,
+            mode: ex.mode === 'timer' ? 'timer' : 'weight',
+            muscle: ex.muscle || ''
+        })
+        setSaveError('')
+        setShowForm(true)
     }
 
     const resetForm = () => {
@@ -55,7 +109,7 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
                 await createExercise(formData)
             }
             resetForm()
-            await fetchExercises()
+            setCustomExercises(await getCustomExercises())
         } catch (err) {
             setSaveError(err?.message || 'Failed to save exercise')
         } finally {
@@ -63,174 +117,219 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
         }
     }
 
-    const handleEdit = (ex) => {
-        setEditingId(ex.id)
-        setFormData({ name: ex.name, category: ex.category, muscle: ex.muscle || '' })
-        setShowForm(true)
-    }
-
     const handleDelete = async (id) => {
         try {
             await deleteExercise(id)
-            await fetchExercises()
+            setCustomExercises(await getCustomExercises())
         } catch (err) {
             setSaveError(err?.message || 'Failed to delete exercise')
         }
     }
 
-    return (
-        <div className='h-full w-full md:w-3/4 flex justify-center'>
-            <div className='scroll h-full w-full border border-orange-500 rounded-2xl overflow-y-auto overflow-x-hidden p-5 relative'>
-                <button
-                    onClick={onClose}
-                    className='sticky top-0 right-0 ml-auto text-white px-3 py-1 text-2xl hover:text-orange-500 transition-all duration-300 font-semibold cursor-pointer rounded z-10 block'
-                >
-                    X
-                </button>
+    const Row = ({ ex }) => (
+        <div
+            onClick={() => onSelectExercise(ex)}
+            className='group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-orange-500/10 cursor-pointer transition-colors'
+        >
+            <span className='flex-1 truncate text-sm text-white'>{ex.name}</span>
+            {ex.custom ? (
+                <>
+                    <ModeTag mode={ex.mode} />
+                    <div className='flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <button
+                            onClick={e => { e.stopPropagation(); handleEdit(ex) }}
+                            className='p-1 text-orange-400 hover:text-orange-300 transition-colors cursor-pointer'
+                            title='Edit'
+                        >
+                            <Pencil size={14} />
+                        </button>
+                        <button
+                            onClick={e => { e.stopPropagation(); handleDelete(ex.id) }}
+                            className='p-1 text-red-400 hover:text-red-300 transition-colors cursor-pointer'
+                            title='Delete'
+                        >
+                            <Trash2 size={14} />
+                        </button>
+                    </div>
+                </>
+            ) : (
+                <span className='hidden sm:block max-w-[45%] truncate text-[10px] text-neutral-500'>{ex.muscle}</span>
+            )}
+            <ChevronRight size={14} className='shrink-0 text-orange-500/30 group-hover:text-orange-500/60 transition-colors' />
+        </div>
+    )
 
-                {/* Tabs */}
-                <div className='flex bg-black/30 rounded-xl p-1 mb-6 mt-2'>
-                    <button
-                        onClick={() => setActiveTab('default')}
-                        className={`flex-1 py-2 rounded-lg font-mono text-sm font-bold transition-all cursor-pointer ${
-                            activeTab === 'default'
-                                ? 'bg-orange-500 text-black'
-                                : 'text-orange-500/50 hover:text-orange-400'
-                        }`}
-                    >
-                        Default
-                    </button>
-                    <button
-                        onClick={() => { setActiveTab('custom'); fetchExercises() }}
-                        className={`flex-1 py-2 rounded-lg font-mono text-sm font-bold transition-all cursor-pointer ${
-                            activeTab === 'custom'
-                                ? 'bg-orange-500 text-black'
-                                : 'text-orange-500/50 hover:text-orange-400'
-                        }`}
-                    >
-                        My Exercises
-                    </button>
+    return (
+        <div className='h-full w-full md:w-3/4 mx-auto flex flex-col relative'>
+            <div className='flex items-center justify-between px-5 h-14 shrink-0'>
+                <div className='flex items-center gap-3'>
+                    <ArrowLeft
+                        onClick={onClose}
+                        className='text-white cursor-pointer hover:text-orange-400 transition-colors'
+                        size={22}
+                    />
+                    <h1 className='text-white font-mono font-bold text-lg tracking-wide'>exercises</h1>
+                </div>
+                <span className='font-mono text-[11px] text-orange-500/50'>{combined.length}</span>
+            </div>
+
+            <div className='px-5 pb-2 space-y-2.5 shrink-0'>
+                <div className='flex items-center gap-2 bg-black/40 border border-orange-500/30 rounded-lg px-3 py-2.5 focus-within:border-orange-500 transition-colors'>
+                    <Search size={16} className='shrink-0 text-orange-500' />
+                    <input
+                        type='text'
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder='search exercises'
+                        className='flex-1 bg-transparent text-white font-mono text-sm outline-none placeholder-orange-500/40 min-w-0'
+                    />
+                    <span className='shrink-0 h-4 w-[2px] bg-orange-500 animate-blink' />
+                    {query && (
+                        <X
+                            size={14}
+                            onClick={() => setQuery('')}
+                            className='shrink-0 text-orange-500/50 cursor-pointer hover:text-orange-400 transition-colors'
+                        />
+                    )}
                 </div>
 
-                {activeTab === 'custom' && (
-                    <div className='mb-4'>
-                        {!showForm ? (
-                            <button
-                                onClick={() => { setShowForm(true); setEditingId(null); setFormData(formInitial) }}
-                                className='flex items-center gap-2 text-orange-400 hover:text-orange-300 font-mono text-sm transition-all cursor-pointer'
-                            >
-                                <Plus size={18} /> Add Exercise
-                            </button>
-                        ) : (
-                            <div className='bg-black/40 border border-orange-500/30 rounded-xl p-4 space-y-3 animate-fadeIn'>
-                                <input
-                                    type='text'
-                                    value={formData.name}
-                                    onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
-                                    placeholder='Exercise name'
-                                    className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
-                                />
-                                <select
-                                    value={formData.category}
-                                    onChange={e => setFormData(p => ({ ...p, category: e.target.value }))}
-                                    className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2 text-white outline-none focus:border-orange-500 font-mono text-sm'
-                                >
-                                    {CATEGORIES.map(cat => (
-                                        <option key={cat} value={cat} className='bg-black text-white'>{cat}</option>
-                                    ))}
-                                </select>
-                                <input
-                                    type='text'
-                                    value={formData.muscle}
-                                    onChange={e => setFormData(p => ({ ...p, muscle: e.target.value }))}
-                                    placeholder='Target muscle (optional)'
-                                    className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
-                                />
-                                {saveError && (
-                                    <p className='text-red-400 text-xs font-mono bg-red-500/10 border border-red-500/30 rounded-lg p-2'>{saveError}</p>
-                                )}
-                                <div className='flex gap-2'>
-                                    <button
-                                        onClick={handleSave}
-                                        disabled={saving || !formData.name.trim()}
-                                        className='flex items-center gap-1 bg-orange-500 hover:bg-orange-400 text-black font-bold px-4 py-2 rounded-lg text-sm transition-all disabled:opacity-50 cursor-pointer'
-                                    >
-                                        <Check size={16} /> {saving ? 'Saving...' : editingId ? 'Update' : 'Save'}
-                                    </button>
-                                    <button
-                                        onClick={resetForm}
-                                        className='flex items-center gap-1 border border-neutral-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-neutral-800 transition-all cursor-pointer'
-                                    >
-                                        <X size={16} /> Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                <div className='scroll flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-1'>
+                    {['all', ...CATEGORIES].map(cat => (
+                        <button
+                            key={cat}
+                            onClick={() => setActiveCategory(cat)}
+                            className={`shrink-0 rounded-md px-2.5 py-1 font-mono text-[11px] font-bold tracking-wide transition-all cursor-pointer ${
+                                activeCategory === cat
+                                    ? 'bg-orange-500 text-black'
+                                    : 'bg-black/30 text-orange-500/50 hover:text-orange-400 hover:bg-black/50'
+                            }`}
+                        >
+                            {cat}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className='flex-1 overflow-y-auto scroll px-3 pb-4 min-h-0'>
+                {searching && filtered.length > 0 && (
+                    <div className='px-2 pt-3 pb-1 text-[10px] font-mono tracking-widest text-orange-500/50'>
+                        {filtered.length} {filtered.length === 1 ? 'result' : 'results'} for '{query.trim()}'
                     </div>
                 )}
 
-                <div className='py-2 pr-5'>
-                    {activeTab === 'default' ? (
-                        defaultExercises.map((group, idx) => (
-                            <div key={idx} className='flex flex-col font-mono mb-5'>
-                                <h1 className='font-bold text-3xl text-orange-600'>{group.category}</h1>
-                                <div className='pt-3 font-bold text-lg cursor-pointer'>
-                                    {group.items.map((exercise, idx2) => (
-                                        <h3
-                                            key={idx2}
-                                            onClick={() => onSelectExercise(exercise)}
-                                            className='hover:bg-orange-500/10 hover:text-orange-400 hover:border-l-2 hover:border-orange-500 hover:pl-4 transition-all duration-200 px-3 py-2 rounded-lg whitespace-nowrap cursor-pointer'
-                                        >
-                                            {exercise.name}
-                                        </h3>
-                                    ))}
-                                </div>
+                {filtered.length === 0 ? (
+                    <div className='flex flex-col items-center justify-center text-center gap-2 h-56 px-6'>
+                        <p className='font-mono text-sm text-orange-500/50'>
+                            {searching ? `nothing for '${query.trim()}'` : 'no exercises here'}
+                        </p>
+                        <p className='font-mono text-xs text-neutral-500'>
+                            {searching ? "not in your library yet — create it" : 'try another category'}
+                        </p>
+                        {searching && (
+                            <button
+                                onClick={() => openAdd(query.trim())}
+                                className='mt-2 flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-black font-mono font-bold text-sm px-4 py-2 rounded-lg transition-colors cursor-pointer'
+                            >
+                                <Plus size={16} /> add '{query.trim()}'
+                            </button>
+                        )}
+                    </div>
+                ) : searching ? (
+                    filtered.map(ex => <Row key={ex.custom ? ex.id : ex.name} ex={ex} />)
+                ) : (
+                    grouped.map(([category, items]) => (
+                        <div key={category}>
+                            <div className='flex items-center gap-2 px-2 pt-4 pb-1'>
+                                <span className='text-[10px] font-mono font-bold tracking-widest text-orange-500/50'>{category.toUpperCase()}</span>
+                                <span className='text-[10px] font-mono text-orange-500/30'>{items.length}</span>
+                                <span className='flex-1 h-px bg-orange-500/10' />
                             </div>
-                        ))
-                    ) : loading ? (
-                        <p className='text-orange-500/50 text-center font-mono py-8'>Loading...</p>
-                    ) : customExercises.length === 0 ? (
-                        <p className='text-orange-500/50 text-center font-mono py-8'>No custom exercises yet. Add one above!</p>
-                    ) : (
-                        groupByCategory(customExercises).map(([category, items]) => (
-                            <div key={category} className='flex flex-col font-mono mb-5'>
-                                <h1 className='font-bold text-3xl text-orange-600'>{category}</h1>
-                                <div className='pt-3 font-bold text-lg'>
-                                    {items.map((exercise) => (
-                                        <div
-                                            key={exercise.id}
-                                            className='flex items-center justify-between group hover:bg-orange-500/10 hover:border-l-2 hover:border-orange-500 hover:pl-4 transition-all duration-200 px-3 py-2 rounded-lg'
-                                        >
-                                            <h3
-                                                onClick={() => onSelectExercise(exercise)}
-                                                className='flex-1 cursor-pointer'
-                                            >
-                                                {exercise.name}
-                                            </h3>
-                                            <div className='flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity'>
-                                                <button
-                                                    onClick={() => handleEdit(exercise)}
-                                                    className='p-1 text-orange-400 hover:text-orange-300 transition-all cursor-pointer'
-                                                    title='Edit'
-                                                >
-                                                    <Pencil size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(exercise.id)}
-                                                    className='p-1 text-red-400 hover:text-red-300 transition-all cursor-pointer'
-                                                    title='Delete'
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
+                            {items.map(ex => <Row key={ex.custom ? ex.id : ex.name} ex={ex} />)}
+                        </div>
+                    ))
+                )}
             </div>
+
+            <div className='p-4 border-t border-neutral-800 shrink-0'>
+                <button
+                    onClick={() => openAdd()}
+                    className='w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-400 text-black font-mono font-bold text-sm py-3 rounded-xl transition-colors cursor-pointer'
+                >
+                    <Plus size={18} /> add exercise
+                </button>
+            </div>
+
+            {showForm && (
+                <div className='fixed inset-0 z-50 bg-neutral-900 flex flex-col animate-fadeIn'>
+                    <div className='flex items-center justify-between px-5 h-14 border-b border-neutral-700 shrink-0'>
+                        <div className='flex items-center gap-3'>
+                            <ArrowLeft
+                                onClick={resetForm}
+                                className='text-white cursor-pointer hover:text-orange-400 transition-colors'
+                                size={22}
+                            />
+                            <h1 className='text-white font-mono font-bold text-lg tracking-wide'>
+                                {editingId ? 'edit exercise' : 'add exercise'}
+                            </h1>
+                        </div>
+                        <X onClick={resetForm} className='text-white cursor-pointer hover:text-orange-400 transition-colors' size={22} />
+                    </div>
+
+                    <div className='flex-1 overflow-y-auto scroll p-5 space-y-3 min-h-0'>
+                        <input
+                            type='text'
+                            value={formData.name}
+                            onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
+                            placeholder='Exercise name'
+                            className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2.5 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
+                        />
+                        <div>
+                            <p className='text-[10px] font-mono tracking-widest text-orange-500/50 mb-1'>CATEGORY</p>
+                            <ThemedSelect
+                                value={formData.category}
+                                onChange={e => setFormData(p => ({ ...p, category: e.target.value }))}
+                                options={CATEGORIES.map(c => ({ value: c, label: c }))}
+                            />
+                        </div>
+                        <div>
+                            <p className='text-[10px] font-mono tracking-widest text-orange-500/50 mb-1'>MODE</p>
+                            <ThemedSelect
+                                value={formData.mode}
+                                onChange={e => setFormData(p => ({ ...p, mode: e.target.value }))}
+                                options={MODES.map(m => ({ value: m.key, label: m.label }))}
+                            />
+                        </div>
+                        <div>
+                            <p className='text-[10px] font-mono tracking-widest text-orange-500/50 mb-1'>TARGET MUSCLE</p>
+                            <input
+                                type='text'
+                                value={formData.muscle}
+                                onChange={e => setFormData(p => ({ ...p, muscle: e.target.value }))}
+                                placeholder='Optional'
+                                className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2.5 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
+                            />
+                        </div>
+                        {saveError && (
+                            <p className='text-red-400 text-xs font-mono bg-red-500/10 border border-red-500/30 rounded-lg p-2'>{saveError}</p>
+                        )}
+                        <div className='flex gap-2 pt-1'>
+                            <button
+                                onClick={handleSave}
+                                disabled={saving || !formData.name.trim()}
+                                className='flex items-center gap-1 bg-orange-500 hover:bg-orange-400 text-black font-mono font-bold px-4 py-2.5 rounded-lg text-sm transition-colors disabled:opacity-50 cursor-pointer'
+                            >
+                                <Check size={16} /> {saving ? 'Saving...' : editingId ? 'Update' : 'Save'}
+                            </button>
+                            <button
+                                onClick={resetForm}
+                                className='flex items-center gap-1 border border-neutral-600 text-white px-4 py-2.5 rounded-lg text-sm hover:bg-neutral-800 transition-colors cursor-pointer'
+                            >
+                                <X size={16} /> Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

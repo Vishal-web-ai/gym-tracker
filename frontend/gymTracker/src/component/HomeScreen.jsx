@@ -8,6 +8,7 @@ import ExerciseDetail from './ExerciseDetail'
 import StaggeredMenu from './StaggeredMenu'
 import MediaGallery from './MediaGallery'
 import WorkoutHistory from './WorkoutHistory'
+import MyExercises from './MyExercises'
 import Settings from './Settings'
 import GreetingUser from './GreetingUser'
 import Streak from './Streak'
@@ -92,6 +93,7 @@ const HomeScreen = () => {
     const [showGallery, setShowGallery] = useState(false)
     const [showHistory, setShowHistory] = useState(false)
     const [showSettings, setShowSettings] = useState(false)
+    const [showMyExercises, setShowMyExercises] = useState(false)
     const [exerciseWeights, setExerciseWeights] = useState(() => savedSession ? normalizeWeights(savedSession.exerciseWeights) : {})
     const [exerciseSets, setExerciseSets] = useState(() => savedSession?.exerciseSets || {})
     const [exerciseNotes, setExerciseNotes] = useState(() => savedSession?.exerciseNotes || {})
@@ -356,6 +358,7 @@ const HomeScreen = () => {
     const staggeredMenuItems = [
         { label: 'Workout History', ariaLabel: 'Open workout history', onClick: () => { setIsHamburgerOpen(false); setShowHistory(true) } },
         { label: 'Gym Memories', ariaLabel: 'Open gym memories gallery', onClick: () => { setIsHamburgerOpen(false); setShowGallery(true) } },
+        { label: 'My Exercises', ariaLabel: 'Open my exercises', onClick: () => { setIsHamburgerOpen(false); setShowMyExercises(true) } },
         { label: 'Settings', ariaLabel: 'Open settings', onClick: () => { setIsHamburgerOpen(false); setShowSettings(true) } }
     ]
 
@@ -379,8 +382,8 @@ const HomeScreen = () => {
                         </div>
                     )}
                 </div>
-                <div className='flex items-center gap-2 border-2 border-orange-500/40 rounded-full bg-[rgba(10,10,10,0.85)] px-4 py-1.5 cursor-pointer' onClick={handleGoHome} title='Go to Home'>
-                    <p className='font-bebas tracking-[2px] text-white text-lg leading-none pt-0.5'>GYM TRACKER</p>
+                <div className='flex items-center gap-2 rounded-full px-4 py-1.5 cursor-pointer' onClick={handleGoHome} title='Go to Home'>
+                    <img src='/logo.png' alt='Gym Tracker' className='h-12 sm:h-16 w-auto object-contain' />
                 </div>
                 <div
                     data-menu-toggle
@@ -833,6 +836,7 @@ const HomeScreen = () => {
             />
             {showGallery && <MediaGallery onClose={() => setShowGallery(false)} />}
             {showHistory && <WorkoutHistory onClose={() => setShowHistory(false)} />}
+            {showMyExercises && <MyExercises onClose={() => setShowMyExercises(false)} />}
             {showSettings && (
                 <Settings
                     onClose={() => setShowSettings(false)}
