@@ -98,5 +98,13 @@ export const defaultExercises = [
             { name: 'Cable Crunch', muscle: 'Upper Abs', image: '/exercises/cable-crunch.png' },
             { name: 'Wood Chop', muscle: 'Obliques / Core', image: '/exercises/wood-chopper.png' }
         ]
+    },
+    {
+        category: 'Cardio',
+        items: [
+            { name: 'Sprint', muscle: 'Cardio', mode: 'timer' },
+            { name: 'Skipping', muscle: 'Cardio', mode: 'timer' },
+            { name: 'Jump Rope', muscle: 'Cardio', mode: 'timer' }
+        ]
     }
 ]

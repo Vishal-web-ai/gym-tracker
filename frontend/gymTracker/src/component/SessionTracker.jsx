@@ -221,7 +221,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
         const now = new Date()
         const isTimer = (idx) => exercises[idx].mode === 'timer'
         try {
-            await createSession({
+            const session = await createSession({
                 date: now.toLocaleDateString('en-US', {
                     year: 'numeric', month: 'long', day: 'numeric'
                 }),
@@ -237,7 +237,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                     media: exerciseMedia?.[idx] || []
                 }))
             })
-            if (onSessionSaved) onSessionSaved(workoutName.trim() || 'Workout')
+            if (onSessionSaved) onSessionSaved(workoutName.trim() || 'Workout', session)
         } catch (err) {
             alert(getErrorMessage(err))
             setShowNameModal(true)

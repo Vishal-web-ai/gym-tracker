@@ -13,6 +13,10 @@ import Settings from './Settings'
 import GreetingUser from './GreetingUser'
 import Streak from './Streak'
 import PrsBadge from './PrsBadge'
+import RankBadge from './RankBadge'
+import RankScreen from './RankScreen'
+import LevelUpOverlay from './LevelUpOverlay'
+import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, challengeStatusForLevel } from '../services/progression'
 import {
     getName,
     getSessions,
@@ -94,12 +98,18 @@ const HomeScreen = () => {
     const [showHistory, setShowHistory] = useState(false)
     const [showSettings, setShowSettings] = useState(false)
     const [showMyExercises, setShowMyExercises] = useState(false)
+    const [showRanks, setShowRanks] = useState(false)
+    const [progress, setProgress] = useState(null)
+    const [celebration, setCelebration] = useState(null)
+    const [frozenDays, setFrozenDays] = useState([])
     const [exerciseWeights, setExerciseWeights] = useState(() => savedSession ? normalizeWeights(savedSession.exerciseWeights) : {})
     const [exerciseSets, setExerciseSets] = useState(() => savedSession?.exerciseSets || {})
     const [exerciseNotes, setExerciseNotes] = useState(() => savedSession?.exerciseNotes || {})
     const [exerciseMedia, setExerciseMedia] = useState(() => savedSession?.exerciseMedia || {})
     const [showSuccess, setShowSuccess] = useState(false)
     const [savedWorkoutName, setSavedWorkoutName] = useState('')
+    const [challengeToasts, setChallengeToasts] = useState([])
+    const challengeToastTimer = useRef(null)
     const [monthlyCount, setMonthlyCount] = useState(0)
     const [statKey, setStatKey] = useState(0)
     const [prs, setPrs] = useState([])
@@ -161,6 +171,19 @@ const HomeScreen = () => {
         refreshTodaysSchedule()
         refreshStats()
     }, [refreshStats, refreshTodaysSchedule])
+
+    useEffect(() => {
+        let cancelled = false
+        applyFreezeProtection()
+            .then(() => Promise.all([getFreezeState(), refreshProgress()]))
+            .then(([freezeState, result]) => {
+                if (cancelled) return
+                setFrozenDays(freezeState.frozenDays || [])
+                setProgress(result.progress)
+            })
+            .catch(() => {})
+        return () => { cancelled = true }
+    }, [])
 
     useEffect(() => {
         if (!showSession) return
@@ -232,7 +255,7 @@ const HomeScreen = () => {
     }
 
     const handleConfirmExercise = (exercise) => {
-        setSelectedExercises(prev => [...prev, { name: exercise.name }])
+        setSelectedExercises(prev => [...prev, { name: exercise.name, mode: exercise.mode }])
         setPreviewExercise(null)
         setShowExercisesList(false)
     }
@@ -269,7 +292,7 @@ const HomeScreen = () => {
 
     const handleStartClick = () => {
         if (todayExercises.length > 0) {
-            setSelectedExercises(todayExercises.map(e => ({ name: e.name })))
+            setSelectedExercises(todayExercises.map(e => ({ name: e.name, mode: e.mode })))
             setExerciseWeights({})
             setExerciseSets({})
             setExerciseNotes({})
@@ -287,7 +310,7 @@ const HomeScreen = () => {
         setShowExercisesList(false)
     }
 
-    const handleSessionSaved = useCallback((name) => {
+    const handleSessionSaved = useCallback(async (name, session) => {
         try {
             localStorage.removeItem(SESSION_KEY)
         } catch {
@@ -303,12 +326,58 @@ const HomeScreen = () => {
         setSavedWorkoutName(name)
         refreshStats()
         setStatKey(k => k + 1)
-        setShowSuccess(true)
-        setTimeout(() => {
-            setShowSuccess(false)
+
+        const result = await refreshProgress().catch(() => null)
+        if (!result) {
+            setShowSuccess(true)
+            setTimeout(() => {
+                setShowSuccess(false)
+                setShowSession(false)
+                setSavedWorkoutName('')
+            }, 1800)
+            return
+        }
+        setProgress(result.progress)
+
+        let breakdown = null
+        if (session) {
+            const sessions = await getSessions().catch(() => [])
+            breakdown = analyzeSession(session, sessions.filter(s => s.id !== session.id))
+            if (breakdown.newPrs.length) {
+                setPrs(prev => {
+                    const next = mergePrs(prev, breakdown.newPrs)
+                    savePrs(next).catch(() => {})
+                    return next
+                })
+            }
+            if (!result.isLevelUp) {
+                const level = result.progress.rank.level
+                const before = challengeStatusForLevel(sessions.filter(s => s.id !== session.id), level)
+                const after = result.progress.challenges?.[level - 1]?.groups || []
+                const newDone = after.filter(g => g.done && !before.some(b => b.key === g.key && b.done))
+                if (newDone.length) {
+                    if (challengeToastTimer.current) clearTimeout(challengeToastTimer.current)
+                    setChallengeToasts(newDone.map(g => g.label))
+                    challengeToastTimer.current = setTimeout(() => setChallengeToasts([]), 4000)
+                }
+            }
+        }
+
+        if (result.isLevelUp || (breakdown && breakdown.bonuses.length)) {
             setShowSession(false)
-            setSavedWorkoutName('')
-        }, 1800)
+            setCelebration({
+                rank: result.progress.rank,
+                breakdown,
+                isLevelUp: result.isLevelUp
+            })
+        } else {
+            setShowSuccess(true)
+            setTimeout(() => {
+                setShowSuccess(false)
+                setShowSession(false)
+                setSavedWorkoutName('')
+            }, 1800)
+        }
     }, [refreshStats])
 
     const persistPrs = (next) => {
@@ -356,6 +425,7 @@ const HomeScreen = () => {
     }
 
     const staggeredMenuItems = [
+        { label: 'My Ranks', ariaLabel: 'Open my ranks', onClick: () => { setIsHamburgerOpen(false); setShowRanks(true) } },
         { label: 'Workout History', ariaLabel: 'Open workout history', onClick: () => { setIsHamburgerOpen(false); setShowHistory(true) } },
         { label: 'Gym Memories', ariaLabel: 'Open gym memories gallery', onClick: () => { setIsHamburgerOpen(false); setShowGallery(true) } },
         { label: 'My Exercises', ariaLabel: 'Open my exercises', onClick: () => { setIsHamburgerOpen(false); setShowMyExercises(true) } },
@@ -419,7 +489,12 @@ const HomeScreen = () => {
                         <motion.div variants={cardVariants} initial="hidden" animate="show" className='w-full max-w-lg h-[105px]'>
                             <HaloCard className='border border-orange-500/30'>
                                 <div className='px-4 py-2 h-full flex flex-col justify-center'>
-                                    <Streak refreshKey={statKey} />
+                                    {progress?.rank && (
+                                        <div className='mb-1.5 cursor-pointer' onClick={() => setShowRanks(true)}>
+                                            <RankBadge rank={progress.rank} compact />
+                                        </div>
+                                    )}
+                                    <Streak refreshKey={statKey} frozenDays={frozenDays} />
                                 </div>
                             </HaloCard>
                         </motion.div>
@@ -623,6 +698,29 @@ const HomeScreen = () => {
                                 Workout Saved!
                             </p>
                         </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Challenge complete toasts */}
+            <AnimatePresence>
+                {challengeToasts.length > 0 && (
+                    <motion.div
+                        key='challenge-toasts'
+                        className='fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] flex flex-col items-center gap-2 px-4 pointer-events-none'
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 16 }}
+                        transition={{ duration: 0.25 }}
+                    >
+                        {challengeToasts.map(label => (
+                            <div key={label} className='flex items-center gap-2 bg-emerald-500 text-black rounded-full px-4 py-2 font-mono text-sm font-bold shadow-[0_0_24px_rgba(16,185,129,0.6)]'>
+                                <svg width='14' height='14' viewBox='0 0 24 24' fill='none'>
+                                    <path d='M5 13l4 4L19 7' stroke='black' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round' />
+                                </svg>
+                                {label} challenge complete!
+                            </div>
+                        ))}
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -837,6 +935,14 @@ const HomeScreen = () => {
             {showGallery && <MediaGallery onClose={() => setShowGallery(false)} />}
             {showHistory && <WorkoutHistory onClose={() => setShowHistory(false)} />}
             {showMyExercises && <MyExercises onClose={() => setShowMyExercises(false)} />}
+            {showRanks && <RankScreen onClose={() => setShowRanks(false)} />}
+            {celebration && (
+                <LevelUpOverlay
+                    rank={celebration.rank}
+                    newBadges={celebration.newBadges}
+                    onClose={() => setCelebration(null)}
+                />
+            )}
             {showSettings && (
                 <Settings
                     onClose={() => setShowSettings(false)}

@@ -18,10 +18,19 @@ function normalize(schedule) {
     for (const day of DAYS) {
         const list = Array.isArray(schedule?.[day.key]) ? schedule[day.key] : []
         out[day.key] = list
-            .map(e => (typeof e === 'string' ? { name: e } : { name: e?.name || '' }))
+            .map(e => (typeof e === 'string' ? { name: e } : { name: e?.name || '', ...(e?.mode ? { mode: e.mode } : {}) }))
             .filter(e => e.name)
     }
     return out
+}
+
+function buildModeMap(custom) {
+    const map = new Map()
+    for (const group of defaultExercises) {
+        for (const item of group.items) map.set(item.name.toLowerCase(), item.mode)
+    }
+    for (const ex of custom) map.set(ex.name.toLowerCase(), ex.mode)
+    return map
 }
 
 function buildGroups(custom) {
@@ -68,6 +77,7 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
     }, [])
 
     const groups = useMemo(() => buildGroups(custom), [custom])
+    const modeByName = useMemo(() => buildModeMap(custom), [custom])
 
     const activeLabel = DAYS.find(d => d.key === activeDay)?.label || activeDay
     const assigned = normalized[activeDay] || []
@@ -86,13 +96,13 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
         const has = assignedNames.has(name.toLowerCase())
         const next = has
             ? assigned.filter(e => e.name.toLowerCase() !== name.toLowerCase())
-            : [...assigned, { name }]
+            : [...assigned, { name, mode: modeByName.get(name.toLowerCase()) }]
         onChange({ ...normalized, [activeDay]: next })
     }
 
     const add = (name) => {
         if (!assignedNames.has(name.toLowerCase())) {
-            onChange({ ...normalized, [activeDay]: [...assigned, { name }] })
+            onChange({ ...normalized, [activeDay]: [...assigned, { name, mode: modeByName.get(name.toLowerCase()) }] })
         }
     }
 

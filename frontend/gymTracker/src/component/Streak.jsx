@@ -93,7 +93,7 @@ function RelaxIcon() {
     )
 }
 
-export default function Streak({ refreshKey = 0 }) {
+export default function Streak({ refreshKey = 0, frozenDays = [] }) {
     const [sessions, setSessions] = useState([])
     const [joinedAt, setJoinedAt] = useState(null)
     const [showCalendar, setShowCalendar] = useState(false)
@@ -116,13 +116,17 @@ export default function Streak({ refreshKey = 0 }) {
     }, [refreshKey])
 
     const doneDays = new Set(sessions.map((s) => toDayKey(s.createdAt)))
+    const frozenKeys = new Set(frozenDays)
 
     const isDateCompleted = (date) => doneDays.has(toDayKey(date))
+
+    const isFrozen = (date) => frozenKeys.has(toDayKey(date))
 
     const isBeforeJoin = (date) => joinedAt && toDayKey(date) < toDayKey(joinedAt)
 
     const isMissed = (date) => {
         if (isDateCompleted(date)) return false
+        if (isFrozen(date)) return false
         if (isToday(date)) return false
         if (date.getDay() === 0) return false
         if (isBeforeJoin(date)) return false
@@ -156,17 +160,18 @@ export default function Streak({ refreshKey = 0 }) {
             >
                 {weekDates.map((date, i) => {
                     const done = isDateCompleted(date)
+                    const frozen = isFrozen(date)
                     const missed = isMissed(date)
                     return (
                         <div key={i} className="flex flex-col items-center">
                             <p className="font-mono text-white/60 mb-1 text-[10px]">{DAYS[i]}</p>
                             <div
                                 className={`rounded-full flex items-center justify-center w-[34px] h-[34px] ${
-                                    done ? 'bg-orange-500' : missed ? 'border-2 border-blue-400' : isBeforeJoin(date) ? '' : 'border-2 border-orange-500'
+                                    done ? 'bg-orange-500' : (frozen || missed) ? 'border-2 border-blue-400' : isBeforeJoin(date) ? '' : 'border-2 border-orange-500'
                                 }`}
                             >
                                 {done && <FlameIcon />}
-                                {missed && <IceCrystal />}
+                                {(frozen || missed) && <IceCrystal />}
                             </div>
                             <p className="font-mono text-white/60 mt-1 text-[10px]">{date.getDate()}</p>
                         </div>
@@ -238,6 +243,7 @@ export default function Streak({ refreshKey = 0 }) {
                                         if (!date) return <div key={`${wi}-${di}`} className="flex-1" style={{ height: 40 }} />
                                         const isTodayDate = isToday(date)
                                         const completed = isDateCompleted(date)
+                                        const frozen = isFrozen(date)
                                         const missed = isMissed(date)
                                         const isSunday = date.getDay() === 0
                                         const isPastOrToday = isBeforeToday(date) || isTodayDate
@@ -249,14 +255,15 @@ export default function Streak({ refreshKey = 0 }) {
                                             <div key={toDayKey(date)} className="flex-1 flex items-center justify-center py-0.5">
                                                 <div
                                                     className={`rounded-full flex items-center justify-center ${
-                                                        completed ? 'bg-orange-500' : (isSunday && isPastOrToday) ? 'bg-green-500' : missed ? 'bg-blue-500' : isTodayDate ? 'border-2 border-orange-500' : ''
+                                                        completed ? 'bg-orange-500' : (isSunday && isPastOrToday) ? 'bg-green-500' : (frozen || missed) ? 'bg-blue-500' : isTodayDate ? 'border-2 border-orange-500' : ''
                                                     }`}
                                                     style={{ width: 36, height: 36 }}
                                                 >
                                                     {completed && <Flame size={16} color="white" fill="white" strokeWidth={2} />}
                                                     {(isSunday && isPastOrToday) && <RelaxIcon />}
+                                                    {frozen && <Snowflake size={16} color="white" strokeWidth={2} />}
                                                     {missed && <span className="bg-white rounded-[2px]" style={{ width: 8, height: 8 }} />}
-                                                    {!completed && !(isSunday && isPastOrToday) && !missed && (
+                                                    {!completed && !(isSunday && isPastOrToday) && !frozen && !missed && (
                                                         <p className={`font-mono text-[11px] ${isTodayDate ? 'text-orange-500' : 'text-white/30'}`}>
                                                             {date.getDate()}
                                                         </p>

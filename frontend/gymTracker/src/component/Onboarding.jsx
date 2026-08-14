@@ -5,6 +5,7 @@ import FloatingDumbbell from './FloatingDumbbell'
 import ScheduleEditor from './ScheduleEditor'
 import { setName, saveUserProfile, saveSchedule } from '../services/storage'
 import { imageFileToDataUrl } from '../services/photo'
+import { saveStartRank, saveProgressionState } from '../services/progression'
 
 const inputClass =
     'bg-black/50 border border-orange-500/30 rounded-xl text-white font-mono text-center outline-none focus:border-orange-500 placeholder-neutral-600'
@@ -17,8 +18,15 @@ const STEP_TITLES = [
     'YOUR AGE',
     'YOUR WEIGHT',
     'YOUR HEIGHT',
+    'YOUR EXPERIENCE',
     'YOUR PROFILE',
     'YOUR WEEK'
+]
+
+const EXPERIENCE_LEVELS = [
+    { level: 1, label: 'BEGINNER', desc: 'New to training (< 6 months)' },
+    { level: 4, label: 'INTERMEDIATE', desc: 'Trained 6 months – 2 years' },
+    { level: 6, label: 'ADVANCED', desc: 'Years of consistent lifting' }
 ]
 
 const Onboarding = ({ onDone }) => {
@@ -30,6 +38,7 @@ const Onboarding = ({ onDone }) => {
     const [inch, setInch] = useState('')
     const [photoUri, setPhotoUri] = useState(null)
     const [schedule, setSchedule] = useState({})
+    const [experience, setExperience] = useState(null)
     const photoInputRef = useRef(null)
 
     const nameReady = name.trim().length > 0
@@ -40,8 +49,9 @@ const Onboarding = ({ onDone }) => {
             case 1: return age.trim().length > 0
             case 2: return weight.trim().length > 0
             case 3: return feet.trim().length > 0
-            case 4: return Boolean(photoUri)
-            case 5: return hasSchedule
+            case 4: return experience != null
+            case 5: return Boolean(photoUri)
+            case 6: return hasSchedule
             default: return false
         }
     }
@@ -87,12 +97,14 @@ const Onboarding = ({ onDone }) => {
         if (photoUri) profile.photoData = photoUri
         await saveUserProfile(profile)
         await saveSchedule(schedule)
+        await saveStartRank(experience || 1)
+        await saveProgressionState({ lastLevel: experience || 1 })
         onDone()
     }
 
     const progress = (current) => (
         <div className='flex items-center justify-center gap-1.5'>
-            {[0, 1, 2, 3, 4, 5].map(i => (
+            {STEP_TITLES.map((_, i) => (
                 <div
                     key={i}
                     className='rounded-full transition-colors duration-300'
@@ -248,6 +260,27 @@ const Onboarding = ({ onDone }) => {
                     )}
 
                     {step === 4 && (
+                        <div className='flex flex-col gap-3 w-full'>
+                            {EXPERIENCE_LEVELS.map(lvl => (
+                                <button
+                                    key={lvl.level}
+                                    onClick={() => setExperience(lvl.level)}
+                                    className={`w-full rounded-xl flex flex-col items-center gap-0.5 px-4 py-3 transition-all cursor-pointer ${
+                                        experience === lvl.level
+                                            ? 'bg-orange-500 text-black shadow-[0_0_24px_rgba(255,107,26,0.5)]'
+                                            : 'bg-black/40 text-white/80 border border-orange-500/20 hover:border-orange-500/60'
+                                    }`}
+                                >
+                                    <span className='font-bebas tracking-[2px] text-lg'>{lvl.label}</span>
+                                    <span className={`font-mono text-[10px] ${experience === lvl.level ? 'text-black/70' : 'text-white/40'}`}>
+                                        {lvl.desc}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {step === 5 && (
                         <div className='flex flex-col items-center gap-6'>
                             <div className='relative'>
                                 {photoUri ? (
@@ -290,7 +323,7 @@ const Onboarding = ({ onDone }) => {
                                 </button>
                             )}
                             <button
-                                onClick={() => setStep(5)}
+                                onClick={() => setStep(6)}
                                 className='font-mono text-orange-500/70 text-sm cursor-pointer hover:text-orange-500 transition-colors'
                             >
                                 Skip for now
@@ -298,12 +331,12 @@ const Onboarding = ({ onDone }) => {
                         </div>
                     )}
 
-                    {step === 5 && (
+                    {step === 6 && (
                         <ScheduleEditor schedule={schedule} onChange={setSchedule} />
                     )}
 
                     <div className='flex gap-4 mt-6'>
-                        {step < 5 ? (
+                        {step < STEP_TITLES.length - 1 ? (
                             <>
                                 <button
                                     onClick={handleBack}
@@ -356,7 +389,7 @@ const Onboarding = ({ onDone }) => {
                     </div>
 
                     <p className='font-mono text-white text-center mt-3' style={{ fontSize: 11 }}>
-                        {step + 1} of 6
+                        {step + 1} of {STEP_TITLES.length}
                     </p>
                 </motion.div>
             </div>
