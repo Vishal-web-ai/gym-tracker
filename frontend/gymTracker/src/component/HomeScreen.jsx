@@ -475,13 +475,10 @@ const HomeScreen = () => {
                     </motion.div>
                     </div>
 
-                    <motion.div variants={bottomVariants} initial="hidden" animate="show" className='flex flex-col items-center justify-between w-full flex-1 px-4 sm:px-10 pt-2'>
-                        <div
-                            className='w-full max-w-lg flex-1 min-h-0 [@media(max-height:700px)]:flex-none [@media(max-height:700px)]:h-[149px]'
-                            style={{ transform: 'translateY(-5px)' }}
-                        >
+                    <motion.div variants={bottomVariants} initial="hidden" animate="show" className='flex flex-col items-center justify-center w-full flex-1 px-4 sm:px-10 pt-2'>
+                        <div className='w-full max-w-lg'>
                             <HaloCard className='border border-orange-500/30'>
-                                <div className='px-4 py-2.5 h-full flex flex-col'>
+                                <div className='px-4 py-2.5 flex flex-col'>
                                     <div className='flex items-center gap-2 mb-1.5 shrink-0'>
                                         <CalendarDays size={16} className='text-orange-500' />
                                         <p className='font-bebas tracking-[2px] text-orange-500 text-base leading-none'>
@@ -489,11 +486,11 @@ const HomeScreen = () => {
                                         </p>
                                     </div>
                                     {todayExercises.length > 0 ? (
-                                        <div className='flex flex-col overflow-y-auto scroll flex-1 min-h-0'>
+                                        <div className='flex flex-col overflow-y-auto scroll max-h-[140px]'>
                                             {todayExercises.map((e, i) => (
                                                 <p
                                                     key={i}
-                                                    className='flex items-center gap-2 font-mono text-white/80 text-sm my-auto'
+                                                    className='flex items-center gap-2 font-mono text-white/80 text-sm py-0.5'
                                                 >
                                                     <span className='text-orange-500 leading-none'>•</span>
                                                     {e.name}
@@ -501,7 +498,7 @@ const HomeScreen = () => {
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className='flex-1 min-h-0 flex flex-col items-center justify-center overflow-hidden'>
+                                        <div className='flex flex-col items-center justify-center'>
                                             <p className='font-bebas text-white tracking-[2px] text-5xl leading-none text-center'>
                                                 REST DAY
                                             </p>

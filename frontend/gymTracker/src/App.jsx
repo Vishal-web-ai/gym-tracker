@@ -52,8 +52,8 @@ export default function App() {
 
     return (
         <div
-            className='w-screen h-screen overflow-hidden flex items-center justify-center'
-            style={{ background: '#050505' }}
+            className='w-screen overflow-hidden flex items-center justify-center'
+            style={{ background: '#050505', height: window.innerHeight }}
         >
             <div
                 className='shrink-0'
