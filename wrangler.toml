@@ -1,0 +1,2 @@
+name = "gym-tracker"
+pages_build_output_dir = "frontend/gymTracker/dist"

@@ -1,0 +1,11 @@
+{
+  "name": "gym-tracker",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix frontend/gymTracker install --no-audit --no-fund && npm --prefix frontend/gymTracker run build",
+    "dev": "npm --prefix frontend/gymTracker run dev",
+    "preview": "npm --prefix frontend/gymTracker run preview",
+    "lint": "npm --prefix frontend/gymTracker run lint",
+    "test": "npm --prefix frontend/gymTracker run test"
+  }
+}
