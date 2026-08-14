@@ -62,7 +62,10 @@ export default function App() {
                     height: window.innerHeight / scale,
                     transform: `scale(${scale})`,
                     transformOrigin: 'center center',
-                    position: 'relative'
+                    position: 'relative',
+                    boxSizing: 'border-box',
+                    '--scale': scale,
+                    paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) / var(--scale))'
                 }}
             >
                 {content}

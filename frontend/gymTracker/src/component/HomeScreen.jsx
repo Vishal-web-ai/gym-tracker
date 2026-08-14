@@ -464,8 +464,8 @@ const HomeScreen = () => {
                     </motion.div>
                     </div>
 
-                    <motion.div variants={bottomVariants} initial="hidden" animate="show" className='flex flex-col items-center w-full flex-1 px-4 sm:px-10 pt-2'>
-                        <div ref={todayCardRef} className='w-full max-w-lg flex-1 min-h-0 -mt-[11px] [@media(max-height:700px)]:max-h-[150px]'>
+                    <motion.div variants={bottomVariants} initial="hidden" animate="show" className='flex flex-col items-center w-full flex-1 min-h-0 px-4 sm:px-10 pt-2'>
+                        <div ref={todayCardRef} className='w-full max-w-lg flex-1 min-h-0 -mt-[11px]'>
                             <HaloCard className='border border-orange-500/30'>
                                 <div className='px-4 py-2.5 h-full flex flex-col'>
                                     <div className='flex items-center gap-2 mb-1.5 shrink-0'>
