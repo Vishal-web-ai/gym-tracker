@@ -510,7 +510,7 @@ const HomeScreen = () => {
                                 </div>
                             </HaloCard>
                         </div>
-                        <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }} className='shrink-0' style={{ marginTop: 13 }}>
+                        <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }} className='shrink-0' style={{ marginTop: 17 }}>
                             <button
                                 onClick={handleStartClick}
                                 className='flex items-center gap-3 rounded-2xl bg-[#f97316] border border-[#c2410c] px-6 py-2 cursor-pointer'
