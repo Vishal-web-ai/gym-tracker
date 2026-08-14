@@ -47,33 +47,9 @@ const REST_MESSAGES = [
 
 const SESSION_KEY = 'gym-tracker-session-v1'
 
-function HaloStack() {
-    const halos = [
-        { size: 288, opacity: 0.025 },
-        { size: 192, opacity: 0.045 },
-        { size: 112, opacity: 0.07 },
-        { size: 56, opacity: 0.12 }
-    ]
-    return halos.map(({ size, opacity }) => (
-        <div
-            key={size}
-            className='absolute rounded-full pointer-events-none'
-            style={{
-                width: size,
-                height: size,
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%,-50%)',
-                backgroundColor: `rgba(249,115,22,${opacity})`
-            }}
-        />
-    ))
-}
-
 function HaloCard({ children, className = '' }) {
     return (
         <div className='relative w-full h-full'>
-            <HaloStack />
             <div className={`relative rounded-2xl w-full h-full bg-[rgba(10,10,10,0.85)] ${className}`}>
                 {children}
             </div>
@@ -140,9 +116,22 @@ const HomeScreen = () => {
     const [todayExercises, setTodayExercises] = useState([])
     const [currentIndex, setCurrentIndex] = useState(() => savedSession?.currentIndex || 0)
     const [showNotes, setShowNotes] = useState(() => savedSession?.showNotes || {})
+    const [todayCardScale, setTodayCardScale] = useState(1)
     const photoInputRef = useRef(null)
+    const todayCardRef = useRef(null)
 
     const restMessage = REST_MESSAGES[new Date().getDay() % REST_MESSAGES.length]
+
+    useEffect(() => {
+        const el = todayCardRef.current
+        if (!el) return
+        const ro = new ResizeObserver(([entry]) => {
+            const h = entry.contentRect.height
+            setTodayCardScale(Math.min(Math.max(h / 175, 1), 1.8))
+        })
+        ro.observe(el)
+        return () => ro.disconnect()
+    }, [])
 
     const refreshStats = useCallback(() => {
         getSessions()
@@ -476,12 +465,12 @@ const HomeScreen = () => {
                     </div>
 
                     <motion.div variants={bottomVariants} initial="hidden" animate="show" className='flex flex-col items-center w-full flex-1 px-4 sm:px-10 pt-2'>
-                        <div className='w-full max-w-lg flex-1 min-h-0 -mt-[13px]'>
+                        <div ref={todayCardRef} className='w-full max-w-lg flex-1 min-h-0 -mt-[11px] [@media(max-height:700px)]:max-h-[150px]'>
                             <HaloCard className='border border-orange-500/30'>
                                 <div className='px-4 py-2.5 h-full flex flex-col'>
                                     <div className='flex items-center gap-2 mb-1.5 shrink-0'>
                                         <CalendarDays size={16} className='text-orange-500' />
-                                        <p className='font-bebas tracking-[2px] text-orange-500 text-base leading-none'>
+                                        <p className='font-bebas tracking-[2px] text-orange-500 leading-none' style={{ fontSize: `${16 * todayCardScale}px` }}>
                                             TODAY'S WORKOUT
                                         </p>
                                     </div>
@@ -490,7 +479,8 @@ const HomeScreen = () => {
                                             {todayExercises.map((e, i) => (
                                                 <p
                                                     key={i}
-                                                    className='flex items-center gap-2 font-mono text-white/80 text-sm my-auto'
+                                                    className='flex items-center gap-2 font-mono text-white/80 my-auto shrink-0'
+                                                    style={{ fontSize: `${14 * todayCardScale}px` }}
                                                 >
                                                     <span className='text-orange-500 leading-none'>•</span>
                                                     {e.name}
@@ -498,11 +488,11 @@ const HomeScreen = () => {
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className='flex-1 min-h-0 flex flex-col items-center justify-center overflow-hidden'>
-                                            <p className='font-bebas text-white tracking-[2px] text-5xl leading-none text-center'>
+                                        <div className='flex-1 min-h-0 flex flex-col items-center justify-center overflow-y-auto scroll'>
+                                            <p className='font-bebas text-white tracking-[2px] leading-none text-center' style={{ fontSize: `${48 * todayCardScale}px` }}>
                                                 REST DAY
                                             </p>
-                                            <p className='font-mono text-white/50 text-xs text-center px-2 mt-2'>
+                                            <p className='font-mono text-white/50 text-center px-2 mt-2' style={{ fontSize: `${12 * todayCardScale}px` }}>
                                                 {restMessage}
                                             </p>
                                         </div>
