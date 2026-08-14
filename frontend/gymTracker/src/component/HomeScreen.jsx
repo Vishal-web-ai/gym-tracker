@@ -475,10 +475,10 @@ const HomeScreen = () => {
                     </motion.div>
                     </div>
 
-                    <motion.div variants={bottomVariants} initial="hidden" animate="show" className='flex flex-col items-center justify-center w-full flex-1 px-4 sm:px-10 pt-2'>
-                        <div className='w-full max-w-lg'>
+                    <motion.div variants={bottomVariants} initial="hidden" animate="show" className='flex flex-col items-center w-full flex-1 px-4 sm:px-10 pt-2'>
+                        <div className='w-full max-w-lg flex-1 min-h-0'>
                             <HaloCard className='border border-orange-500/30'>
-                                <div className='px-4 py-2.5 flex flex-col'>
+                                <div className='px-4 py-2.5 h-full flex flex-col'>
                                     <div className='flex items-center gap-2 mb-1.5 shrink-0'>
                                         <CalendarDays size={16} className='text-orange-500' />
                                         <p className='font-bebas tracking-[2px] text-orange-500 text-base leading-none'>
@@ -486,11 +486,11 @@ const HomeScreen = () => {
                                         </p>
                                     </div>
                                     {todayExercises.length > 0 ? (
-                                        <div className='flex flex-col overflow-y-auto scroll max-h-[140px]'>
+                                        <div className='flex flex-col overflow-y-auto scroll flex-1 min-h-0'>
                                             {todayExercises.map((e, i) => (
                                                 <p
                                                     key={i}
-                                                    className='flex items-center gap-2 font-mono text-white/80 text-sm py-0.5'
+                                                    className='flex items-center gap-2 font-mono text-white/80 text-sm my-auto'
                                                 >
                                                     <span className='text-orange-500 leading-none'>•</span>
                                                     {e.name}
@@ -498,7 +498,7 @@ const HomeScreen = () => {
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className='flex flex-col items-center justify-center'>
+                                        <div className='flex-1 min-h-0 flex flex-col items-center justify-center overflow-hidden'>
                                             <p className='font-bebas text-white tracking-[2px] text-5xl leading-none text-center'>
                                                 REST DAY
                                             </p>
@@ -510,7 +510,7 @@ const HomeScreen = () => {
                                 </div>
                             </HaloCard>
                         </div>
-                        <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }} className='mt-3 shrink-0'>
+                        <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }} className='shrink-0' style={{ marginTop: 7 }}>
                             <button
                                 onClick={handleStartClick}
                                 className='flex items-center gap-3 rounded-2xl bg-[#f97316] border border-[#c2410c] px-6 py-2 cursor-pointer'
