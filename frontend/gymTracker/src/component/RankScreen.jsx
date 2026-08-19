@@ -178,23 +178,34 @@ export default function RankScreen({ onClose }) {
                                 <p className='font-mono text-white/40 text-sm'>Log some sets to start ranking your exercises.</p>
                             ) : (
                                 <div className='flex-1 overflow-y-auto scroll flex flex-col gap-2.5 pr-1'>
-                                    {progress.exerciseRanks.map((e) => (
+                                    {progress.exerciseRanks.map((e) => {
+                                    const isTimer = e.mode === 'timer'
+                                    const cur = isTimer ? e.duration : e.weight
+                                    const nextVal = e.score > 0 && e.rank.nextScore != null
+                                        ? Math.round((cur / e.score) * e.rank.nextScore)
+                                        : null
+                                    const nextName = e.rank.nextScore != null ? EXERCISE_RANKS[e.rank.tier + 1].name : null
+                                    return (
                                         <div key={e.name} className='flex flex-col gap-1'>
                                             <div className='flex items-center gap-2'>
                                                 <p className='font-mono text-white/80 text-sm flex-1 truncate'>{e.name}</p>
                                                 <p className='font-bebas text-xs tracking-[1px]' style={{ color: e.rank.color }}>
                                                     {e.rank.name.toUpperCase()}
                                                 </p>
-                                                <p className='font-mono text-white/30 text-[10px]'>{e.points} sets</p>
+                                                <p className='font-mono text-white/30 text-[10px]'>
+                                                    {cur ? (isTimer ? `${cur}s` : `${cur}kg`) : '—'}
+                                                    {nextVal != null ? ` / ${nextVal}${isTimer ? 's' : 'kg'}` : ''}
+                                                </p>
                                             </div>
                                             <div className='h-1.5 rounded-full bg-white/10 overflow-hidden'>
                                                 <div className='h-full rounded-full' style={{ width: `${Math.round(e.rank.progress * 100)}%`, background: e.rank.color }} />
                                             </div>
                                             <p className='font-mono text-white/30 text-[9px]'>
-                                                {e.rank.nextPoints ? `${e.rank.nextPoints - e.points} sets to ${EXERCISE_RANKS[e.rank.tier + 1].name.toUpperCase()}` : 'MAX TIER'}
+                                                {nextVal != null ? `${Math.max(0, nextVal - cur)}${isTimer ? 's' : 'kg'} to ${nextName.toUpperCase()}` : 'MAX TIER'}
                                             </p>
                                         </div>
-                                    ))}
+                                    )
+                                })}
                                 </div>
                             )}
                         </>

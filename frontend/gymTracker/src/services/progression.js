@@ -1,5 +1,5 @@
 import { dbGet, dbPut } from './idb'
-import { getSessions, toDayKey } from './storage'
+import { getSessions, toDayKey, getUserProfile } from './storage'
 
 // ---------------------------------------------------------------------------
 // Ranks (player level ladder, driven by total XP)
@@ -171,6 +171,18 @@ export function mergePrs(prs, newPrs) {
     return next
 }
 
+// Derives the personal-records list purely from saved sessions. Deleting a
+// session therefore removes any PR that only existed in it.
+export function computePrsFromSessions(sessions) {
+    const index = buildHistoryIndex(sessions || [])
+    const prs = []
+    for (const [name, entry] of Object.entries(index)) {
+        if (entry.bestWeight === -Infinity) continue
+        prs.push({ name, weight: String(entry.bestWeight), reps: String(entry.bestRepsAtWeight?.[entry.bestWeight] || '') })
+    }
+    return prs
+}
+
 export function totalLoggedSets(sessions) {
     return sessions.reduce(
         (sum, s) => sum + (Array.isArray(s?.exercises) ? s.exercises : []).reduce((a, ex) => a + loggedSetsOf(ex), 0),
@@ -201,22 +213,70 @@ export function rankForXp(xp) {
 }
 
 // ---------------------------------------------------------------------------
-// Per-exercise ranks (driven by total logged sets for that exercise)
+// Per-exercise ranks (weight-based, relative to bodyweight, minimum 8 reps)
 // ---------------------------------------------------------------------------
 
 export const EXERCISE_RANKS = [
-    { name: 'Iron', color: '#9ca3af', points: 0 },
-    { name: 'Bronze', color: '#d97706', points: 10 },
-    { name: 'Silver', color: '#cbd5e1', points: 25 },
-    { name: 'Gold', color: '#facc15', points: 50 },
-    { name: 'Platinum', color: '#22d3ee', points: 100 },
-    { name: 'Diamond', color: '#818cf8', points: 200 }
+    { name: 'Wood', color: '#a16207', threshold: 0.3 },
+    { name: 'Bronze', color: '#cd7f32', threshold: 0.55 },
+    { name: 'Silver', color: '#cbd5e1', threshold: 0.8 },
+    { name: 'Gold', color: '#facc15', threshold: 1.0 },
+    { name: 'Platinum', color: '#22d3ee', threshold: 1.25 },
+    { name: 'Diamond', color: '#818cf8', threshold: 1.5 }
 ]
 
-export function exerciseRankForPoints(points) {
+// Strength factor = the typical bodyweight multiple an intermediate lifter hits
+// for that category. Weight score = weight / (bodyweight × factor), so a score
+// of 1.0 always means "intermediate for your size" regardless of exercise.
+const CATEGORY_FACTORS = {
+    Chest: 1.0,
+    Back: 1.1,
+    Biceps: 0.4,
+    Triceps: 0.5,
+    Arms: 0.45,
+    Shoulders: 0.7,
+    Legs: 1.5,
+    Core: 0.5,
+    Cardio: 1.0
+}
+
+// Seconds that count as an "intermediate" effort for that category, so timer
+// exercises use the exact same threshold table as weight lifts.
+const CATEGORY_TIME_FACTORS = {
+    Chest: 60,
+    Back: 60,
+    Biceps: 60,
+    Triceps: 60,
+    Arms: 60,
+    Shoulders: 60,
+    Legs: 60,
+    Core: 90,
+    Cardio: 600
+}
+
+export function strengthFactorForCategory(category) {
+    return CATEGORY_FACTORS[category] ?? 1.0
+}
+
+export function timeFactorForCategory(category) {
+    return CATEGORY_TIME_FACTORS[category] ?? 60
+}
+
+export function strengthScore({ weight, bodyweight, category }) {
+    const bw = parseFloat(bodyweight)
+    if (!bw || !(weight > 0)) return 0
+    return weight / (bw * strengthFactorForCategory(category))
+}
+
+export function durationScore({ seconds, category }) {
+    if (!(seconds > 0)) return 0
+    return seconds / timeFactorForCategory(category)
+}
+
+export function exerciseRankForScore(score) {
     let tier = 0
     for (let i = 1; i < EXERCISE_RANKS.length; i++) {
-        if (points >= EXERCISE_RANKS[i].points) tier = i
+        if (score >= EXERCISE_RANKS[i].threshold) tier = i
         else break
     }
     const current = EXERCISE_RANKS[tier]
@@ -225,23 +285,56 @@ export function exerciseRankForPoints(points) {
         tier,
         name: current.name,
         color: current.color,
-        points,
-        nextPoints: next ? next.points : null,
-        progress: next ? Math.min((points - current.points) / (next.points - current.points), 1) : 1
+        score,
+        nextScore: next ? next.threshold : null,
+        progress: next ? Math.min((score - current.threshold) / (next.threshold - current.threshold), 1) : 1
     }
 }
 
-export function computeExerciseRanks(sessions) {
-    const points = {}
+// Best recorded effort per exercise across sessions: heaviest weight hit for
+// 8+ reps, or the longest held time for timer exercises.
+export function bestExerciseEffort(sessions) {
+    const best = {}
     for (const s of sessions) {
         for (const ex of (s?.exercises || [])) {
-            const logged = loggedSetsOf(ex)
-            if (logged > 0) points[ex.name] = (points[ex.name] || 0) + logged
+            const mode = ex.mode === 'timer' ? 'timer' : 'weight'
+            const entry = best[ex.name] || (best[ex.name] = { weight: 0, duration: 0, category: ex.category || null, mode })
+            if (ex.category) entry.category = ex.category
+            if (mode === 'timer') {
+                for (const set of (ex?.sets || [])) {
+                    const d = parseReps(set?.reps)
+                    if (d > entry.duration) entry.duration = d
+                }
+            } else {
+                for (const set of (ex?.sets || [])) {
+                    const r = parseReps(set?.reps)
+                    const w = parseWeight(set?.weight)
+                    if (w != null && r >= 8 && w > entry.weight) entry.weight = w
+                }
+            }
         }
     }
-    return Object.entries(points)
-        .map(([name, pts]) => ({ name, points: pts, rank: exerciseRankForPoints(pts) }))
-        .sort((a, b) => b.points - a.points)
+    return best
+}
+
+export function computeExerciseRanks(sessions, bodyweight = 0) {
+    const best = bestExerciseEffort(sessions)
+    return Object.entries(best)
+        .map(([name, e]) => {
+            const score = e.mode === 'timer'
+                ? durationScore({ seconds: e.duration, category: e.category })
+                : strengthScore({ weight: e.weight, bodyweight, category: e.category })
+            return {
+                name,
+                category: e.category || 'Chest',
+                mode: e.mode,
+                score,
+                weight: e.weight,
+                duration: e.duration,
+                rank: exerciseRankForScore(score)
+            }
+        })
+        .sort((a, b) => b.score - a.score)
 }
 
 // ---------------------------------------------------------------------------
@@ -517,7 +610,7 @@ export function computeStreakWithFreezes(sessions, frozenDays = [], now = new Da
 // Progression snapshot + celebration state
 // ---------------------------------------------------------------------------
 
-export function computeProgress({ sessions, frozenDays = [], now = new Date(), startRank = 1 }) {
+export function computeProgress({ sessions, frozenDays = [], now = new Date(), startRank = 1, bodyweight = 0 }) {
     const xp = Math.max(totalXp(sessions), xpThresholdForLevel(startRank))
     const xpRank = rankForXp(xp)
     const eligible = Math.max(startRank, challengeEligibleLevel(sessions))
@@ -525,7 +618,7 @@ export function computeProgress({ sessions, frozenDays = [], now = new Date(), s
     const threshold = xpThresholdForLevel(level)
     const nextThreshold = level < MAX_LEVEL ? xpThresholdForLevel(level + 1) : null
     const streak = computeStreakWithFreezes(sessions, frozenDays, now)
-    const exerciseRanks = computeExerciseRanks(sessions)
+    const exerciseRanks = computeExerciseRanks(sessions, bodyweight)
     return {
         xp,
         rank: {
@@ -559,13 +652,15 @@ export async function saveProgressionState(state) {
 // Computes everything, compares against the persisted level marker, and
 // returns { progress, isLevelUp } while recording the new marker.
 export async function refreshProgress(now = new Date()) {
-    const [sessions, freezeState, marker, startRank] = await Promise.all([
+    const [sessions, freezeState, marker, startRank, profile] = await Promise.all([
         getSessions(),
         getFreezeState(),
         getProgressionState(),
-        getStartRank()
+        getStartRank(),
+        getUserProfile()
     ])
-    const progress = computeProgress({ sessions, frozenDays: freezeState.frozenDays, now, startRank })
+    const bodyweight = parseFloat(profile?.weight) || 0
+    const progress = computeProgress({ sessions, frozenDays: freezeState.frozenDays, now, startRank, bodyweight })
     const wasLevel = marker.lastLevel || 0
     const isLevelUp = progress.rank.level > wasLevel
     if (isLevelUp) {

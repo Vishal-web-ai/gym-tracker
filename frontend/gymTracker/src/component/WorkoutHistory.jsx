@@ -5,7 +5,7 @@ import { getSessions, deleteSession, removeExerciseMedia } from '../services/sto
 import { deleteMedia } from '../services/media'
 import { getErrorMessage } from '../services/errors'
 
-const WorkoutHistory = ({ onClose }) => {
+const WorkoutHistory = ({ onClose, onDeleted }) => {
     const [sessions, setSessions] = useState([])
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState('')
@@ -32,6 +32,7 @@ const WorkoutHistory = ({ onClose }) => {
         try {
             await deleteSession(id)
             setSessions(prev => prev.filter(s => s.id !== id))
+            if (onDeleted) onDeleted()
         } catch (err) {
             alert(getErrorMessage(err))
         }

@@ -1,27 +1,42 @@
-import { useState, useLayoutEffect, useEffect, useRef } from 'react'
-import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check, Images, Film } from 'lucide-react'
+import { useState, useLayoutEffect, useEffect, useRef, useMemo } from 'react'
+import { motion } from 'framer-motion'
+import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check, Images, Film, Trophy, Flame, Zap, Timer } from 'lucide-react'
 import NumberOfSets from './NumberOfSets'
 import ExerciseMedia from './ExerciseMedia'
 import RestTimer from './RestTimer'
 import { createSession, getRestSound } from '../services/storage'
 import { addMedia } from '../services/media'
 import { getErrorMessage } from '../services/errors'
+import { strengthScore, durationScore, exerciseRankForScore, strengthFactorForCategory, timeFactorForCategory, buildHistoryIndex } from '../services/progression'
 
-const WeightCell = ({ value, onChange }) => (
+const XP_BURST = Array.from({ length: 12 }, (_, i) => {
+    const angle = (i / 12) * Math.PI * 2
+    return {
+        id: i,
+        x: Math.cos(angle) * 70,
+        y: Math.sin(angle) * 70,
+        delay: (i % 4) * 0.05,
+        color: ['#f97316', '#fbbf24', '#fb923c', '#fff'][i % 4],
+        size: 5 + (i % 3) * 2
+    }
+})
+
+const WeightCell = ({ value, onChange, disabled = false }) => (
     <input
         type='text'
         inputMode='decimal'
         value={value}
+        disabled={disabled}
         onChange={(e) => {
             const v = e.target.value
             if (v === '' || /^\d*\.?\d*$/.test(v)) onChange(v)
         }}
         placeholder='0'
-        className='w-full h-9 bg-black/30 border border-white/15 rounded-xl text-center font-bebas text-orange-400 text-lg outline-none placeholder-orange-400/40'
+        className='w-full h-9 bg-black/30 border border-white/15 rounded-xl text-center font-bebas text-orange-400 text-lg outline-none placeholder-orange-400/40 disabled:cursor-not-allowed disabled:opacity-40'
     />
 )
 
-const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, showNotes, setShowNotes, sound, canPrev, canNext, onGoPrev, onGoNext }) => {
+const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, showNotes, setShowNotes, sound, bodyweight, sessions = [], onXpFlash, canPrev, canNext, onGoPrev, onGoNext }) => {
     const photoCaptureRef = useRef(null)
     const photoGalleryRef = useRef(null)
     const videoCaptureRef = useRef(null)
@@ -30,6 +45,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const glowRef = useRef(null)
     const [busy, setBusy] = useState(false)
     const [menuFor, setMenuFor] = useState(null)
+    const rewardedRef = useRef(new Set())
     const nameRef = useRef(null)
     const setsScrollRef = useRef(null)
     const dragRef = useRef(null)
@@ -153,6 +169,41 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         [idx]: [...(prev[idx] || []), item]
     }))
 
+    const savedEntry = useMemo(() => buildHistoryIndex(sessions)[exercise.name], [sessions, exercise.name])
+    const savedWeight = savedEntry && savedEntry.bestWeight > 0 ? savedEntry.bestWeight : 0
+    const savedDuration = savedEntry?.bestDuration || 0
+    let liveWeight = 0
+    let liveDuration = 0
+    if (isTimer) {
+        for (let si = 0; si < setCount; si++) {
+            const d = parseFloat(exerciseSets[idx]?.[si]) || 0
+            if (d > liveDuration) liveDuration = d
+        }
+    } else {
+        for (let si = 0; si < setCount; si++) {
+            const reps = parseFloat(exerciseSets[idx]?.[si]) || 0
+            const w = parseFloat(String(exerciseWeights[idx]?.[si]).replace('kg', '')) || 0
+            if (reps >= 8 && w > liveWeight) liveWeight = w
+        }
+    }
+    const bestWeight = Math.max(savedWeight, liveWeight)
+    const bestDuration = Math.max(savedDuration, liveDuration)
+    const score = isTimer
+        ? durationScore({ seconds: bestDuration, category: exercise.category })
+        : strengthScore({ weight: bestWeight, bodyweight, category: exercise.category })
+    const rank = exerciseRankForScore(score)
+    const nextScore = rank.nextScore
+    const nextTarget = nextScore != null
+        ? isTimer
+            ? Math.round(timeFactorForCategory(exercise.category) * nextScore)
+            : Math.round(bodyweight * strengthFactorForCategory(exercise.category) * nextScore)
+        : null
+    const displayCur = isTimer ? (bestDuration || '—') + 's' : (bestWeight || '—') + 'kg'
+    const displayNext = nextTarget != null ? `${nextTarget}${isTimer ? 's' : 'kg'}` : null
+    const pr = savedEntry && savedEntry.bestWeight > 0
+        ? { name: exercise.name, weight: savedEntry.bestWeight, reps: savedEntry.bestRepsAtWeight?.[savedEntry.bestWeight] || '—' }
+        : null
+
     const handleFiles = async (e) => {
         const files = Array.from(e.target.files || [])
         e.target.value = ''
@@ -167,6 +218,38 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         } finally {
             setBusy(false)
         }
+    }
+
+    const handleToggleDone = (setIdx) => {
+        const currentlyDone = !!exerciseDone[idx]?.[setIdx]
+        if (!currentlyDone) {
+            const doneSets = []
+            for (let si = 0; si < setCount; si++) {
+                if (si !== setIdx && exerciseDone[idx]?.[si]) {
+                    doneSets.push({
+                        reps: exerciseSets[idx]?.[si] || '—',
+                        weight: isTimer ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
+                    })
+                }
+            }
+            const index = buildHistoryIndex([...(sessions || []), { exercises: [{ name: exercise.name, mode: exercise.mode, sets: doneSets }] }])
+            const reps = parseFloat(exerciseSets[idx]?.[setIdx]) || 0
+            const weight = parseFloat(String(exerciseWeights[idx]?.[setIdx]).replace('kg', '')) || 0
+            const entry = index[exercise.name]
+            let bonus = null
+            if (isTimer) {
+                if (entry && reps > entry.bestDuration) bonus = { type: 'timer-record', points: 10 }
+            } else if (entry && weight > entry.bestWeight) {
+                bonus = { type: 'weight-pr', points: 10 }
+            } else if (entry && weight > 0 && reps > (entry.bestRepsAtWeight?.[weight] || 0)) {
+                bonus = { type: 'extra-rep', points: 5 }
+            }
+            if (bonus && !rewardedRef.current.has(`${idx}:${setIdx}`)) {
+                rewardedRef.current.add(`${idx}:${setIdx}`)
+                onXpFlash({ id: Date.now(), type: bonus.type, points: bonus.points })
+            }
+        }
+        setDone(idx, setIdx, !currentlyDone)
     }
 
     return (
@@ -354,61 +437,76 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                     ref={setsScrollRef}
                     className='flex-initial min-h-0 overflow-y-auto scroll mt-1.5'
                 >
-                    <div className='flex flex-col gap-1.5'>
+                    <div className='flex flex-col gap-6 pt-4'>
                         {Array.from({ length: setCount }, (_, setIdx) => {
                             const done = !!exerciseDone[idx]?.[setIdx]
+                            const unlocked = setIdx === 0 || !!exerciseDone[idx]?.[setIdx - 1]
+                            const locked = done || !unlocked
                             return (
                                 <div key={setIdx} className='flex items-center gap-2.5'>
-                                    <div className='w-7 h-7 rounded-full border border-orange-500/40 flex items-center justify-center shrink-0'>
-                                        <span className='font-bebas text-orange-400 text-base leading-none'>{setIdx + 1}</span>
+                                    <div className='w-7 h-9 flex items-center justify-center shrink-0'>
+                                        <div className={`w-7 h-7 rounded-full border border-orange-500/40 flex items-center justify-center transition-opacity ${locked ? 'opacity-40' : ''}`}>
+                                            <span className='font-bebas text-orange-400 text-base leading-none'>{setIdx + 1}</span>
+                                        </div>
                                     </div>
-                                    <div className='flex-1 min-w-0'>
-                                        <label className='block text-[9px] font-bold text-neutral-500 mb-0.5 tracking-[2px]'>
+                                    {!isTimer && (
+                                        <div className='flex-1 min-w-0 relative'>
+                                            <label className='absolute -top-3.5 left-0 text-[9px] font-bold text-neutral-500 tracking-[2px]'>
+                                                WEIGHT (KG)
+                                            </label>
+                                            <WeightCell
+                                                value={exerciseWeights[idx]?.[setIdx] || ''}
+                                                onChange={(val) => setWeight(idx, setIdx, val)}
+                                                disabled={locked}
+                                            />
+                                        </div>
+                                    )}
+                                    <div className='flex-1 min-w-0 relative'>
+                                        <label className='absolute -top-3.5 left-0 text-[9px] font-bold text-neutral-500 tracking-[2px]'>
                                             {isTimer ? 'TIME' : 'REPS'}
                                         </label>
                                         {isTimer ? (
-                                            <NumberOfSets
-                                                mode='timer'
-                                                reps={exerciseSets[idx]?.[setIdx] || ''}
-                                                setReps={(_, val) => setReps(idx, setIdx, val)}
-                                                idx={setIdx}
-                                                className='h-9'
-                                            />
+                                            locked ? (
+                                                <div className='w-full h-9 flex items-center justify-center bg-black/30 border border-white/15 rounded-xl font-bebas text-orange-400 text-lg opacity-60'>
+                                                    {exerciseSets[idx]?.[setIdx] || '—'}
+                                                </div>
+                                            ) : (
+                                                <NumberOfSets
+                                                    mode='timer'
+                                                    reps={exerciseSets[idx]?.[setIdx] || ''}
+                                                    setReps={(_, val) => setReps(idx, setIdx, val)}
+                                                    idx={setIdx}
+                                                    className='h-9'
+                                                />
+                                            )
                                         ) : (
                                             <input
                                                 type='text'
                                                 inputMode='numeric'
                                                 value={exerciseSets[idx]?.[setIdx] || ''}
+                                                disabled={locked}
                                                 onChange={(e) => {
                                                     const v = e.target.value
                                                     if (v === '' || /^\d+$/.test(v)) setReps(idx, setIdx, v)
                                                 }}
                                                 placeholder='0'
-className='w-full h-9 bg-black/30 border border-white/15 rounded-xl text-center font-bebas text-orange-400 text-lg outline-none placeholder-orange-400/40'
+className='w-full h-9 bg-black/30 border border-white/15 rounded-xl text-center font-bebas text-orange-400 text-lg outline-none placeholder-orange-400/40 disabled:cursor-not-allowed disabled:opacity-40'
                                             />
                                         )}
                                     </div>
-                                    {!isTimer && (
-                                        <div className='flex-1 min-w-0'>
-<label className='block text-[9px] font-bold text-neutral-500 mb-0.5 tracking-[2px]'>
-                                            WEIGHT (KG)
-                                        </label>
-                                        <WeightCell
-                                            value={exerciseWeights[idx]?.[setIdx] || ''}
-                                            onChange={(val) => setWeight(idx, setIdx, val)}
-                                        />
-                                        </div>
-                                    )}
-                                    <button
-                                        onClick={() => setDone(idx, setIdx, !done)}
-className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 transition-all cursor-pointer ${done
-                                        ? 'border-white bg-white/20'
-                                        : 'border-neutral-600 hover:border-neutral-400 hover:bg-white/5'
-                                        }`}
-                                    title={done ? 'Mark set incomplete' : 'Mark set complete'}
-                                >
-                                    <Check size={15} className={done ? 'text-white' : 'text-transparent'} />
-                                    </button>
+                                    <div className='h-9 flex items-center shrink-0'>
+                                        <button
+                                            onClick={() => handleToggleDone(setIdx)}
+                                            disabled={!unlocked}
+className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 transition-all ${done
+                                            ? 'border-white bg-white/20'
+                                            : 'border-neutral-600 hover:border-neutral-400 hover:bg-white/5'
+                                            } ${!unlocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                                        title={!unlocked ? 'Complete the previous set first' : done ? 'Mark set incomplete' : 'Mark set complete'}
+                                    >
+                                        <Check size={15} className={done ? 'text-white' : 'text-transparent'} />
+                                        </button>
+                                    </div>
                                 </div>
                             )
                         })}
@@ -436,6 +534,30 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                     )}
                 </div>
 
+                {/* Exercise rank + PR — centered between set controls and rest timer */}
+                <div className='flex items-center justify-center gap-5 pt-1.5 mt-auto'>
+                    <div className='flex items-center gap-2 min-w-0'>
+                        <span className='h-3 w-3 rounded-full shrink-0' style={{ background: rank.color }} />
+                        <span className='font-bebas text-sm tracking-[1px] whitespace-nowrap' style={{ color: rank.color }}>
+                            {rank.name.toUpperCase()}
+                        </span>
+                        <span className='font-mono text-[11px] text-neutral-500 whitespace-nowrap'>
+                            {displayCur}{displayNext ? ` / ${displayNext}` : ' / MAX'}
+                        </span>
+                    </div>
+                    {pr && (
+                        <>
+                            <span className='h-4 w-px bg-white/15 shrink-0' />
+                            <div className='flex items-center gap-1.5 min-w-0'>
+                                <Trophy size={16} className='text-orange-400 shrink-0' />
+                                <span className='font-mono text-xs text-orange-300 whitespace-nowrap'>
+                                    PR {pr.weight}kg × {pr.reps}
+                                </span>
+                            </div>
+                        </>
+                    )}
+                </div>
+
                 {/* Rest timer — always pinned to the bottom */}
                 <div className='mt-auto pt-1.5'>
                     <RestTimer sound={sound} />
@@ -445,16 +567,23 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
     )
 }
 
-const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAddExercises, onSessionSaved, onJumpToExercise, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, currentIndex, setCurrentIndex, showNotes, setShowNotes }) => {
+const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAddExercises, onSessionSaved, onJumpToExercise, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, currentIndex, setCurrentIndex, showNotes, setShowNotes, bodyweight = 0, sessions = [] }) => {
     const [showNameModal, setShowNameModal] = useState(false)
     const [showPreview, setShowPreview] = useState(false)
     const [workoutName, setWorkoutName] = useState('')
     const [restSound, setRestSound] = useState(null)
     const [enterDir, setEnterDir] = useState('next')
+    const [xpFlash, setXpFlash] = useState(null)
 
     useEffect(() => {
         getRestSound().then(s => { if (s) setRestSound(s) }).catch(() => {})
     }, [])
+
+    useEffect(() => {
+        if (!xpFlash) return
+        const t = setTimeout(() => setXpFlash(null), 1700)
+        return () => clearTimeout(t)
+    }, [xpFlash])
 
     const current = exercises.length === 0 ? 0 : Math.min(currentIndex, exercises.length - 1)
     const isLast = current === exercises.length - 1
@@ -478,6 +607,7 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                 exercises: exercises.map((exercise, idx) => ({
                     name: exercise.name,
                     mode: exercise.mode === 'timer' ? 'timer' : 'weight',
+                    category: exercise.category,
                     sets: Array.from({ length: Math.max(3, Math.min(10, exerciseSetCount?.[idx] || 3)) }, (_, setIdx) => ({
                         reps: exerciseSets[idx]?.[setIdx] || '—',
                         weight: isTimer(idx) ? '—' : (exerciseWeights[idx]?.[setIdx] ? `${exerciseWeights[idx][setIdx]}kg` : '—')
@@ -545,6 +675,9 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                             showNotes={showNotes}
                             setShowNotes={setShowNotes}
                             sound={restSound}
+                            bodyweight={bodyweight}
+                            sessions={sessions}
+                            onXpFlash={setXpFlash}
                             canPrev={current > 0}
                             canNext={!isLast}
                             onGoPrev={() => { setEnterDir('prev'); setCurrentIndex(current - 1) }}
@@ -666,6 +799,41 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                                 )
                             })}
                         </ul>
+                    </div>
+                </div>
+            )}
+
+            {/* Full-screen dim + XP flash */}
+            {xpFlash && (
+                <div key={xpFlash.id} className='fixed inset-0 z-[70] pointer-events-none'>
+                    <motion.div
+                        className='absolute inset-0 bg-black/70'
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: [0, 1, 1, 0] }}
+                        transition={{ duration: 1.7, times: [0, 0.15, 0.65, 1] }}
+                    />
+                    <div className='absolute right-4 top-[28%] rotate-[20deg] animate-xpFlash'>
+                        <div className='relative flex items-center gap-1.5'>
+                            {XP_BURST.map(p => (
+                                <motion.span
+                                    key={p.id}
+                                    className='absolute rounded-sm'
+                                    style={{ width: p.size, height: p.size, background: p.color, top: '50%', left: '50%' }}
+                                    initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                                    animate={{ x: p.x, y: p.y, opacity: 0, scale: 0.5, rotate: 180 }}
+                                    transition={{ duration: 0.7, delay: p.delay, ease: 'easeOut' }}
+                                />
+                            ))}
+                            <div className='flex items-center gap-1.5'>
+                                {xpFlash.type === 'weight-pr' && <Flame size={18} className='text-orange-400' />}
+                                {xpFlash.type === 'extra-rep' && <Zap size={18} className='text-orange-400' />}
+                                {xpFlash.type === 'timer-record' && <Timer size={18} className='text-orange-400' />}
+                                <span className='font-bold text-orange-400 text-2xl tracking-wide leading-none drop-shadow-[0_0_12px_rgba(249,115,22,0.6)]'>+{xpFlash.points} XP</span>
+                                <span className='font-bold text-orange-300/80 text-[10px] leading-none'>
+                                    {xpFlash.type === 'weight-pr' ? 'NEW PR' : xpFlash.type === 'extra-rep' ? 'EXTRA REPS' : 'DURATION RECORD'}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

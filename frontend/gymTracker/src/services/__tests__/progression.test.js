@@ -4,11 +4,14 @@ import {
     totalXp,
     analyzeSession,
     mergePrs,
+    computePrsFromSessions,
     rankForXp,
     xpThresholdForLevel,
     MAX_LEVEL,
-    exerciseRankForPoints,
+    exerciseRankForScore,
     computeExerciseRanks,
+    strengthScore,
+    durationScore,
     weekKeyFor,
     planFreezeProtection,
     computeStreakWithFreezes,
@@ -140,6 +143,26 @@ describe('analyzeSession', () => {
     })
 })
 
+describe('computePrsFromSessions', () => {
+    it('derives best weight + reps at that weight from sessions', () => {
+        const sessions = [
+            weightSession('Bench', 60, 10, 'a'),
+            weightSession('Bench', 65, 8, 'b'),
+            weightSession('Deadlift', 180, 5, 'c')
+        ]
+        expect(computePrsFromSessions(sessions)).toEqual([
+            { name: 'Bench', weight: '65', reps: '8' },
+            { name: 'Deadlift', weight: '180', reps: '5' }
+        ])
+    })
+
+    it('returns nothing when the only session is removed', () => {
+        const sessions = [weightSession('Bench', 65, 8, 'a')]
+        const remaining = sessions.filter(s => s.id !== 'a')
+        expect(computePrsFromSessions(remaining)).toEqual([])
+    })
+})
+
 describe('mergePrs', () => {
     it('adds new entries', () => {
         expect(mergePrs([], [{ name: 'Deadlift', weight: '180', reps: '5' }])).toEqual([
@@ -212,29 +235,58 @@ describe('player ranks', () => {
 })
 
 describe('exercise ranks', () => {
-    it('tiers by logged sets', () => {
-        expect(exerciseRankForPoints(0).name).toBe('Iron')
-        expect(exerciseRankForPoints(9).name).toBe('Iron')
-        expect(exerciseRankForPoints(10).name).toBe('Bronze')
-        expect(exerciseRankForPoints(25).name).toBe('Silver')
-        expect(exerciseRankForPoints(50).name).toBe('Gold')
-        expect(exerciseRankForPoints(100).name).toBe('Platinum')
-        expect(exerciseRankForPoints(200).name).toBe('Diamond')
-        expect(exerciseRankForPoints(1000).nextPoints).toBeNull()
+    it('tiers by strength score', () => {
+        expect(exerciseRankForScore(0).name).toBe('Wood')
+        expect(exerciseRankForScore(0.3).name).toBe('Wood')
+        expect(exerciseRankForScore(0.54).name).toBe('Wood')
+        expect(exerciseRankForScore(0.55).name).toBe('Bronze')
+        expect(exerciseRankForScore(0.8).name).toBe('Silver')
+        expect(exerciseRankForScore(1.0).name).toBe('Gold')
+        expect(exerciseRankForScore(1.25).name).toBe('Platinum')
+        expect(exerciseRankForScore(1.5).name).toBe('Diamond')
+        expect(exerciseRankForScore(2.0).name).toBe('Diamond')
+        expect(exerciseRankForScore(2.0).nextScore).toBeNull()
     })
 
-    it('accumulates points per exercise across sessions', () => {
-        const multiSet = (name, n, id) => ({
-            id,
+    it('scales weight against bodyweight and category factor', () => {
+        expect(strengthScore({ weight: 70, bodyweight: 70, category: 'Chest' })).toBeCloseTo(1.0)
+        expect(strengthScore({ weight: 14, bodyweight: 70, category: 'Biceps' })).toBeCloseTo(0.5)
+        expect(strengthScore({ weight: 105, bodyweight: 70, category: 'Legs' })).toBeCloseTo(1.0)
+        expect(strengthScore({ weight: 40, bodyweight: 0, category: 'Chest' })).toBe(0)
+    })
+
+    it('scores timer exercises by duration against category time factor', () => {
+        expect(durationScore({ seconds: 90, category: 'Core' })).toBeCloseTo(1.0)
+        expect(durationScore({ seconds: 600, category: 'Cardio' })).toBeCloseTo(1.0)
+        expect(durationScore({ seconds: 0, category: 'Core' })).toBe(0)
+    })
+
+    it('uses heaviest weight hit for 8+ reps, ignores lighter/high-rep sets', () => {
+        const session = {
+            id: 'a',
             name: 'Workout',
-            exercises: [{ name, mode: 'weight', sets: Array.from({ length: n }, () => ({ reps: '10', weight: '60kg' })) }]
-        })
-        const sessions = [multiSet('Bench', 3, 'm1'), multiSet('Bench', 2, 'm2'), multiSet('Squat', 1, 'm3')]
-        const ranks = computeExerciseRanks(sessions)
+            exercises: [
+                {
+                    name: 'Bench',
+                    mode: 'weight',
+                    category: 'Chest',
+                    sets: [
+                        { reps: '10', weight: '60kg' },
+                        { reps: '5', weight: '90kg' },
+                        { reps: '12', weight: '55kg' }
+                    ]
+                },
+                { name: 'Plank', mode: 'timer', category: 'Core', sets: [{ reps: '120' }] }
+            ]
+        }
+        const ranks = computeExerciseRanks([session], 70)
         const bench = ranks.find((r) => r.name === 'Bench')
-        expect(bench.points).toBe(5)
-        expect(bench.rank.name).toBe('Iron')
-        expect(ranks[0].name).toBe('Bench')
+        expect(bench.weight).toBe(60)
+        expect(bench.rank.name).toBe('Silver')
+        const plank = ranks.find((r) => r.name === 'Plank')
+        expect(plank.duration).toBe(120)
+        expect(plank.rank.name).toBe('Platinum')
+        expect(ranks[0].name).toBe('Plank')
     })
 })
 

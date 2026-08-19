@@ -15,6 +15,7 @@ export default function RankBadge({ rank, compact = false }) {
         )
     }
     const nextLabel = rank.nextThreshold ? `NEXT LV.${rank.level + 1}` : 'MAX RANK'
+    const fill = rank.nextThreshold ? Math.min(rank.xp / rank.nextThreshold, 1) : 1
     return (
         <div className='flex flex-col gap-1 w-full'>
             <div className='flex items-center gap-2'>
@@ -30,7 +31,7 @@ export default function RankBadge({ rank, compact = false }) {
                 <div className='flex-1 h-[3px] rounded-full bg-white/10 overflow-hidden'>
                     <div
                         className='h-full rounded-full transition-all duration-500'
-                        style={{ width: `${Math.round(rank.progress * 100)}%`, background: rank.color }}
+                        style={{ width: `${Math.round(fill * 100)}%`, background: rank.color }}
                     />
                 </div>
                 <p className='font-mono text-white/40 text-[8px] leading-none shrink-0'>{nextLabel}</p>

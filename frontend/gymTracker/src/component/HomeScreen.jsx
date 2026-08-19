@@ -16,7 +16,7 @@ import PrsBadge from './PrsBadge'
 import RankBadge from './RankBadge'
 import RankScreen from './RankScreen'
 import LevelUpOverlay from './LevelUpOverlay'
-import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, challengeStatusForLevel } from '../services/progression'
+import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, computePrsFromSessions, challengeStatusForLevel } from '../services/progression'
 import {
     getName,
     getSessions,
@@ -127,6 +127,8 @@ const HomeScreen = () => {
     const [monthlyCount, setMonthlyCount] = useState(0)
     const [statKey, setStatKey] = useState(0)
     const [prs, setPrs] = useState([])
+    const [manualPrs, setManualPrs] = useState([])
+    const manualPrsRef = useRef([])
     const [showAddPr, setShowAddPr] = useState(false)
     const [showManagePr, setShowManagePr] = useState(false)
     const [editingPrIndex, setEditingPrIndex] = useState(null)
@@ -137,6 +139,8 @@ const HomeScreen = () => {
     const [editPrWeight, setEditPrWeight] = useState('')
     const [editPrReps, setEditPrReps] = useState('')
     const [photoData, setPhotoData] = useState('')
+    const [bodyweight, setBodyweight] = useState(0)
+    const [sessions, setSessions] = useState([])
     const [showPhotoModal, setShowPhotoModal] = useState(false)
     const [, setSchedule] = useState({})
     const [todayExercises, setTodayExercises] = useState([])
@@ -167,6 +171,16 @@ const HomeScreen = () => {
             .catch(() => {})
     }, [])
 
+    const refreshSessionsAndPrs = useCallback(() => {
+        getSessions()
+            .then(list => {
+                setSessions(list)
+                setMonthlyCount(computeMonthlyCount(list))
+                setPrs(mergePrs(manualPrsRef.current, computePrsFromSessions(list)))
+            })
+            .catch(() => {})
+    }, [])
+
     const refreshTodaysSchedule = useCallback(() => {
         getSchedule()
             .then(schedule => {
@@ -176,15 +190,38 @@ const HomeScreen = () => {
             .catch(() => {})
     }, [])
 
+    const handleDeletedSession = useCallback(() => {
+        refreshSessionsAndPrs()
+        refreshProgress()
+            .then(result => { if (result) setProgress(result.progress) })
+            .catch(() => {})
+    }, [refreshSessionsAndPrs])
+
     useEffect(() => {
         getName().then(setUserName).catch(() => {})
-        getPrs().then(setPrs).catch(() => {})
+        getPrs()
+            .then(list => {
+                const manual = Array.isArray(list) ? list : []
+                manualPrsRef.current = manual
+                setManualPrs(manual)
+                getSessions()
+                    .then(sess => {
+                        setSessions(sess)
+                        setMonthlyCount(computeMonthlyCount(sess))
+                        setPrs(mergePrs(manual, computePrsFromSessions(sess)))
+                    })
+                    .catch(() => {})
+            })
+            .catch(() => {})
         getUserProfile()
-            .then(profile => setPhotoData(profile.photoData || ''))
+            .then(profile => {
+                setPhotoData(profile.photoData || '')
+                setBodyweight(parseFloat(profile.weight) || 0)
+            })
             .catch(() => {})
         refreshTodaysSchedule()
         refreshStats()
-    }, [refreshStats, refreshTodaysSchedule])
+    }, [refreshSessionsAndPrs, refreshStats, refreshTodaysSchedule])
 
     useEffect(() => {
         let cancelled = false
@@ -398,6 +435,7 @@ const HomeScreen = () => {
         setShowNotes({})
         setSavedWorkoutName(name)
         refreshStats()
+        refreshSessionsAndPrs()
         setStatKey(k => k + 1)
 
         const result = await refreshProgress().catch(() => null)
@@ -416,13 +454,6 @@ const HomeScreen = () => {
         if (session) {
             const sessions = await getSessions().catch(() => [])
             breakdown = analyzeSession(session, sessions.filter(s => s.id !== session.id))
-            if (breakdown.newPrs.length) {
-                setPrs(prev => {
-                    const next = mergePrs(prev, breakdown.newPrs)
-                    savePrs(next).catch(() => {})
-                    return next
-                })
-            }
             if (!result.isLevelUp) {
                 const level = result.progress.rank.level
                 const before = challengeStatusForLevel(sessions.filter(s => s.id !== session.id), level)
@@ -441,7 +472,8 @@ const HomeScreen = () => {
             setCelebration({
                 rank: result.progress.rank,
                 breakdown,
-                isLevelUp: result.isLevelUp
+                isLevelUp: result.isLevelUp,
+                progress: result.progress
             })
         } else {
             setShowSuccess(true)
@@ -451,16 +483,19 @@ const HomeScreen = () => {
                 setSavedWorkoutName('')
             }, 1800)
         }
-    }, [refreshStats])
+    }, [refreshStats, refreshSessionsAndPrs])
 
     const persistPrs = (next) => {
-        setPrs(next)
-        savePrs(next).catch(() => {})
+        const manual = [...next]
+        manualPrsRef.current = manual
+        setManualPrs(manual)
+        setPrs(mergePrs(manual, computePrsFromSessions(sessions)))
+        savePrs(manual).catch(() => {})
     }
 
     const handleAddPr = () => {
         if (!prName.trim() || !prWeight.trim() || !prReps.trim()) return
-        persistPrs([...prs, { name: prName.trim(), weight: prWeight.trim(), reps: prReps.trim() }])
+        persistPrs([...manualPrs, { name: prName.trim(), weight: prWeight.trim(), reps: prReps.trim() }])
         setPrName('')
         setPrWeight('')
         setPrReps('')
@@ -468,7 +503,7 @@ const HomeScreen = () => {
     }
 
     const handleEditPr = (idx) => {
-        const pr = prs[idx]
+        const pr = manualPrs[idx]
         setEditingPrIndex(idx)
         setEditPrName(pr.name)
         setEditPrWeight(pr.weight)
@@ -477,7 +512,7 @@ const HomeScreen = () => {
 
     const handleSaveEditPr = () => {
         if (editingPrIndex === null || !editPrName.trim() || !editPrWeight.trim() || !editPrReps.trim()) return
-        persistPrs(prs.map((pr, i) =>
+        persistPrs(manualPrs.map((pr, i) =>
             i === editingPrIndex
                 ? { name: editPrName.trim(), weight: editPrWeight.trim(), reps: editPrReps.trim() }
                 : pr
@@ -489,7 +524,7 @@ const HomeScreen = () => {
     }
 
     const handleDeletePr = (idx) => {
-        persistPrs(prs.filter((_, i) => i !== idx))
+        persistPrs(manualPrs.filter((_, i) => i !== idx))
     }
 
     const closeManagePr = () => {
@@ -748,6 +783,8 @@ const HomeScreen = () => {
                                     setCurrentIndex={setCurrentIndex}
                                     showNotes={showNotes}
                                     setShowNotes={setShowNotes}
+                                    bodyweight={bodyweight}
+                                    sessions={sessions}
                                 />
                             </div>
                         )}
@@ -1018,13 +1055,15 @@ const HomeScreen = () => {
                 displayItemNumbering={false}
             />
             {showGallery && <MediaGallery onClose={() => setShowGallery(false)} />}
-            {showHistory && <WorkoutHistory onClose={() => setShowHistory(false)} />}
+            {showHistory && <WorkoutHistory onClose={() => setShowHistory(false)} onDeleted={handleDeletedSession} />}
             {showMyExercises && <MyExercises onClose={() => setShowMyExercises(false)} />}
             {showRanks && <RankScreen onClose={() => setShowRanks(false)} />}
             {celebration && (
                 <LevelUpOverlay
                     rank={celebration.rank}
-                    newBadges={celebration.newBadges}
+                    breakdown={celebration.breakdown}
+                    isLevelUp={celebration.isLevelUp}
+                    progress={celebration.progress}
                     onClose={() => setCelebration(null)}
                 />
             )}

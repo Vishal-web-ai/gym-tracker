@@ -192,13 +192,13 @@ exercises.js     (standalone — pure data)
 - 60 exercises, each with: `name`, `category`, `targetMuscle`, `imagePath` (→ `/exercises/*.png`)
 - Pure data module, no logic
 
-### progression.js — Gamification Engine (575 lines)
+### progression.js — Gamification Engine (~600 lines)
 - **12 Ranks**: Rookie → Beginner → Learner → Intermediate → Skilled → Strong → Pro → Elite → Master → Grandmaster → Champion → Legend
 - **XP System**: Base 20/session + bonus for PRs (+10), extra reps (+5), timer records (+10). Threshold: `50 * level * (level - 1)`
 - **Challenge Gates**: 5 muscle groups (Chest, Back, Arms, Legs, Cardio), each with alternative exercises and ladder thresholds
-- **Exercise Ranks**: Iron (0 sets) → Bronze (10) → Silver (25) → Gold (50) → Platinum (100) → Diamond (200)
+- **Exercise Ranks**: Wood (score 0.3) → Bronze (0.55) → Silver (0.8) → Gold (1.0) → Platinum (1.25) → Diamond (1.5). Weight-based: score = best weight hit at 8+ reps ÷ (bodyweight × category factor). Timer exercises score by duration ÷ category time factor. Factors in `CATEGORY_FACTORS` / `CATEGORY_TIME_FACTORS`
 - **Streak Freeze**: 2 freezes/week (Monday-anchored), Sundays auto-exempt, consumed on app load
-- Key functions: `sessionXp()`, `analyzeSession()`, `totalXp()`, `mergePrs()`, `playerRank()`, `exerciseRank()`, `computeProgress()`, `refreshProgress()`, `consumeFreezes()`
+- Key functions: `sessionXp()`, `analyzeSession()`, `totalXp()`, `mergePrs()`, `playerRank()`, `exerciseRankForScore()`, `strengthScore()`, `durationScore()`, `bestExerciseEffort()`, `computeExerciseRanks()`, `computeProgress()`, `refreshProgress()`, `consumeFreezes()`
 
 ### media.js — OPFS Media Management
 - Files stored in OPFS under `media/` directory
@@ -234,6 +234,7 @@ exercises.js     (standalone — pure data)
   exercises: [{
     name: string,
     mode: 'weight' | 'timer',
+    category: string,        // optional, used for exercise rank factors
     sets: [{ reps: string, weight: string }],
     notes: string,
     media: [{ id, type, fileName, ... }]
