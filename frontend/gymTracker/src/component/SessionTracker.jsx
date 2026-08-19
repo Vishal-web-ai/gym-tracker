@@ -1,5 +1,4 @@
 import { useState, useLayoutEffect, useEffect, useRef } from 'react'
-import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check } from 'lucide-react'
 import NumberOfSets from './NumberOfSets'
 import ExerciseMedia from './ExerciseMedia'
@@ -22,42 +21,103 @@ const WeightCell = ({ value, onChange }) => (
     />
 )
 
-const ExerciseCard = ({ exercise, idx, role, activeRef, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, showNotes, setShowNotes, sound, canPrev, canNext, onGoPrev, onGoNext }) => {
+const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, showNotes, setShowNotes, sound, canPrev, canNext, onGoPrev, onGoNext }) => {
     const photoRef = useRef(null)
     const videoRef = useRef(null)
+    const cardRef = useRef(null)
+    const glowRef = useRef(null)
     const [busy, setBusy] = useState(false)
-    const x = useMotionValue(0)
     const nameRef = useRef(null)
     const setsScrollRef = useRef(null)
+    const dragRef = useRef(null)
+    const rafRef = useRef(null)
+    const snapTimerRef = useRef(null)
     const isTimer = exercise.mode === 'timer'
     const setCount = Math.max(3, Math.min(10, exerciseSetCount?.[idx] || 3))
     const prevSetCount = useRef(setCount)
     const width = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 375))[0]
     const gutter = 12
     const CW = Math.max(200, width - gutter * 2)
-    const peekX = 40
-    const shift = CW - peekX
-    const isFront = role === 'front'
-    const targetX = !isFront ? (role === 'next' ? shift : -shift) : 0
-    const deckSpring = { type: 'spring', stiffness: 360, damping: 34, mass: 0.9 }
-    const dragScale = useTransform(x, [-shift, 0, shift], [0.97, 1, 0.97])
-    const glowOpacity = useTransform(x, [-shift, 0, shift], [0.55, 0, 0.55])
+    const shift = CW - 40
 
-    const snapBack = () => animate(x, 0, { type: 'spring', stiffness: 600, damping: 42 })
+    const setCardTransform = (px, ms = 0) => {
+        const el = cardRef.current
+        if (!el) return
+        const prog = Math.min(1, Math.abs(px) / shift)
+        el.style.transition = ms > 0 ? `transform ${ms}ms cubic-bezier(0.16, 1, 0.3, 1)` : 'none'
+        el.style.transform = `translateX(${px}px) scale(${1 - 0.03 * prog})`
+        if (glowRef.current) glowRef.current.style.opacity = 0.55 * prog
+    }
 
-    const handleDragEnd = (e, info) => {
-        const dx = info.offset.x
-        const vx = info.velocity.x
-        if (dx < -60 || vx < -500) {
-            if (canNext) onGoNext()
-            else snapBack()
-        } else if (dx > 60 || vx > 500) {
-            if (canPrev) onGoPrev()
-            else snapBack()
+    const snapBack = () => setCardTransform(0, 220)
+
+    const handlePointerDown = (e) => {
+        if (e.target.closest('button, input, textarea')) return
+        const el = cardRef.current
+        if (!el) return
+        clearTimeout(snapTimerRef.current)
+        dragRef.current = { id: e.pointerId, startX: e.clientX, lastX: e.clientX, lastT: performance.now(), vx: 0 }
+        try { el.setPointerCapture(e.pointerId) } catch { /* pointer capture is optional */ }
+        el.style.transition = 'none'
+    }
+
+    const handlePointerMove = (e) => {
+        const d = dragRef.current
+        if (!d || d.id !== e.pointerId) return
+        const now = performance.now()
+        const dt = Math.max(1, now - d.lastT)
+        d.vx = 0.6 * d.vx + 0.4 * ((e.clientX - d.lastX) / dt * 1000)
+        d.lastX = e.clientX
+        d.lastT = now
+        d.dx = e.clientX - d.startX
+        if (rafRef.current) return
+        rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = null
+            const limit = shift
+            let px = d.dx
+            if (px > limit) px = limit + (px - limit) * 0.35
+            else if (px < -limit) px = -limit - (px + limit) * 0.35
+            setCardTransform(px)
+        })
+    }
+
+    const handlePointerUp = (e) => {
+        const d = dragRef.current
+        if (!d || d.id !== e.pointerId) return
+        dragRef.current = null
+        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+        const dx = e.clientX - d.startX
+        if ((dx < -60 || d.vx < -500) && canNext) {
+            setCardTransform(-shift, 200)
+            snapTimerRef.current = setTimeout(onGoNext, 170)
+        } else if ((dx > 60 || d.vx > 500) && canPrev) {
+            setCardTransform(shift, 200)
+            snapTimerRef.current = setTimeout(onGoPrev, 170)
         } else {
             snapBack()
         }
     }
+
+    const handlePointerCancel = (e) => {
+        const d = dragRef.current
+        if (!d || d.id !== e.pointerId) return
+        dragRef.current = null
+        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+        snapBack()
+    }
+
+    useLayoutEffect(() => {
+        const el = cardRef.current
+        if (!el) return
+        const from = enterDir === 'prev' ? -shift : shift
+        el.style.transition = 'none'
+        el.style.transform = `translateX(${from}px)`
+        const raf = requestAnimationFrame(() => {
+            el.style.transition = 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)'
+            el.style.transform = 'translateX(0px)'
+        })
+        return () => cancelAnimationFrame(raf)
+    }, [shift, enterDir])
 
     useLayoutEffect(() => {
         const el = setsScrollRef.current
@@ -107,31 +167,22 @@ const ExerciseCard = ({ exercise, idx, role, activeRef, onRemove, exerciseWeight
     }
 
     return (
-        <motion.div
-            ref={isFront ? activeRef : undefined}
-            initial={{ x: targetX, opacity: isFront ? 1 : 0, scale: 1 }}
-            animate={{ x: targetX, opacity: isFront ? 1 : 0, scale: 1 }}
-            transition={{ x: deckSpring, opacity: { duration: 0.3 }, scale: deckSpring }}
-            style={{ x, scale: dragScale, zIndex: isFront ? 20 : 10 }}
-            drag={isFront ? 'x' : false}
-            dragConstraints={{ left: -shift, right: shift }}
-            dragElastic={0.25}
-            dragMomentum={false}
-            onDragEnd={isFront ? handleDragEnd : undefined}
-            className={`absolute top-0 bottom-0 left-3 right-3 rounded-3xl border border-white/15 bg-white/5 backdrop-blur-2xl overflow-hidden touch-pan-y ${isFront
-                ? 'cursor-grab active:cursor-grabbing shadow-[0_20px_45px_rgba(0,0,0,0.6)]'
-                : 'pointer-events-none'
-                }`}
+        <div
+            ref={cardRef}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+            className='absolute top-0 bottom-0 left-3 right-3 rounded-3xl border border-white/15 bg-white/5 backdrop-blur-2xl overflow-hidden touch-pan-y cursor-grab active:cursor-grabbing shadow-[0_20px_45px_rgba(0,0,0,0.6)]'
         >
-            {isFront && (
-                <motion.div
-                    className='absolute inset-0 pointer-events-none rounded-3xl'
-                    style={{
-                        opacity: glowOpacity,
-                        background: 'radial-gradient(120% 90% at 50% 50%, rgba(249,115,22,0.12), transparent 70%)'
-                    }}
-                />
-            )}
+            <div
+                ref={glowRef}
+                className='absolute inset-0 pointer-events-none rounded-3xl'
+                style={{
+                    opacity: 0,
+                    background: 'radial-gradient(120% 90% at 50% 50%, rgba(249,115,22,0.12), transparent 70%)'
+                }}
+            />
             <div
                 className='absolute inset-0 pointer-events-none'
                 style={{
@@ -328,7 +379,7 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                     <RestTimer sound={sound} />
                 </div>
             </div>
-        </motion.div>
+        </div>
     )
 }
 
@@ -337,7 +388,7 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
     const [showPreview, setShowPreview] = useState(false)
     const [workoutName, setWorkoutName] = useState('')
     const [restSound, setRestSound] = useState(null)
-    const activeRef = useRef(null)
+    const [enterDir, setEnterDir] = useState('next')
 
     useEffect(() => {
         getRestSound().then(s => { if (s) setRestSound(s) }).catch(() => {})
@@ -385,18 +436,14 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
             <div className='flex flex-col h-full w-full'>
                 {/* Exercise progress */}
                 <div className='shrink-0 flex flex-col items-center gap-2 px-5 pt-4 pb-1'>
-                    <motion.button
-                        key={current}
-                        initial={{ opacity: 0, x: -40 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ x: { duration: 0.35, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.25 } }}
+                    <button
                         onClick={() => setShowPreview(true)}
                         title='View all exercises'
                         className='font-bebas tracking-[3px] text-[15px] cursor-pointer hover:opacity-90 transition-opacity'
                     >
                         <span className='text-orange-500'>EXERCISE</span>
                         <span className='text-neutral-400'> {current + 1} OF {exercises.length}</span>
-                    </motion.button>
+                    </button>
                     <div className='flex gap-1.5'>
                         {exercises.map((ex, i) => (
                             <button
@@ -415,41 +462,32 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                 {/* Main exercise card — deck of prev / current / next */}
                 <div className='relative flex-1 min-h-0 mt-3 mb-3 overflow-hidden'>
                     {exercises.length > 0 ? (
-                        <>
-                            {exercises.map((exercise, i) => {
-                                const role = i === current ? 'front' : i === current - 1 ? 'prev' : i === current + 1 ? 'next' : null
-                                if (!role) return null
-                                return (
-                                    <ExerciseCard
-                                        key={exercise.id}
-                                        role={role}
-                                        exercise={exercise}
-                                        idx={i}
-                                        activeRef={activeRef}
-                                        onRemove={onRemove}
-                                        exerciseWeights={exerciseWeights}
-                                        exerciseSets={exerciseSets}
-                                        exerciseNotes={exerciseNotes}
-                                        exerciseMedia={exerciseMedia}
-                                        exerciseDone={exerciseDone}
-                                        exerciseSetCount={exerciseSetCount}
-                                        setWeight={setWeight}
-                                        setReps={setReps}
-                                        setNotes={setNotes}
-                                        setMedia={setMedia}
-                                        setDone={setDone}
-                                        setSetCount={setSetCount}
-                                        showNotes={showNotes}
-                                        setShowNotes={setShowNotes}
-                                        sound={restSound}
-                                        canPrev={current > 0}
-                                        canNext={!isLast}
-                                        onGoPrev={() => setCurrentIndex(current - 1)}
-                                        onGoNext={() => setCurrentIndex(current + 1)}
-                                    />
-                                )
-                            })}
-                        </>
+                        <ExerciseCard
+                            key={exercises[current].id}
+                            enterDir={enterDir}
+                            exercise={exercises[current]}
+                            idx={current}
+                            onRemove={onRemove}
+                            exerciseWeights={exerciseWeights}
+                            exerciseSets={exerciseSets}
+                            exerciseNotes={exerciseNotes}
+                            exerciseMedia={exerciseMedia}
+                            exerciseDone={exerciseDone}
+                            exerciseSetCount={exerciseSetCount}
+                            setWeight={setWeight}
+                            setReps={setReps}
+                            setNotes={setNotes}
+                            setMedia={setMedia}
+                            setDone={setDone}
+                            setSetCount={setSetCount}
+                            showNotes={showNotes}
+                            setShowNotes={setShowNotes}
+                            sound={restSound}
+                            canPrev={current > 0}
+                            canNext={!isLast}
+                            onGoPrev={() => { setEnterDir('prev'); setCurrentIndex(current - 1) }}
+                            onGoNext={() => { setEnterDir('next'); setCurrentIndex(current + 1) }}
+                        />
                     ) : (
                         <div className='h-full flex flex-col items-center justify-center'>
                             <p className='text-orange-500/50 tracking-wide text-center font-mono'>
