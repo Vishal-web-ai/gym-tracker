@@ -6,7 +6,7 @@ const formatTime = (seconds) => {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-const NumberOfSets = ({ reps, setReps, idx, placeholder = 'R', mode = 'weight' }) => {
+const NumberOfSets = ({ reps, setReps, idx, placeholder = 'R', mode = 'weight', className = '' }) => {
   const [running, setRunning] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -62,10 +62,10 @@ const NumberOfSets = ({ reps, setReps, idx, placeholder = 'R', mode = 'weight' }
 
   if (mode === 'timer') {
     return (
-      <div>
+      <div className={className}>
         <button
           onClick={handleClick}
-          className='w-[clamp(38px,12vw,56px)] h-[30px] bg-black text-orange-500 rounded-lg text-center text-sm font-bold outline-none cursor-pointer hover:bg-orange-500/10 transition-all'
+          className='w-full h-full bg-black/30 text-orange-400 rounded-xl text-center text-lg font-bebas outline-none cursor-pointer hover:bg-orange-500/10 transition-all'
         >
           {running ? formatTime(elapsed) : (reps || 'T')}
         </button>
@@ -74,7 +74,7 @@ const NumberOfSets = ({ reps, setReps, idx, placeholder = 'R', mode = 'weight' }
   }
 
   return (
-    <div>
+    <div className={className}>
       <input
         type="text"
         inputMode="numeric"
@@ -86,7 +86,7 @@ const NumberOfSets = ({ reps, setReps, idx, placeholder = 'R', mode = 'weight' }
           }
         }}
         placeholder={placeholder}
-        className='w-[clamp(34px,11vw,38px)] h-[30px] bg-black text-orange-500 rounded-lg text-center text-sm font-bold outline-none placeholder-orange-500'
+        className='w-full h-full bg-black/30 text-orange-400 rounded-xl text-center text-lg font-bebas outline-none placeholder-orange-400/40'
       />
     </div>
   )

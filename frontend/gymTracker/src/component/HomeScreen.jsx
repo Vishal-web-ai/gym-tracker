@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RiMenuLine, RiCloseLine } from '@remixicon/react'
-import { Check, Zap, Edit3, Plus, BicepsFlexed, User, CalendarDays } from 'lucide-react'
+import { Check, Zap, Edit3, Plus, BicepsFlexed, User, CalendarDays, RotateCcw } from 'lucide-react'
 import ExercisesList from './ExercisesList'
 import SessionTracker from './SessionTracker'
 import ExerciseDetail from './ExerciseDetail'
@@ -51,6 +51,7 @@ const REST_MESSAGES = [
 ]
 
 const SESSION_KEY = 'gym-tracker-session-v1'
+const RESUME_FLAG = 'gym-tracker-resume-flag'
 
 function HaloCard({ children, className = '' }) {
     return (
@@ -89,9 +90,20 @@ const getSavedSession = () => {
 const HomeScreen = () => {
     const [savedSession] = useState(getSavedSession)
     const [userName, setUserName] = useState('Vishal')
-    const [showSession, setShowSession] = useState(() => !!savedSession)
+    const [showSession, setShowSession] = useState(() => {
+        try {
+            return !!savedSession && sessionStorage.getItem(RESUME_FLAG) === '1'
+        } catch {
+            return false
+        }
+    })
     const [showExercisesList, setShowExercisesList] = useState(false)
-    const [selectedExercises, setSelectedExercises] = useState(() => savedSession?.selectedExercises || [])
+    const [selectedExercises, setSelectedExercises] = useState(() =>
+        (savedSession?.selectedExercises || []).map(e => ({ ...e, id: e.id || crypto.randomUUID() }))
+    )
+    const [plannedExercises, setPlannedExercises] = useState(() =>
+        (savedSession?.plannedExercises || savedSession?.selectedExercises || []).map(e => ({ ...e, id: e.id || crypto.randomUUID() }))
+    )
     const [previewExercise, setPreviewExercise] = useState(null)
     const [isHamburgerOpen, setIsHamburgerOpen] = useState(false)
     const [showGallery, setShowGallery] = useState(false)
@@ -106,6 +118,8 @@ const HomeScreen = () => {
     const [exerciseSets, setExerciseSets] = useState(() => savedSession?.exerciseSets || {})
     const [exerciseNotes, setExerciseNotes] = useState(() => savedSession?.exerciseNotes || {})
     const [exerciseMedia, setExerciseMedia] = useState(() => savedSession?.exerciseMedia || {})
+    const [exerciseDone, setExerciseDone] = useState(() => savedSession?.exerciseDone || {})
+    const [exerciseSetCount, setExerciseSetCount] = useState(() => savedSession?.exerciseSetCount || {})
     const [showSuccess, setShowSuccess] = useState(false)
     const [savedWorkoutName, setSavedWorkoutName] = useState('')
     const [challengeToasts, setChallengeToasts] = useState([])
@@ -190,17 +204,29 @@ const HomeScreen = () => {
         try {
             localStorage.setItem(SESSION_KEY, JSON.stringify({
                 selectedExercises,
+                plannedExercises,
                 exerciseWeights,
                 exerciseSets,
                 exerciseNotes,
                 exerciseMedia,
+                exerciseDone,
+                exerciseSetCount,
                 currentIndex,
                 showNotes
             }))
         } catch {
             // snapshot too large to persist; skip silently
         }
-    }, [showSession, selectedExercises, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, currentIndex, showNotes])
+    }, [showSession, selectedExercises, plannedExercises, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, currentIndex, showNotes])
+
+    useEffect(() => {
+        try {
+            if (showSession) sessionStorage.setItem(RESUME_FLAG, '1')
+            else sessionStorage.removeItem(RESUME_FLAG)
+        } catch {
+            // ignore
+        }
+    }, [showSession])
 
     const handlePhotoUpload = async (e) => {
         const file = e.target.files?.[0]
@@ -240,6 +266,19 @@ const HomeScreen = () => {
         setExerciseNotes(prev => ({ ...prev, [idx]: note }))
     }
 
+    const setDone = (exerciseIdx, setIdx, value) => {
+        setExerciseDone(prev => {
+            const arr = Array.isArray(prev[exerciseIdx]) ? prev[exerciseIdx] : []
+            const next = [...arr]
+            next[setIdx] = value
+            return { ...prev, [exerciseIdx]: next }
+        })
+    }
+
+    const setSetCount = (exerciseIdx, count) => {
+        setExerciseSetCount(prev => ({ ...prev, [exerciseIdx]: count }))
+    }
+
     const setReps = (exerciseIdx, setIdx, value) => {
         setExerciseSets(prev => ({
             ...prev,
@@ -255,7 +294,9 @@ const HomeScreen = () => {
     }
 
     const handleConfirmExercise = (exercise) => {
-        setSelectedExercises(prev => [...prev, { name: exercise.name, mode: exercise.mode }])
+        const newExercise = { id: crypto.randomUUID(), name: exercise.name, mode: exercise.mode }
+        setSelectedExercises(prev => [...prev, newExercise])
+        setPlannedExercises(prev => [...prev, newExercise])
         setPreviewExercise(null)
         setShowExercisesList(false)
     }
@@ -279,7 +320,10 @@ const HomeScreen = () => {
         setExerciseSets(prev => reindexMap(prev, idx))
         setExerciseNotes(prev => reindexMap(prev, idx))
         setExerciseMedia(prev => reindexMap(prev, idx))
-        setCurrentIndex(prev => (prev > idx ? prev - 1 : prev))
+        setExerciseDone(prev => reindexMap(prev, idx))
+        setExerciseSetCount(prev => reindexMap(prev, idx))
+        setShowNotes(prev => reindexMap(prev, idx))
+        setCurrentIndex(prev => Math.max(prev - 1, 0))
         removedMedia.forEach(m => deleteMedia(m.id).catch(() => {}))
     }
 
@@ -290,16 +334,42 @@ const HomeScreen = () => {
         setIsHamburgerOpen(false)
     }
 
+    const handleResumeSession = () => {
+        setShowSession(true)
+        setShowExercisesList(false)
+        setPreviewExercise(null)
+        setIsHamburgerOpen(false)
+    }
+
     const handleStartClick = () => {
         if (todayExercises.length > 0) {
-            setSelectedExercises(todayExercises.map(e => ({ name: e.name, mode: e.mode })))
+            const list = todayExercises.map(e => ({ id: crypto.randomUUID(), name: e.name, mode: e.mode }))
+            setPlannedExercises(list)
+            setSelectedExercises(list)
             setExerciseWeights({})
             setExerciseSets({})
             setExerciseNotes({})
             setExerciseMedia({})
+            setExerciseDone({})
+            setExerciseSetCount({})
         }
+        setCurrentIndex(0)
+        setShowNotes({})
         setShowSession(true)
         setShowExercisesList(false)
+    }
+
+    const handleJumpToExercise = (id) => {
+        const idx = selectedExercises.findIndex(e => e.id === id)
+        if (idx >= 0) {
+            setCurrentIndex(idx)
+            return
+        }
+        const planned = plannedExercises.find(e => e.id === id)
+        if (planned) {
+            setSelectedExercises(prev => [...prev, planned])
+            setCurrentIndex(selectedExercises.length)
+        }
     }
 
     const handleAddExercises = () => {
@@ -317,10 +387,13 @@ const HomeScreen = () => {
             // ignore
         }
         setSelectedExercises([])
+        setPlannedExercises([])
         setExerciseWeights({})
         setExerciseSets({})
         setExerciseNotes({})
         setExerciseMedia({})
+        setExerciseDone({})
+        setExerciseSetCount({})
         setCurrentIndex(0)
         setShowNotes({})
         setSavedWorkoutName(name)
@@ -444,11 +517,11 @@ const HomeScreen = () => {
                         <img
                             src={photoData}
                             alt='Profile'
-                            className='rounded-full border-2 border-orange-500 object-cover w-10 h-10 sm:w-12 sm:h-12'
+                            className='rounded-full border border-orange-500 object-cover w-9 h-9 sm:w-10 sm:h-10'
                         />
                     ) : (
-                        <div className='w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-dashed border-orange-500/60 bg-[rgba(10,10,10,0.85)] flex items-center justify-center'>
-                            <User size={18} className='text-orange-500' />
+                        <div className='w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-dashed border-orange-500/60 bg-[rgba(10,10,10,0.85)] flex items-center justify-center'>
+                            <User size={16} className='text-orange-500' />
                         </div>
                     )}
                 </div>
@@ -463,9 +536,9 @@ const HomeScreen = () => {
                     onClick={() => setIsHamburgerOpen(v => !v)}
                 >
                     {isHamburgerOpen ? (
-                        <RiCloseLine color="white" size={36} className='sm:size-[50]' />
+                        <RiCloseLine color="white" size={28} className='sm:size-10' />
                     ) : (
-                        <RiMenuLine color="white" size={36} className='sm:size-[50]' />
+                        <RiMenuLine color="white" size={28} className='sm:size-10' />
                     )}
                 </div>
             </header>
@@ -514,7 +587,7 @@ const HomeScreen = () => {
                                 <p className='font-inter font-bold text-white/50 tracking-[1px] text-[11px] -mt-1'>Days</p>
                             </div>
 
-                            <div className='flex-[0.6] border border-orange-500/30 rounded-2xl bg-[rgba(10,10,10,0.85)] px-4 py-2.5 flex flex-col justify-center'>
+                            <div className='flex-[0.6] border border-orange-500/30 rounded-2xl bg-[rgba(10,10,10,0.85)] px-4 py-2.5 flex flex-col justify-start'>
                             <div className='flex items-center justify-between w-full mb-2'>
                                 <PrsBadge />
                                 <div className='flex items-center gap-2'>
@@ -580,11 +653,17 @@ const HomeScreen = () => {
                         </div>
                         <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }} className='shrink-0' style={{ marginTop: 17 }}>
                             <button
-                                onClick={handleStartClick}
+                                onClick={selectedExercises.length > 0 ? handleResumeSession : handleStartClick}
                                 className='flex items-center gap-3 rounded-2xl bg-[#f97316] border border-[#c2410c] px-6 py-2 cursor-pointer'
                             >
-                                <Zap size={24} color="black" className='w-5 h-5' />
-                                <span className='font-bebas tracking-[2px] text-black text-2xl'>Start Session</span>
+                                {selectedExercises.length > 0 ? (
+                                    <RotateCcw size={20} color="black" className='w-5 h-5' />
+                                ) : (
+                                    <Zap size={24} color="black" className='w-5 h-5' />
+                                )}
+                                <span className='font-bebas tracking-[2px] text-black text-2xl'>
+                                    {selectedExercises.length > 0 ? 'Resume Session' : 'Start Session'}
+                                </span>
                             </button>
                         </motion.div>
                     </motion.div>
@@ -603,7 +682,7 @@ const HomeScreen = () => {
                     <motion.div
                         key='session-panel'
                         className='absolute inset-x-0 bottom-0 top-16 sm:top-20 z-30 overflow-hidden'
-            style={{ background: 'linear-gradient(to bottom right, #111111 45%, #9a3412 86%, #f97316 100%)' }}
+            style={{ background: '#050505' }}
                         initial={{ x: '100%', opacity: 0 }}
                         animate={{ x: 0, opacity: 1 }}
                         exit={{ x: '100%', opacity: 0 }}
@@ -613,7 +692,7 @@ const HomeScreen = () => {
                             {previewExercise && (
                                 <motion.div
                                     key='preview'
-                                    className='absolute inset-0 z-10 bg-[#050505] scroll overflow-y-auto'
+                                    className='absolute inset-0 z-[40] bg-[#050505] scroll overflow-y-auto'
                                     initial={{ opacity: 0, scale: 0.9 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     exit={{ opacity: 0, scale: 0.9 }}
@@ -629,7 +708,7 @@ const HomeScreen = () => {
                             {!previewExercise && showExercisesList && (
                                 <motion.div
                                     key='exercises-list'
-                                    className='absolute inset-0 z-10 bg-[#050505]'
+                                    className='absolute inset-0 z-[40] bg-[#050505]'
                                     initial={{ x: '100%' }}
                                     animate={{ x: 0 }}
                                     exit={{ x: '100%' }}
@@ -648,17 +727,23 @@ const HomeScreen = () => {
                             <div className='h-full scroll overflow-y-auto'>
                                 <SessionTracker
                                     exercises={selectedExercises}
+                                    plannedExercises={plannedExercises}
                                     onRemove={handleRemoveExercise}
                                     onAddExercises={handleAddExercises}
                                     onSessionSaved={handleSessionSaved}
+                                    onJumpToExercise={handleJumpToExercise}
                                     exerciseWeights={exerciseWeights}
                                     exerciseSets={exerciseSets}
                                     exerciseNotes={exerciseNotes}
                                     exerciseMedia={exerciseMedia}
+                                    exerciseDone={exerciseDone}
+                                    exerciseSetCount={exerciseSetCount}
                                     setWeight={setWeight}
                                     setReps={setReps}
                                     setNotes={setNotes}
                                     setMedia={setExerciseMedia}
+                                    setDone={setDone}
+                                    setSetCount={setSetCount}
                                     currentIndex={currentIndex}
                                     setCurrentIndex={setCurrentIndex}
                                     showNotes={showNotes}

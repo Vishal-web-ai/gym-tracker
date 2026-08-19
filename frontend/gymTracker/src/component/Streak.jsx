@@ -61,11 +61,17 @@ function getCalendarGrid(year, month) {
 function FlameIcon() {
     return (
         <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', damping: 8, stiffness: 200 }}
+            className="relative flex items-center justify-center"
+            animate={{ scale: [1, 1.12, 0.94, 1.08, 1], rotate: [-2, 3, -1, 2, 0] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut', times: [0, 0.25, 0.5, 0.75, 1] }}
         >
-            <Flame size={22} color="white" fill="white" strokeWidth={2} className='w-[18px] h-[18px]' />
+            <motion.span
+                className="absolute inset-0 rounded-full"
+                style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.6) 0%, transparent 70%)' }}
+                animate={{ scale: [1, 1.55, 1.15, 1.4, 1], opacity: [0.65, 1, 0.5, 0.9, 0.65] }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut', times: [0, 0.25, 0.5, 0.75, 1] }}
+            />
+            <Flame size={22} color="white" fill="white" strokeWidth={2} className='w-[18px] h-[18px] relative' />
         </motion.span>
     )
 }

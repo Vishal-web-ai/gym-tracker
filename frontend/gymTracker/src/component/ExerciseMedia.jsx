@@ -81,10 +81,10 @@ export default function ExerciseMedia({ media = [], onDelete }) {
     }
 
     return (
-        <div className='flex items-center justify-end' style={{ marginTop: '-2.6em', marginRight: '3px' }}>
+        <div className='flex items-center'>
             <button
                 onClick={() => loadIndex(0)}
-                className='flex items-center gap-0.5 px-1.5 py-1.5 rounded-full text-xs font-bold transition-all duration-300 cursor-pointer bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20'
+                className='flex items-center gap-0.5 px-1.5 py-1.5 rounded-full text-xs font-bold transition-all duration-300 cursor-pointer bg-orange-500/10 border border-orange-500/30 text-orange-400 hover:bg-orange-500/20'
                 title='View media'
             >
                 <ImageIcon size={14} />

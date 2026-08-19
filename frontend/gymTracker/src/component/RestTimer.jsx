@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Timer, ChevronUp, ChevronDown } from 'lucide-react'
+import { Timer, Play, Square, ChevronUp, ChevronDown } from 'lucide-react'
 import { getRestSound } from '../services/storage'
 import { playBeep, ensureCtx } from '../services/audio'
 
@@ -103,7 +103,7 @@ const RestTimer = ({ sound }) => {
     }, [sound])
 
     const total = minutes * 60 + seconds
-    const displayed = running || done ? remaining : total
+    const displayed = running || done ? remaining : (remaining > 0 ? remaining : total)
 
     const start = useCallback(() => {
         stopAlarm()
@@ -112,35 +112,38 @@ const RestTimer = ({ sound }) => {
         } catch {
             // audio unavailable
         }
-        endTimeRef.current = Date.now() + total * 1000
-        setRemaining(total)
+        const from = remaining > 0 ? remaining : total
+        endTimeRef.current = Date.now() + from * 1000
+        setRemaining(from)
         setRunning(true)
         setOpen(false)
-    }, [stopAlarm, total])
+    }, [stopAlarm, total, remaining])
 
     const stop = useCallback(() => {
         stopAlarm()
         setRunning(false)
-        setRemaining(0)
     }, [stopAlarm])
 
-    const handleClick = useCallback(() => {
+    const restart = useCallback(() => {
+        stopAlarm()
+        setRemaining(total)
+    }, [stopAlarm, total])
+
+    const handlePlayClick = useCallback(() => {
         const now = Date.now()
         if (now - lastClickRef.current < 300) {
             clearTimeout(clickTimerRef.current)
             lastClickRef.current = 0
-            setOpen(true)
+            restart()
             return
         }
         lastClickRef.current = now
-        clickTimerRef.current = setTimeout(() => {
-            if (done) {
-                stopAlarm()
-            } else if (!running) {
-                start()
-            }
-        }, 300)
-    }, [done, running, start, stopAlarm])
+        if (running || done) {
+            stop()
+            return
+        }
+        clickTimerRef.current = setTimeout(() => start(), 300)
+    }, [running, done, start, stop, restart])
 
     useEffect(() => {
         if (!running) return
@@ -160,19 +163,42 @@ const RestTimer = ({ sound }) => {
 
     return (
         <>
-            <button
-                onClick={handleClick}
-                className={`ml-auto flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-lg font-bold tracking-wide transition-all duration-300 cursor-pointer ${
+            <div
+                className={`w-full flex items-center justify-between rounded-2xl px-4 py-2 transition-all duration-300 ${
                     running || done
-                        ? 'bg-orange-500 text-black animate-pulse'
-                        : 'bg-orange-500/10 border border-orange-500/50 text-orange-500 hover:bg-orange-500/20'
+                        ? 'bg-orange-500/10 border border-orange-400/60 animate-pulse'
+                        : 'bg-black/30 border border-orange-500/35 hover:border-orange-400/70'
                 }`}
-                style={{ marginRight: '3px' }}
-                title='Rest timer'
             >
-                <Timer size={18} />
-                {formatTime(displayed)}
-            </button>
+                <button
+                    onClick={() => setOpen(true)}
+                    className='flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer'
+                    title='Rest timer'
+                >
+                    <div className='w-9 h-9 rounded-full bg-orange-500/10 border border-orange-500/30 flex items-center justify-center shrink-0'>
+                        <Timer size={16} className='text-orange-400' />
+                    </div>
+                    <div className='text-left'>
+                        <p className='text-[9px] font-bold text-neutral-400 tracking-[2px]'>
+                            {running ? 'RESTING' : 'REST TIMER'}
+                        </p>
+                        <p className='font-bebas text-orange-400 text-[22px] leading-none mt-1'>
+                            {formatTime(displayed)}
+                        </p>
+                    </div>
+                </button>
+                <button
+                    onClick={handlePlayClick}
+                    className='w-10 h-10 rounded-full border border-orange-500/50 flex items-center justify-center shrink-0 cursor-pointer hover:bg-orange-500/10 transition-all'
+                    title={running || done ? 'Stop timer (double-click to restart)' : 'Start timer'}
+                >
+                    {running || done ? (
+                        <Square size={13} className='text-orange-400' />
+                    ) : (
+                        <Play size={16} className='text-orange-400 fill-orange-400 ml-0.5' />
+                    )}
+                </button>
+            </div>
 
             {open && (
                 <div

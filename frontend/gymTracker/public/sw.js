@@ -1,4 +1,4 @@
-const CACHE = 'gym-tracker-v4'
+const CACHE = 'gym-tracker-v6'
 const IS_DEV = ['localhost', '127.0.0.1'].includes(self.location.hostname)
 const PRECACHE = [
     '/',
@@ -6,8 +6,8 @@ const PRECACHE = [
     '/manifest.json',
     '/icon-192.png',
     '/icon-512.png',
-    '/icons.svg',
-    '/favicon.svg'
+    '/favicon.png',
+    '/logo.png'
 ]
 
 const FONT_ORIGINS = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com']

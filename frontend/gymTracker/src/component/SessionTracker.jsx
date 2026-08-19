@@ -1,6 +1,6 @@
 import { useState, useLayoutEffect, useEffect, useRef } from 'react'
-import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion'
-import { Camera, Video, StickyNote, Trash2 } from 'lucide-react'
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
+import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check } from 'lucide-react'
 import NumberOfSets from './NumberOfSets'
 import ExerciseMedia from './ExerciseMedia'
 import RestTimer from './RestTimer'
@@ -8,29 +8,82 @@ import { createSession, getRestSound } from '../services/storage'
 import { addMedia } from '../services/media'
 import { getErrorMessage } from '../services/errors'
 
-const SET_INDICES = [0, 1, 2]
-
 const WeightCell = ({ value, onChange }) => (
     <input
         type='text'
-        inputMode='numeric'
+        inputMode='decimal'
         value={value}
         onChange={(e) => {
             const v = e.target.value
             if (v === '' || /^\d*\.?\d*$/.test(v)) onChange(v)
         }}
         placeholder='0'
-        className='w-[clamp(34px,11vw,38px)] h-[30px] bg-black text-orange-500 rounded-lg text-center text-sm font-bold outline-none placeholder-orange-500/40'
+        className='w-full h-9 bg-black/30 border border-white/15 rounded-xl text-center font-bebas text-orange-400 text-lg outline-none placeholder-orange-400/40'
     />
 )
 
-const ExerciseCard = ({ exercise, idx, current, activeRef, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, setWeight, setReps, setNotes, setMedia, showNotes, setShowNotes, sound }) => {
-    const x = useMotionValue(0)
-    const panelOpacity = useTransform(x, [-120, -60, 0], [1, 1, 0])
+const ExerciseCard = ({ exercise, idx, role, activeRef, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, showNotes, setShowNotes, sound, canPrev, canNext, onGoPrev, onGoNext }) => {
     const photoRef = useRef(null)
     const videoRef = useRef(null)
     const [busy, setBusy] = useState(false)
+    const x = useMotionValue(0)
+    const nameRef = useRef(null)
+    const setsScrollRef = useRef(null)
     const isTimer = exercise.mode === 'timer'
+    const setCount = Math.max(3, Math.min(10, exerciseSetCount?.[idx] || 3))
+    const prevSetCount = useRef(setCount)
+    const width = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 375))[0]
+    const gutter = 12
+    const CW = Math.max(200, width - gutter * 2)
+    const peekX = 40
+    const shift = CW - peekX
+    const isFront = role === 'front'
+    const targetX = !isFront ? (role === 'next' ? shift : -shift) : 0
+    const deckSpring = { type: 'spring', stiffness: 360, damping: 34, mass: 0.9 }
+    const dragScale = useTransform(x, [-shift, 0, shift], [0.97, 1, 0.97])
+    const glowOpacity = useTransform(x, [-shift, 0, shift], [0.55, 0, 0.55])
+
+    const snapBack = () => animate(x, 0, { type: 'spring', stiffness: 600, damping: 42 })
+
+    const handleDragEnd = (e, info) => {
+        const dx = info.offset.x
+        const vx = info.velocity.x
+        if (dx < -60 || vx < -500) {
+            if (canNext) onGoNext()
+            else snapBack()
+        } else if (dx > 60 || vx > 500) {
+            if (canPrev) onGoPrev()
+            else snapBack()
+        } else {
+            snapBack()
+        }
+    }
+
+    useLayoutEffect(() => {
+        const el = setsScrollRef.current
+        if (el && setCount > prevSetCount.current) {
+            el.scrollTop = el.scrollHeight
+        }
+        prevSetCount.current = setCount
+    }, [setCount])
+
+    useLayoutEffect(() => {
+        const el = nameRef.current
+        if (!el) return
+        const fit = () => {
+            el.style.fontSize = '30px'
+            const cs = getComputedStyle(el)
+            const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+            const range = document.createRange()
+            range.selectNodeContents(el)
+            const needed = range.getBoundingClientRect().width
+            const available = Math.max(el.clientWidth - pad - 8, 40)
+            const scale = needed > available ? Math.max(0.35, available / needed) : 1
+            el.style.fontSize = `${30 * scale}px`
+        }
+        fit()
+        if (document.fonts?.ready) document.fonts.ready.then(fit).catch(() => {})
+    }, [exercise.name])
 
     const onAdd = (item) => setMedia(prev => ({
         ...prev,
@@ -54,113 +107,95 @@ const ExerciseCard = ({ exercise, idx, current, activeRef, onRemove, exerciseWei
     }
 
     return (
-        <div className='relative'>
-            <motion.div
-                style={{ opacity: panelOpacity }}
-                className='absolute inset-y-0 right-0 w-28 bg-red-500 rounded-lg flex items-center justify-center gap-1.5 pointer-events-none'
-            >
-                <Trash2 size={20} color='white' />
-                <span className='text-white text-lg font-bold tracking-wide'>DELETE</span>
-            </motion.div>
-            <motion.div
-                ref={idx === current ? activeRef : undefined}
-                initial={{ opacity: 0, x: 200 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -200, transition: { duration: 0.25 } }}
-                transition={{ x: { duration: 0.45, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.3 } }}
-            >
+        <motion.div
+            ref={isFront ? activeRef : undefined}
+            initial={{ x: targetX, opacity: isFront ? 1 : 0, scale: 1 }}
+            animate={{ x: targetX, opacity: isFront ? 1 : 0, scale: 1 }}
+            transition={{ x: deckSpring, opacity: { duration: 0.3 }, scale: deckSpring }}
+            style={{ x, scale: dragScale, zIndex: isFront ? 20 : 10 }}
+            drag={isFront ? 'x' : false}
+            dragConstraints={{ left: -shift, right: shift }}
+            dragElastic={0.25}
+            dragMomentum={false}
+            onDragEnd={isFront ? handleDragEnd : undefined}
+            className={`absolute top-0 bottom-0 left-3 right-3 rounded-3xl border border-white/15 bg-white/5 backdrop-blur-2xl overflow-hidden touch-pan-y ${isFront
+                ? 'cursor-grab active:cursor-grabbing shadow-[0_20px_45px_rgba(0,0,0,0.6)]'
+                : 'pointer-events-none'
+                }`}
+        >
+            {isFront && (
                 <motion.div
-                    style={{ x }}
-                    drag='x'
-                    dragConstraints={{ left: -120, right: 0 }}
-                    dragElastic={0.6}
-                    onDragEnd={(e, info) => {
-                        if (info.offset.x < -95 || info.velocity.x < -500) {
-                            onRemove(idx)
-                        }
+                    className='absolute inset-0 pointer-events-none rounded-3xl'
+                    style={{
+                        opacity: glowOpacity,
+                        background: 'radial-gradient(120% 90% at 50% 50%, rgba(249,115,22,0.12), transparent 70%)'
                     }}
-                    className='flex flex-col gap-3 p-3 rounded-lg border border-orange-500/50 bg-orange-500/10 cursor-grab active:cursor-grabbing touch-pan-y'
-                >
-                    <div className='flex items-center justify-between gap-2'>
-                        <h2 className='font-bebas text-orange-500 text-2xl flex-1 min-w-0 truncate'>
-                            {exercise.name}
-                        </h2>
-                        <div className='flex items-center gap-3 bg-orange-500/10 border border-orange-500/20 rounded-lg px-2 py-1 shrink-0'>
-                            <button
-                                onClick={() => photoRef.current?.click()}
-                                disabled={busy}
-                                className='cursor-pointer hover:text-orange-300 transition-all disabled:opacity-50'
-                                title='Take photo'
-                            >
-                                <Camera size={20} />
-                            </button>
-                            <button
-                                onClick={() => videoRef.current?.click()}
-                                disabled={busy}
-                                className='cursor-pointer hover:text-orange-300 transition-all disabled:opacity-50'
-                                title='Record video'
-                            >
-                                <Video size={20} />
-                            </button>
-                            <button
-                                onClick={() => setShowNotes(prev => ({ ...prev, [idx]: !prev[idx] }))}
-                                className='cursor-pointer hover:text-orange-300 transition-all'
-                                title='Notes'
-                            >
-                                <StickyNote size={17} />
-                            </button>
-                        </div>
-                        <input
-                            ref={photoRef}
-                            type='file'
-                            accept='image/*'
-                            capture='environment'
-                            onChange={handleFiles}
-                            className='hidden'
-                        />
-                        <input
-                            ref={videoRef}
-                            type='file'
-                            accept='video/*'
-                            capture='environment'
-                            onChange={handleFiles}
-                            className='hidden'
-                        />
-                    </div>
-                    <div className='flex items-center gap-1'>
-                        <span className='text-neutral-400 text-xs tracking-wide shrink-0' style={{ width: 'clamp(32px, 11vw, 48px)' }}>
-                            SETS
-                        </span>
-                        <div className='flex items-center gap-2 sm:gap-3'>
-                            {SET_INDICES.map(setIdx => (
-                                <NumberOfSets
-                                    key={setIdx}
-                                    reps={exerciseSets[idx]?.[setIdx] || ''}
-                                    setReps={(_, val) => setReps(idx, setIdx, val)}
-                                    idx={setIdx}
-                                    placeholder={isTimer ? 'T' : 'R'}
-                                    mode={isTimer ? 'timer' : 'weight'}
-                                />
-                            ))}
-                        </div>
-                        <RestTimer sound={sound} />
-                    </div>
-                    {!isTimer && (
-                        <div className='flex items-center gap-1'>
-                            <span className='text-neutral-400 text-xs tracking-wide shrink-0' style={{ width: 'clamp(32px, 11vw, 48px)' }}>
-                                WEIGHT
-                            </span>
-                            <div className='flex items-center gap-2 sm:gap-3'>
-                                {SET_INDICES.map(setIdx => (
-                                    <WeightCell
-                                        key={setIdx}
-                                        value={exerciseWeights[idx]?.[setIdx] || ''}
-                                        onChange={(val) => setWeight(idx, setIdx, val)}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                />
+            )}
+            <div
+                className='absolute inset-0 pointer-events-none'
+                style={{
+                    background: 'radial-gradient(110% 85% at 90% 100%, rgba(255,255,255,0.06) 0%, transparent 62%), radial-gradient(80% 55% at 0% 0%, rgba(255,255,255,0.04) 0%, transparent 55%)'
+                }}
+            />
+            {/* Glass shine — top highlight + inner glow + diagonal streak */}
+            <div
+                className='absolute inset-0 pointer-events-none rounded-3xl'
+                style={{
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16), inset 0 0 50px rgba(255,255,255,0.05)'
+                }}
+            />
+            <div
+                className='absolute inset-x-0 top-0 h-2/5 pointer-events-none'
+                style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.10), transparent)' }}
+            />
+            <div
+                className='absolute inset-0 pointer-events-none'
+                style={{ background: 'linear-gradient(115deg, transparent 28%, rgba(255,255,255,0.07) 42%, transparent 56%)' }}
+            />
+            <div className='relative flex flex-col h-full px-4 py-2.5'>
+                {/* Title row + trash */}
+                <div className='relative'>
+                    <h1
+                        ref={nameRef}
+                        className='absolute inset-x-0 top-1/2 -translate-y-1/2 text-center font-bebas text-orange-400 text-[30px] leading-none tracking-[1px] whitespace-nowrap overflow-hidden text-ellipsis px-12'
+                    >
+                        {exercise.name}
+                    </h1>
+                    <button
+                        onClick={() => onRemove(idx)}
+                        className='relative z-10 ml-auto flex w-9 h-9 rounded-lg border border-white/20 bg-white/5 items-center justify-center cursor-pointer hover:bg-white/15 transition-all shrink-0'
+                        title='Remove exercise'
+                    >
+                        <Trash2 size={15} className='text-white/70' />
+                    </button>
+                </div>
+
+                {/* Action buttons + media pill — centered below the name */}
+                <div className='flex flex-wrap items-center justify-center gap-2 mt-1.5'>
+                    <button
+                        onClick={() => photoRef.current?.click()}
+                        disabled={busy}
+                        className='w-8 h-8 rounded-lg border border-white/20 flex items-center justify-center cursor-pointer hover:border-orange-400/60 hover:text-orange-300 transition-all disabled:opacity-50'
+                        title='Take photo'
+                    >
+                        <Camera size={16} className='text-white/70' />
+                    </button>
+                    <button
+                        onClick={() => videoRef.current?.click()}
+                        disabled={busy}
+                        className='w-8 h-8 rounded-lg border border-white/20 flex items-center justify-center cursor-pointer hover:border-orange-400/60 hover:text-orange-300 transition-all disabled:opacity-50'
+                        title='Record video'
+                    >
+                        <Video size={16} className='text-white/70' />
+                    </button>
+                    <button
+                        onClick={() => setShowNotes(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                        className='w-8 h-8 rounded-lg border border-white/20 flex items-center justify-center cursor-pointer hover:border-orange-400/60 hover:text-orange-300 transition-all'
+                        title='Notes'
+                    >
+                        <StickyNote size={15} className='text-white/70' />
+                    </button>
                     <ExerciseMedia
                         media={exerciseMedia?.[idx] || []}
                         onDelete={(mediaIdx) => setMedia(prev => ({
@@ -168,27 +203,138 @@ const ExerciseCard = ({ exercise, idx, current, activeRef, onRemove, exerciseWei
                             [idx]: (prev[idx] || []).filter((_, i) => i !== mediaIdx)
                         }))}
                     />
-                    {showNotes[idx] && (
-                        <textarea
-                            value={exerciseNotes?.[idx] || ''}
-                            onChange={(e) => setNotes(idx, e.target.value)}
-                            onInput={(e) => {
-                                e.target.style.height = 'auto'
-                                e.target.style.height = e.target.scrollHeight + 'px'
-                            }}
-                            placeholder="Notes..."
-                            rows={1}
-                            className='w-full bg-neutral-900 text-white text-sm border border-orange-500/30 rounded-lg px-3 py-2 outline-none focus:border-orange-500 placeholder-neutral-500 resize-none overflow-hidden transition-all duration-300'
-                        />
+                    <input
+                        ref={photoRef}
+                        type='file'
+                        accept='image/*'
+                        capture='environment'
+                        onChange={handleFiles}
+                        className='hidden'
+                    />
+                    <input
+                        ref={videoRef}
+                        type='file'
+                        accept='video/*'
+                        capture='environment'
+                        onChange={handleFiles}
+                        className='hidden'
+                    />
+                </div>
+
+                {/* Notes — opens below the icon row, above the sets */}
+                {showNotes[idx] && (
+                    <textarea
+                        value={exerciseNotes?.[idx] || ''}
+                        onChange={(e) => setNotes(idx, e.target.value)}
+                        onInput={(e) => {
+                            e.target.style.height = 'auto'
+                            e.target.style.height = e.target.scrollHeight + 'px'
+                        }}
+                        placeholder="Notes..."
+                        rows={1}
+                        className='w-full bg-black/30 text-white text-sm border border-orange-500/25 rounded-xl px-3 py-2 mt-3 outline-none focus:border-orange-400 placeholder-neutral-500 resize-none overflow-hidden transition-all duration-300'
+                    />
+                )}
+
+                {/* Set input rows — scrollable when they don't fit */}
+                <div
+                    ref={setsScrollRef}
+                    className='flex-initial min-h-0 overflow-y-auto scroll mt-1.5'
+                >
+                    <div className='flex flex-col gap-1.5'>
+                        {Array.from({ length: setCount }, (_, setIdx) => {
+                            const done = !!exerciseDone[idx]?.[setIdx]
+                            return (
+                                <div key={setIdx} className='flex items-center gap-2.5'>
+                                    <div className='w-7 h-7 rounded-full border border-orange-500/40 flex items-center justify-center shrink-0'>
+                                        <span className='font-bebas text-orange-400 text-base leading-none'>{setIdx + 1}</span>
+                                    </div>
+                                    <div className='flex-1 min-w-0'>
+                                        <label className='block text-[9px] font-bold text-neutral-500 mb-0.5 tracking-[2px]'>
+                                            {isTimer ? 'TIME' : 'REPS'}
+                                        </label>
+                                        {isTimer ? (
+                                            <NumberOfSets
+                                                mode='timer'
+                                                reps={exerciseSets[idx]?.[setIdx] || ''}
+                                                setReps={(_, val) => setReps(idx, setIdx, val)}
+                                                idx={setIdx}
+                                                className='h-9'
+                                            />
+                                        ) : (
+                                            <input
+                                                type='text'
+                                                inputMode='numeric'
+                                                value={exerciseSets[idx]?.[setIdx] || ''}
+                                                onChange={(e) => {
+                                                    const v = e.target.value
+                                                    if (v === '' || /^\d+$/.test(v)) setReps(idx, setIdx, v)
+                                                }}
+                                                placeholder='0'
+className='w-full h-9 bg-black/30 border border-white/15 rounded-xl text-center font-bebas text-orange-400 text-lg outline-none placeholder-orange-400/40'
+                                            />
+                                        )}
+                                    </div>
+                                    {!isTimer && (
+                                        <div className='flex-1 min-w-0'>
+<label className='block text-[9px] font-bold text-neutral-500 mb-0.5 tracking-[2px]'>
+                                            WEIGHT (KG)
+                                        </label>
+                                        <WeightCell
+                                            value={exerciseWeights[idx]?.[setIdx] || ''}
+                                            onChange={(val) => setWeight(idx, setIdx, val)}
+                                        />
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={() => setDone(idx, setIdx, !done)}
+className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 transition-all cursor-pointer ${done
+                                        ? 'border-white bg-white/20'
+                                        : 'border-neutral-600 hover:border-neutral-400 hover:bg-white/5'
+                                        }`}
+                                    title={done ? 'Mark set incomplete' : 'Mark set complete'}
+                                >
+                                    <Check size={15} className={done ? 'text-white' : 'text-transparent'} />
+                                    </button>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+
+                {/* Add / remove set controls — fixed below the scrollable area */}
+                <div className='flex items-center justify-center gap-2 pt-1.5'>
+                    <button
+                        onClick={() => setSetCount(idx, Math.min(10, setCount + 1))}
+                        disabled={setCount >= 10}
+                        className='flex items-center gap-1 px-3 py-1.5 rounded-full border border-orange-500/35 text-orange-400/90 text-[10px] font-bold tracking-[2px] cursor-pointer hover:bg-orange-500/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed'
+                        title={setCount >= 10 ? 'Maximum of 10 sets' : 'Add a set'}
+                    >
+                        <Plus size={12} /> ADD SET
+                    </button>
+                    {setCount > 3 && (
+                        <button
+                            onClick={() => setSetCount(idx, setCount - 1)}
+                            className='flex items-center gap-1 px-3 py-1.5 rounded-full border border-white/25 text-white/70 text-[10px] font-bold tracking-[2px] cursor-pointer hover:bg-white/10 transition-all'
+                            title='Remove last set'
+                        >
+                            <Minus size={12} /> REMOVE SET
+                        </button>
                     )}
-                </motion.div>
-            </motion.div>
-        </div>
+                </div>
+
+                {/* Rest timer — always pinned to the bottom */}
+                <div className='mt-auto pt-1.5'>
+                    <RestTimer sound={sound} />
+                </div>
+            </div>
+        </motion.div>
     )
 }
 
-const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSaved, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, setWeight, setReps, setNotes, setMedia, currentIndex, setCurrentIndex, showNotes, setShowNotes }) => {
+const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAddExercises, onSessionSaved, onJumpToExercise, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, currentIndex, setCurrentIndex, showNotes, setShowNotes }) => {
     const [showNameModal, setShowNameModal] = useState(false)
+    const [showPreview, setShowPreview] = useState(false)
     const [workoutName, setWorkoutName] = useState('')
     const [restSound, setRestSound] = useState(null)
     const activeRef = useRef(null)
@@ -199,17 +345,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
 
     const current = exercises.length === 0 ? 0 : Math.min(currentIndex, exercises.length - 1)
     const isLast = current === exercises.length - 1
-
-    useLayoutEffect(() => {
-        if (exercises.length > 0 && activeRef.current) {
-            const el = activeRef.current
-            const container = el.closest('.scroll')
-            if (container) {
-                const top = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
-                container.scrollTop = top
-            }
-        }
-    }, [current, exercises.length])
+    const selectedCount = plannedExercises.filter(ex => exercises.some(e => e.id === ex.id)).length
 
     const handleSaveClick = () => {
         setWorkoutName('')
@@ -229,7 +365,7 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                 exercises: exercises.map((exercise, idx) => ({
                     name: exercise.name,
                     mode: exercise.mode === 'timer' ? 'timer' : 'weight',
-                    sets: SET_INDICES.map(setIdx => ({
+                    sets: Array.from({ length: Math.max(3, Math.min(10, exerciseSetCount?.[idx] || 3)) }, (_, setIdx) => ({
                         reps: exerciseSets[idx]?.[setIdx] || '—',
                         weight: isTimer(idx) ? '—' : (exerciseWeights[idx]?.[setIdx] ? `${exerciseWeights[idx][setIdx]}kg` : '—')
                     })),
@@ -247,84 +383,104 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
     return (
         <div className='w-full md:w-3/4 h-full flex justify-center'>
             <div className='flex flex-col h-full w-full'>
-                <div className='flex-1 overflow-y-auto px-5 sm:px-7 scroll'>
+                {/* Exercise progress */}
+                <div className='shrink-0 flex flex-col items-center gap-2 px-5 pt-4 pb-1'>
+                    <motion.button
+                        key={current}
+                        initial={{ opacity: 0, x: -40 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ x: { duration: 0.35, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.25 } }}
+                        onClick={() => setShowPreview(true)}
+                        title='View all exercises'
+                        className='font-bebas tracking-[3px] text-[15px] cursor-pointer hover:opacity-90 transition-opacity'
+                    >
+                        <span className='text-orange-500'>EXERCISE</span>
+                        <span className='text-neutral-400'> {current + 1} OF {exercises.length}</span>
+                    </motion.button>
+                    <div className='flex gap-1.5'>
+                        {exercises.map((ex, i) => (
+                            <button
+                                key={ex.id}
+                                onClick={() => onJumpToExercise(ex.id)}
+                                title={ex.name}
+                                className={`h-[3px] rounded-full w-5 transition-all cursor-pointer ${i === current
+                                    ? 'bg-orange-500'
+                                    : 'bg-neutral-800 hover:bg-neutral-600'
+                                    }`}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                {/* Main exercise card — deck of prev / current / next */}
+                <div className='relative flex-1 min-h-0 mt-3 mb-3 overflow-hidden'>
                     {exercises.length > 0 ? (
                         <>
-                            <div className='flex flex-col gap-3 font-semibold font-mono text-base sm:text-lg'>
-                                <div className='flex items-center justify-center overflow-hidden'>
-                                    <motion.p
-                                        key={current}
-                                        initial={{ opacity: 0, x: -40 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ x: { duration: 0.35, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.25 } }}
-                                        className='font-bebas text-orange-500 tracking-[2px] text-sm sm:text-base'
-                                    >
-                                        EXERCISE {current + 1} <span className='text-white/50'>/ {exercises.length}</span>
-                                    </motion.p>
-                                </div>
-                                <AnimatePresence initial={false}>
-                                    {exercises.slice(0, current + 1).map((exercise, idx) => (
-                                        <ExerciseCard
-                                            key={idx}
-                                            exercise={exercise}
-                                            idx={idx}
-                                            current={current}
-                                            activeRef={activeRef}
-                                            onRemove={onRemove}
-                                            exerciseWeights={exerciseWeights}
-                                            exerciseSets={exerciseSets}
-                                            exerciseNotes={exerciseNotes}
-                                            exerciseMedia={exerciseMedia}
-                                            setWeight={setWeight}
-                                            setReps={setReps}
-                                            setNotes={setNotes}
-                                            setMedia={setMedia}
-                                            showNotes={showNotes}
-                                            setShowNotes={setShowNotes}
-                                            sound={restSound}
-                                        />
-                                    ))}
-                                </AnimatePresence>
-                            </div>
-                            {!isLast && (
-                                <button
-                                    onClick={() => setCurrentIndex(current + 1)}
-                                    disabled={exercises.length === 0}
-                                    className={`mt-[8px] mx-auto w-1/2 block text-center border border-orange-500 bg-orange-500 text-black font-bold px-5 py-1.5 sm:py-2 text-xl sm:text-2xl rounded-xl transition-all duration-300 font-bebas tracking-[2px] ${exercises.length === 0
-                                        ? 'opacity-30 cursor-not-allowed'
-                                        : 'cursor-pointer hover:scale-105 hover:bg-orange-400 hover:shadow-orange-500/50 hover:shadow-lg active:scale-95'
-                                        }`}
-                                >
-                                    Next Exercise
-                                </button>
-                            )}
+                            {exercises.map((exercise, i) => {
+                                const role = i === current ? 'front' : i === current - 1 ? 'prev' : i === current + 1 ? 'next' : null
+                                if (!role) return null
+                                return (
+                                    <ExerciseCard
+                                        key={exercise.id}
+                                        role={role}
+                                        exercise={exercise}
+                                        idx={i}
+                                        activeRef={activeRef}
+                                        onRemove={onRemove}
+                                        exerciseWeights={exerciseWeights}
+                                        exerciseSets={exerciseSets}
+                                        exerciseNotes={exerciseNotes}
+                                        exerciseMedia={exerciseMedia}
+                                        exerciseDone={exerciseDone}
+                                        exerciseSetCount={exerciseSetCount}
+                                        setWeight={setWeight}
+                                        setReps={setReps}
+                                        setNotes={setNotes}
+                                        setMedia={setMedia}
+                                        setDone={setDone}
+                                        setSetCount={setSetCount}
+                                        showNotes={showNotes}
+                                        setShowNotes={setShowNotes}
+                                        sound={restSound}
+                                        canPrev={current > 0}
+                                        canNext={!isLast}
+                                        onGoPrev={() => setCurrentIndex(current - 1)}
+                                        onGoNext={() => setCurrentIndex(current + 1)}
+                                    />
+                                )
+                            })}
                         </>
                     ) : (
-                        <p className='text-orange-500/50 tracking-wide text-center py-10'>
-                            No exercises yet. Tap "Add Exercises" to start.
-                        </p>
+                        <div className='h-full flex flex-col items-center justify-center'>
+                            <p className='text-orange-500/50 tracking-wide text-center font-mono'>
+                                No exercises yet. Tap "Add Exercises" to start.
+                            </p>
+                        </div>
                     )}
                 </div>
 
-                <div className='shrink-0 px-5 sm:px-7 pb-5 sm:pb-7 pt-3 flex flex-col gap-3'>
-                    <div className='flex gap-3'>
-                        <button
-                            onClick={onAddExercises}
-                            className='flex-1 border border-orange-500/40 text-orange-500 font-bold px-4 py-1.5 text-sm sm:text-base rounded-xl transition-all duration-300 font-bebas tracking-[2px] cursor-pointer hover:bg-orange-500/10 active:scale-95'
-                        >
-                            Add More Exercises
-                        </button>
-                        <button
-                            onClick={handleSaveClick}
-                            disabled={exercises.length === 0}
-                            className={`flex-1 border border-orange-500/40 text-orange-500 font-bold px-4 py-1.5 text-sm sm:text-base rounded-xl transition-all duration-300 font-bebas tracking-[2px] ${exercises.length === 0
-                                ? 'opacity-30 cursor-not-allowed'
-                                : 'cursor-pointer hover:bg-orange-500/10 active:scale-95'
-                                }`}
-                        >
-                            Save
-                        </button>
-                    </div>
+                {/* Bottom action bar */}
+                <div className='shrink-0 px-4 pt-3 pb-5 flex gap-3'>
+                    <button
+                        onClick={onAddExercises}
+                        className='flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-white/10 backdrop-blur-3xl py-3 cursor-pointer hover:bg-white/15 transition-all duration-300 active:scale-95'
+                    >
+                        <Plus size={15} className='text-orange-400' />
+                        <span className='font-bebas text-orange-400 text-[13px] tracking-[1px]'>ADD MORE EXERCISES</span>
+                    </button>
+                    <button
+                        onClick={handleSaveClick}
+                        disabled={exercises.length === 0}
+                        className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-3 backdrop-blur-3xl transition-all duration-300 ${exercises.length === 0
+                            ? 'bg-white/5 cursor-not-allowed'
+                            : 'bg-orange-400/25 cursor-pointer hover:bg-orange-400/35 active:scale-95 shadow-[0_0_30px_rgba(249,115,22,0.45),inset_0_0_14px_rgba(255,255,255,0.15)]'
+                            }`}
+                    >
+                        <Save size={15} className={exercises.length === 0 ? 'text-white/40' : 'text-orange-300'} />
+                        <span className={`font-bebas text-[13px] tracking-[1px] ${exercises.length === 0 ? 'text-white/40' : 'text-orange-300'}`}>
+                            SAVE WORKOUT
+                        </span>
+                    </button>
                 </div>
             </div>
 
@@ -358,6 +514,58 @@ const SessionTracker = ({ exercises = [], onRemove, onAddExercises, onSessionSav
                                 Save
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+            {showPreview && (
+                <div
+                    className='fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4'
+                    onClick={() => setShowPreview(false)}
+                >
+                    <div
+                        className='bg-neutral-800 border border-orange-500/40 rounded-2xl p-5 w-full max-w-sm max-h-[75vh] overflow-y-auto scroll animate-popIn'
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className='flex items-center justify-between mb-4'>
+                            <h2 className='text-white text-lg font-bold font-mono'>Workout Preview</h2>
+                            <button
+                                onClick={() => setShowPreview(false)}
+                                className='text-neutral-400 hover:text-white transition-colors cursor-pointer'
+                                title='Close'
+                            >
+                                <X size={22} />
+                            </button>
+                        </div>
+                        <p className='text-neutral-400 text-xs mb-3 font-mono'>
+                            {selectedCount} of {plannedExercises.length} exercises
+                        </p>
+                        <ul className='flex flex-col gap-2'>
+                            {plannedExercises.map((ex, i) => {
+                                const sessionIdx = exercises.findIndex(e => e.id === ex.id)
+                                const isCurrent = sessionIdx === current
+                                const isDeleted = sessionIdx === -1
+                                return (
+                                    <li
+                                        key={ex.id}
+                                        onClick={() => {
+                                            setShowPreview(false)
+                                            onJumpToExercise(ex.id)
+                                        }}
+                                        className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 cursor-pointer transition-all duration-200 ${isCurrent
+                                            ? 'border-orange-500 bg-orange-500/20'
+                                            : isDeleted
+                                                ? 'border-neutral-700 bg-neutral-900 opacity-50 hover:opacity-80'
+                                                : 'border-neutral-700 bg-neutral-900 hover:border-orange-500/50'
+                                            }`}
+                                    >
+                                        <span className='font-bebas text-orange-500 text-lg w-6 text-center shrink-0'>{i + 1}</span>
+                                        <span className='flex-1 text-white font-semibold truncate'>{ex.name}</span>
+                                        {isCurrent && <span className='text-orange-400 text-xs font-mono shrink-0'>CURRENT</span>}
+                                        {isDeleted && <span className='text-neutral-500 text-xs font-mono shrink-0'>RE-ADD</span>}
+                                    </li>
+                                )
+                            })}
+                        </ul>
                     </div>
                 </div>
             )}
