@@ -1,5 +1,5 @@
 import { useState, useLayoutEffect, useEffect, useRef } from 'react'
-import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check } from 'lucide-react'
+import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check, Images, Film } from 'lucide-react'
 import NumberOfSets from './NumberOfSets'
 import ExerciseMedia from './ExerciseMedia'
 import RestTimer from './RestTimer'
@@ -22,11 +22,14 @@ const WeightCell = ({ value, onChange }) => (
 )
 
 const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, showNotes, setShowNotes, sound, canPrev, canNext, onGoPrev, onGoNext }) => {
-    const photoRef = useRef(null)
-    const videoRef = useRef(null)
+    const photoCaptureRef = useRef(null)
+    const photoGalleryRef = useRef(null)
+    const videoCaptureRef = useRef(null)
+    const videoGalleryRef = useRef(null)
     const cardRef = useRef(null)
     const glowRef = useRef(null)
     const [busy, setBusy] = useState(false)
+    const [menuFor, setMenuFor] = useState(null)
     const nameRef = useRef(null)
     const setsScrollRef = useRef(null)
     const dragRef = useRef(null)
@@ -223,20 +226,20 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                 </div>
 
                 {/* Action buttons + media pill — centered below the name */}
-                <div className='flex flex-wrap items-center justify-center gap-2 mt-1.5'>
+                <div className='relative flex flex-wrap items-center justify-center gap-2 mt-1.5'>
                     <button
-                        onClick={() => photoRef.current?.click()}
+                        onClick={() => setMenuFor('photo')}
                         disabled={busy}
                         className='w-8 h-8 rounded-lg border border-white/20 flex items-center justify-center cursor-pointer hover:border-orange-400/60 hover:text-orange-300 transition-all disabled:opacity-50'
-                        title='Take photo'
+                        title='Add photo'
                     >
                         <Camera size={16} className='text-white/70' />
                     </button>
                     <button
-                        onClick={() => videoRef.current?.click()}
+                        onClick={() => setMenuFor('video')}
                         disabled={busy}
                         className='w-8 h-8 rounded-lg border border-white/20 flex items-center justify-center cursor-pointer hover:border-orange-400/60 hover:text-orange-300 transition-all disabled:opacity-50'
-                        title='Record video'
+                        title='Add video'
                     >
                         <Video size={16} className='text-white/70' />
                     </button>
@@ -254,8 +257,44 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                             [idx]: (prev[idx] || []).filter((_, i) => i !== mediaIdx)
                         }))}
                     />
+                    {menuFor && (
+                        <>
+                            <div
+                                className='fixed inset-0 z-30'
+                                onPointerDown={(e) => { e.stopPropagation(); setMenuFor(null) }}
+                            />
+                            <div className='absolute top-full right-0 z-40 mt-2 w-44 rounded-xl border border-white/15 bg-neutral-800/95 backdrop-blur-xl p-1.5 shadow-2xl animate-popIn'>
+                                <button
+                                    onClick={() => {
+                                        setMenuFor(null)
+                                        if (menuFor === 'photo') photoCaptureRef.current?.click()
+                                        else videoCaptureRef.current?.click()
+                                    }}
+                                    className='flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-white/90 hover:bg-white/10 transition-colors cursor-pointer'
+                                >
+                                    {menuFor === 'photo'
+                                        ? <Camera size={14} className='text-orange-400' />
+                                        : <Video size={14} className='text-orange-400' />}
+                                    {menuFor === 'photo' ? 'Take Photo' : 'Record Video'}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setMenuFor(null)
+                                        if (menuFor === 'photo') photoGalleryRef.current?.click()
+                                        else videoGalleryRef.current?.click()
+                                    }}
+                                    className='flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-white/90 hover:bg-white/10 transition-colors cursor-pointer'
+                                >
+                                    {menuFor === 'photo'
+                                        ? <Images size={14} className='text-orange-400' />
+                                        : <Film size={14} className='text-orange-400' />}
+                                    Choose from Gallery
+                                </button>
+                            </div>
+                        </>
+                    )}
                     <input
-                        ref={photoRef}
+                        ref={photoCaptureRef}
                         type='file'
                         accept='image/*'
                         capture='environment'
@@ -263,29 +302,52 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                         className='hidden'
                     />
                     <input
-                        ref={videoRef}
+                        ref={photoGalleryRef}
+                        type='file'
+                        accept='image/*'
+                        onChange={handleFiles}
+                        className='hidden'
+                    />
+                    <input
+                        ref={videoCaptureRef}
                         type='file'
                         accept='video/*'
                         capture='environment'
                         onChange={handleFiles}
                         className='hidden'
                     />
+                    <input
+                        ref={videoGalleryRef}
+                        type='file'
+                        accept='video/*'
+                        onChange={handleFiles}
+                        className='hidden'
+                    />
                 </div>
 
-                {/* Notes — opens below the icon row, above the sets */}
-                {showNotes[idx] && (
-                    <textarea
-                        value={exerciseNotes?.[idx] || ''}
-                        onChange={(e) => setNotes(idx, e.target.value)}
-                        onInput={(e) => {
-                            e.target.style.height = 'auto'
-                            e.target.style.height = e.target.scrollHeight + 'px'
-                        }}
-                        placeholder="Notes..."
-                        rows={1}
-                        className='w-full bg-black/30 text-white text-sm border border-orange-500/25 rounded-xl px-3 py-2 mt-3 outline-none focus:border-orange-400 placeholder-neutral-500 resize-none overflow-hidden transition-all duration-300'
-                    />
-                )}
+                {/* Notes — slides open below the icon row, above the sets */}
+                <div
+                    className='grid mt-3'
+                    style={{
+                        gridTemplateRows: showNotes[idx] ? '1fr' : '0fr',
+                        opacity: showNotes[idx] ? 1 : 0,
+                        transition: 'grid-template-rows 300ms cubic-bezier(0.16,1,0.3,1), opacity 250ms ease'
+                    }}
+                >
+                    <div className='overflow-hidden'>
+                        <textarea
+                            value={exerciseNotes?.[idx] || ''}
+                            onChange={(e) => setNotes(idx, e.target.value)}
+                            onInput={(e) => {
+                                e.target.style.height = 'auto'
+                                e.target.style.height = e.target.scrollHeight + 'px'
+                            }}
+                            placeholder="Notes..."
+                            rows={1}
+                            className='w-full bg-black/30 text-white text-sm border border-orange-500/25 rounded-xl px-3 py-2 outline-none focus:border-orange-400 placeholder-neutral-500 resize-none overflow-hidden transition-all duration-300'
+                        />
+                    </div>
+                </div>
 
                 {/* Set input rows — scrollable when they don't fit */}
                 <div
