@@ -16,7 +16,8 @@ import PrsBadge from './PrsBadge'
 import RankBadge from './RankBadge'
 import RankScreen from './RankScreen'
 import LevelUpOverlay from './LevelUpOverlay'
-import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, computePrsFromSessions, challengeStatusForLevel } from '../services/progression'
+import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, computePrsFromSessions, challengeStatusForLevel, getChallengePicks } from '../services/progression'
+import { exerciseMetaByName } from '../services/exercises'
 import {
     getName,
     getSessions,
@@ -25,6 +26,7 @@ import {
     getUserProfile,
     saveUserProfile,
     getSchedule,
+    getCustomExercises,
     getTodaysExercises,
     computeMonthlyCount
 } from '../services/storage'
@@ -142,7 +144,8 @@ const HomeScreen = () => {
     const [bodyweight, setBodyweight] = useState(0)
     const [sessions, setSessions] = useState([])
     const [showPhotoModal, setShowPhotoModal] = useState(false)
-    const [, setSchedule] = useState({})
+    const [customExercises, setCustomExercises] = useState([])
+    const [challengePicks, setChallengePicks] = useState({})
     const [todayExercises, setTodayExercises] = useState([])
     const [currentIndex, setCurrentIndex] = useState(() => savedSession?.currentIndex || 0)
     const [showNotes, setShowNotes] = useState(() => savedSession?.showNotes || {})
@@ -182,9 +185,10 @@ const HomeScreen = () => {
     }, [])
 
     const refreshTodaysSchedule = useCallback(() => {
-        getSchedule()
-            .then(schedule => {
-                setSchedule(schedule || {})
+        Promise.all([getSchedule(), getCustomExercises(), getChallengePicks()])
+            .then(([schedule, custom, picks]) => {
+                setCustomExercises(custom)
+                setChallengePicks(picks || {})
                 setTodayExercises(getTodaysExercises(schedule))
             })
             .catch(() => {})
@@ -331,7 +335,12 @@ const HomeScreen = () => {
     }
 
     const handleConfirmExercise = (exercise) => {
-        const newExercise = { id: crypto.randomUUID(), name: exercise.name, mode: exercise.mode }
+        const newExercise = {
+            id: crypto.randomUUID(),
+            name: exercise.name,
+            mode: exercise.mode,
+            category: exercise.category || exerciseMetaByName(exercise.name)?.category
+        }
         setSelectedExercises(prev => [...prev, newExercise])
         setPlannedExercises(prev => [...prev, newExercise])
         setPreviewExercise(null)
@@ -380,7 +389,12 @@ const HomeScreen = () => {
 
     const handleStartClick = () => {
         if (todayExercises.length > 0) {
-            const list = todayExercises.map(e => ({ id: crypto.randomUUID(), name: e.name, mode: e.mode }))
+            const list = todayExercises.map(e => ({
+                id: crypto.randomUUID(),
+                name: e.name,
+                mode: e.mode,
+                category: e.category || exerciseMetaByName(e.name)?.category
+            }))
             setPlannedExercises(list)
             setSelectedExercises(list)
             setExerciseWeights({})
@@ -453,10 +467,11 @@ const HomeScreen = () => {
         let breakdown = null
         if (session) {
             const sessions = await getSessions().catch(() => [])
-            breakdown = analyzeSession(session, sessions.filter(s => s.id !== session.id))
+            const prior = sessions.filter(s => s.id !== session.id && (s.createdAt || '') <= (session.createdAt || ''))
+            breakdown = analyzeSession(session, prior)
             if (!result.isLevelUp) {
                 const level = result.progress.rank.level
-                const before = challengeStatusForLevel(sessions.filter(s => s.id !== session.id), level)
+                const before = challengeStatusForLevel(prior, level, challengePicks, customExercises)
                 const after = result.progress.challenges?.[level - 1]?.groups || []
                 const newDone = after.filter(g => g.done && !before.some(b => b.key === g.key && b.done))
                 if (newDone.length) {
@@ -483,7 +498,7 @@ const HomeScreen = () => {
                 setSavedWorkoutName('')
             }, 1800)
         }
-    }, [refreshStats, refreshSessionsAndPrs])
+    }, [refreshStats, refreshSessionsAndPrs, customExercises, challengePicks])
 
     const persistPrs = (next) => {
         const manual = [...next]
@@ -1073,6 +1088,7 @@ const HomeScreen = () => {
                     name={userName}
                     onNameChange={setUserName}
                     onScheduleSaved={refreshTodaysSchedule}
+                    onChallengesSaved={() => { refreshTodaysSchedule(); refreshProgress() }}
                 />
             )}
         </div>

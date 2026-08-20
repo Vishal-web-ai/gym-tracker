@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Pencil, Trash2, X, Check, ArrowLeft, ChevronRight, Search } from 'lucide-react'
 import { getCustomExercises, createExercise, updateExercise, deleteExercise } from '../services/storage'
-import { defaultExercises } from '../services/exercises'
+import { defaultExercises, inferCategoryByName } from '../services/exercises'
 import ThemedSelect from './ThemedSelect'
 
 const CATEGORIES = ['Chest', 'Back', 'Biceps', 'Triceps', 'Arms', 'Shoulders', 'Legs', 'Core', 'Cardio']
@@ -72,7 +72,7 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
         setEditingId(null)
         setFormData({
             name,
-            category: activeCategory === 'all' ? 'Chest' : activeCategory,
+            category: activeCategory === 'all' ? inferCategoryByName(name) || 'Chest' : activeCategory,
             mode: 'weight',
             muscle: ''
         })

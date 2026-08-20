@@ -10,6 +10,8 @@ import {
     MAX_LEVEL,
     exerciseRankForScore,
     computeExerciseRanks,
+    buildHistoryIndex,
+    parseDurationSeconds,
     strengthScore,
     durationScore,
     weekKeyFor,
@@ -26,7 +28,10 @@ import {
     challengeStatusForLevel,
     challengeEligibleLevel,
     getStartRank,
-    saveStartRank
+    saveStartRank,
+    getChallengePicks,
+    saveChallengePicks,
+    DEFAULT_CHALLENGE_PICKS
 } from '../progression'
 import { createSession } from '../storage'
 import { resetDb } from '../../test/resetDb'
@@ -108,6 +113,22 @@ describe('session XP', () => {
         expect(sessionXp(timerSession('Plank', 60), [])).toBe(30)
         expect(sessionXp(timerSession('Plank', 60), [timerSession('Plank', 60)])).toBe(20)
         expect(sessionXp(timerSession('Plank', 90), [timerSession('Plank', 60)])).toBe(30)
+    })
+
+    it('parses stopwatch-style "M:SS" timer reps as seconds', () => {
+        expect(parseDurationSeconds('1:30')).toBe(90)
+        expect(parseDurationSeconds('0:45')).toBe(45)
+        expect(parseDurationSeconds('120')).toBe(120)
+        const stored = { id: 't1', name: 'W', exercises: [{ name: 'Plank', mode: 'timer', sets: [{ reps: '1:30', weight: '—' }] }] }
+        expect(sessionXp(stored, [])).toBe(30)
+        const index = buildHistoryIndex([stored])
+        expect(index.Plank.bestDuration).toBe(90)
+    })
+
+    it('does not award a timer record for an "M:SS" repeat of the same duration', () => {
+        const a = { id: 't1', name: 'W', exercises: [{ name: 'Plank', mode: 'timer', sets: [{ reps: '1:30' }] }] }
+        const b = { id: 't2', name: 'W', exercises: [{ name: 'Plank', mode: 'timer', sets: [{ reps: '1:30' }] }] }
+        expect(sessionXp(b, [a])).toBe(20)
     })
 
     it('gives a per-exercise bonus for each exercise that sets a record', () => {
@@ -221,16 +242,23 @@ describe('player ranks', () => {
             { name: 'A', mode: 'weight', sets: [{ reps: '10', weight: '60kg' }] },
             { name: 'B', mode: 'weight', sets: [{ reps: '8', weight: '80kg' }] }
         ] }
-        expect(totalXp([s1, s2])).toBe(20 + 20)
+        // The first session set both records (+10 each); the repeat earns base only.
+        expect(totalXp([s1, s2])).toBe(40 + 20)
     })
 
-    it('rewards a progressive weight chain: rep records at each new weight + PR at the top', () => {
-        // Each weight is new in history → +5 rep record at that weight. Only the
-        // heaviest also earns the +10 PR (which supersedes the +5).
+    it('credits every PR permanently, even after a heavier one lands', () => {
+        const s1 = weightSession('Bench', 60, 10)
+        const s2 = weightSession('Bench', 80, 5)
+        // s1 beat nothing (+10 PR), s2 beat s1 (+10 PR). Both keep their credit.
+        expect(totalXp([s1, s2])).toBe(30 + 30)
+    })
+
+    it('rewards a progressive weight chain: each new weight is its own PR', () => {
         const s1 = weightSession('Bench', 60, 10)
         const s2 = weightSession('Bench', 65, 8)
         const s3 = weightSession('Bench', 70, 6)
-        expect(totalXp([s1, s2, s3])).toBe(20 + 5 + 20 + 5 + 30)
+        // Each session beats everything before it, so all three earn the +10 PR.
+        expect(totalXp([s1, s2, s3])).toBe(30 + 30 + 30)
     })
 })
 
@@ -287,6 +315,53 @@ describe('exercise ranks', () => {
         expect(plank.duration).toBe(120)
         expect(plank.rank.name).toBe('Platinum')
         expect(ranks[0].name).toBe('Plank')
+    })
+
+    it('falls back to the built-in category when a session drops it', () => {
+        // "Barbell Curl" is a Biceps exercise (factor 0.4), but the session
+        // record has no category. The name lookup must recover it, so 20kg at
+        // 70kg bodyweight scores 0.71 (Bronze) instead of defaulting to 0.29 (below Wood).
+        const session = {
+            id: 'b',
+            name: 'W',
+            exercises: [
+                { name: 'Barbell Curl', mode: 'weight', sets: [{ reps: '10', weight: '20kg' }] }
+            ]
+        }
+        const ranks = computeExerciseRanks([session], 70)
+        const curl = ranks[0]
+        expect(curl.category).toBe('Biceps')
+        expect(curl.score).toBeCloseTo(20 / (70 * 0.4))
+        expect(curl.rank.name).toBe('Bronze')
+    })
+
+    it('infers a category for custom exercises so every exercise gets its own ladder', () => {
+        // A custom "Biceps Curl" stored with no category must resolve to
+        // Biceps (factor 0.4), not the neutral 1.0 — otherwise its next-tier
+        // target matches a bench press instead of its own lighter ladder.
+        const session = {
+            id: 'd',
+            name: 'W',
+            exercises: [
+                { name: 'Biceps Curl', mode: 'weight', sets: [{ reps: '10', weight: '20kg' }] }
+            ]
+        }
+        const ranks = computeExerciseRanks([session], 70)
+        expect(ranks[0].category).toBe('Biceps')
+        expect(ranks[0].score).toBeCloseTo(20 / (70 * 0.4))
+    })
+
+    it('parses "M:SS" timer reps in exercise-rank durations', () => {
+        const session = {
+            id: 'c',
+            name: 'W',
+            exercises: [
+                { name: 'Plank', mode: 'timer', category: 'Core', sets: [{ reps: '1:30' }] }
+            ]
+        }
+        const ranks = computeExerciseRanks([session], 70)
+        expect(ranks[0].duration).toBe(90)
+        expect(ranks[0].rank.name).toBe('Gold')
     })
 })
 
@@ -373,7 +448,7 @@ describe('computeProgress / refreshProgress', () => {
         const first = await refreshProgress(new Date('2026-08-10T12:00:00'))
         expect(first.isLevelUp).toBe(false) // no XP, still Rookie
 
-        const big = await createSession({ name: 'Big', createdAt: new Date('2026-08-10T09:00:00').toISOString(), exercises: [{ name: 'Bench', sets: [{ reps: '10', weight: '60kg' }] }] })
+        const big = await createSession({ name: 'Big', createdAt: new Date('2026-08-10T09:00:00').toISOString(), exercises: [{ name: 'Flat Bench Press', sets: [{ reps: '10', weight: '60kg' }] }] })
         // simulate many sets to cross a threshold
         for (let i = 0; i < 4; i++) {
             await createSession({
@@ -382,17 +457,17 @@ describe('computeProgress / refreshProgress', () => {
                 exercises: Array.from({ length: 4 }, () => ({ name: `Ex${i}`, sets: [{ reps: '10', weight: '60kg' }] }))
             })
         }
-        // XP alone must NOT rank up — every Rookie challenge must be cleared too
+        // XP alone must NOT rank up — every scheduled challenge must be cleared too
         const noChallenges = await refreshProgress(new Date('2026-08-10T12:00:00'))
         expect(noChallenges.progress.rank.level).toBe(1)
 
-        // clear the remaining four groups (Chest done by Bench above)
+        // clear the remaining challenges (Flat Bench Press done above)
         await createSession({
             name: 'Big',
             createdAt: new Date('2026-08-10T11:00:00').toISOString(),
             exercises: [
                 { name: 'Deadlift', sets: [{ reps: '8', weight: '20kg' }] },
-                { name: 'Curl', sets: [{ reps: '8', weight: '5kg' }] },
+                { name: 'Barbell Curl', sets: [{ reps: '8', weight: '5kg' }] },
                 { name: 'Squat', sets: [{ reps: '8', weight: '20kg' }] },
                 { name: 'Sprint', mode: 'timer', sets: [{ reps: '2:30', weight: '—' }] }
             ]
@@ -408,103 +483,116 @@ describe('computeProgress / refreshProgress', () => {
 })
 
 describe('rank challenges', () => {
-    const timer = (name, duration) => ({ name, mode: 'timer', sets: [{ reps: duration, weight: '—' }] })
+    const session = (exercises) => ({ name: 'W', exercises })
     const lift = (name, weight, reps = 8) => ({ name, sets: [{ reps: String(reps), weight: `${weight}kg` }] })
+    const timer = (name, duration) => ({ name, mode: 'timer', sets: [{ reps: duration, weight: '—' }] })
+    const reps = (name, count) => ({ name, sets: [{ reps: String(count), weight: '—' }] })
+    const DEFAULTS = {
+        chest: 'Flat Bench Press',
+        back: 'Deadlift',
+        arms: 'Barbell Curl',
+        legs: 'Squat',
+        cardio: 'Sprint'
+    }
 
-    it('defines five groups with ladders for every rank', () => {
-        const level1 = challengesForLevel(1)
-        expect(level1.map((g) => g.key)).toEqual(['chest', 'back', 'arms', 'legs', 'cardio'])
-        expect(level1.find((g) => g.key === 'chest').targets[0]).toMatchObject({ kind: 'weight', value: 5 })
-        expect(level1.find((g) => g.key === 'back').targets.map((t) => t.value)).toContain(20)
-        expect(level1.find((g) => g.key === 'legs').targets.map((t) => t.value)).toContain(20)
-        expect(level1.find((g) => g.key === 'cardio').targets[0]).toMatchObject({ kind: 'duration', value: 2 })
-        expect(challengesForLevel(12)[0].targets[0].value).toBe(120)
+    it('builds one challenge per muscle group with sensible defaults', () => {
+        const level1 = challengesForLevel({}, [], 1)
+        expect(level1).toHaveLength(5)
+        expect(level1.map((c) => c.key)).toEqual(['chest', 'back', 'arms', 'legs', 'cardio'])
+        expect(level1.map((c) => c.label)).toEqual(['Flat Bench Press', 'Deadlift', 'Barbell Curl', 'Squat', 'Sprint'])
+        expect(level1[0]).toMatchObject({ kind: 'weight', value: 5 })   // bench ladder
+        expect(level1[1]).toMatchObject({ kind: 'weight', value: 20 })  // deadlift ladder
+        expect(level1[2]).toMatchObject({ kind: 'weight', value: 5 })   // curl ladder
+        expect(level1[3]).toMatchObject({ kind: 'weight', value: 20 })  // squat ladder
+        expect(level1[4]).toMatchObject({ kind: 'duration', value: 2 }) // cardio ladder
+        expect(challengesForLevel({}, [], 12)[0].value).toBe(120)
     })
 
-    it('matches exercise aliases', () => {
-        const sessions = [{
-            name: 'W', exercises: [
-                lift('DB Bench Press', 20),
-                lift('dl', 35),
-                lift('lat pull down', 20),
-                lift('Bicep Curl', 10),
-                timer('jump rope', '4:00')
-            ]
-        }]
-        const status = challengeStatusForLevel(sessions, 2)
-        expect(status.find((g) => g.key === 'chest').done).toBe(true)
-        expect(status.find((g) => g.key === 'back').done).toBe(true)
-        expect(status.find((g) => g.key === 'arms').done).toBe(true)
-        expect(status.find((g) => g.key === 'cardio').done).toBe(true)
+    it('uses the picked exercise as the challenge label', () => {
+        const level1 = challengesForLevel({ chest: 'Incline Bench Press' }, [], 1)
+        expect(level1[0].label).toBe('Incline Bench Press')
+        expect(challengesForLevel({ back: 'Pull-Up' }, [], 1)[1].label).toBe('Pull-Up')
+        expect(level1.map((c) => c.key)).toEqual(['chest', 'back', 'arms', 'legs', 'cardio'])
     })
 
-    it('clears a group with any alternative (Squat OR Leg Press)', () => {
-        const bySquat = challengeStatusForLevel([{ name: 'W', exercises: [lift('Barbell Squat', 30)] }], 2)
-        const byLegPress = challengeStatusForLevel([{ name: 'W', exercises: [lift('Leg Press', 60)] }], 2)
-        expect(bySquat.find((g) => g.key === 'legs').done).toBe(true)
-        expect(byLegPress.find((g) => g.key === 'legs').done).toBe(true)
-    })
-
-    it('clears back with Pull-Ups (bodyweight reps, no weight)', () => {
-        const status = challengeStatusForLevel([{ name: 'W', exercises: [{ name: 'Pull Ups', sets: [{ reps: '8', weight: '—' }] }] }], 1, 0)
-        expect(status.find((g) => g.key === 'back').done).toBe(true)
+    it('clears a challenge by logging the picked exercise at 8+ reps', () => {
+        const status = challengeStatusForLevel([session([lift('Flat Bench Press', 5)])], 1, DEFAULTS, [])
+        expect(status.find((c) => c.key === 'chest').done).toBe(true)
+        expect(status.find((c) => c.key === 'cardio').done).toBe(false)
     })
 
     it('requires at least 8 reps on every lift to count', () => {
-        const tooFew = challengeStatusForLevel([{ name: 'W', exercises: [lift('Bench', 20, 7)] }], 2)
-        expect(tooFew.find((g) => g.key === 'chest').done).toBe(false)
-        const enough = challengeStatusForLevel([{ name: 'W', exercises: [lift('Bench', 20, 8)] }], 2)
-        expect(enough.find((g) => g.key === 'chest').done).toBe(true)
+        const tooFew = challengeStatusForLevel([session([lift('Flat Bench Press', 20, 7)])], 2, DEFAULTS, [])
+        expect(tooFew[0].done).toBe(false)
+        const enough = challengeStatusForLevel([session([lift('Flat Bench Press', 20, 8)])], 2, DEFAULTS, [])
+        expect(enough[0].done).toBe(true)
     })
 
-    it('times cardio in minutes from timer sessions', () => {
-        expect(challengeStatusForLevel([{ name: 'W', exercises: [timer('Skipping', '3:00')] }], 1, 0).find((g) => g.key === 'cardio').done).toBe(true)
-        expect(challengeStatusForLevel([{ name: 'W', exercises: [timer('Sprint', '0:30')] }], 1, 0).find((g) => g.key === 'cardio').done).toBe(false)
+    it('only the picked exercise clears its own group', () => {
+        const status = challengeStatusForLevel([session([lift('Squat', 60)])], 2, DEFAULTS, [])
+        expect(status[0].done).toBe(false)
+        expect(status.find((c) => c.key === 'legs').done).toBe(true)
     })
 
-    it('cascades eligibility only when every prior rank is cleared', () => {
-        const rookieSessions = [{
-            name: 'W', exercises: [
-                lift('Bench', 5),
-                lift('Deadlift', 20),
-                lift('Curl', 5),
-                lift('Squat', 20),
-                timer('Rope', '2:00')
-            ]
-        }]
-        expect(challengeEligibleLevel(rookieSessions)).toBe(2)
-        expect(challengeEligibleLevel([])).toBe(1)
+    it('scores bodyweight picks on reps', () => {
+        const status = challengeStatusForLevel([session([reps('Push-Up', 8)])], 1, { chest: 'Push-Up' }, [])
+        expect(status[0]).toMatchObject({ kind: 'reps', value: 8, done: true })
+    })
+
+    it('scores cardio picks on duration', () => {
+        expect(challengeStatusForLevel([session([timer('Sprint', '2:00')])], 1, DEFAULTS, []).find((c) => c.key === 'cardio').done).toBe(true)
+        expect(challengeStatusForLevel([session([timer('Sprint', '0:30')])], 1, DEFAULTS, []).find((c) => c.key === 'cardio').done).toBe(false)
+    })
+
+    it('cascades eligibility only when all 5 challenges are cleared', () => {
+        const allCleared = [lift('Flat Bench Press', 5), lift('Deadlift', 20), lift('Barbell Curl', 5), lift('Squat', 20), timer('Sprint', '2:00')]
+        expect(challengeEligibleLevel([session(allCleared)], {}, [])).toBe(2)
+        expect(challengeEligibleLevel([session([lift('Flat Bench Press', 5)])], {}, [])).toBe(1)
+        expect(challengeEligibleLevel([], {}, [])).toBe(1)
+    })
+
+    it('missing picks fall back to defaults and picks persist', async () => {
+        expect(await getChallengePicks()).toEqual(DEFAULT_CHALLENGE_PICKS)
+        await saveChallengePicks({ chest: 'Incline Bench Press' })
+        const picks = await getChallengePicks()
+        expect(picks.chest).toBe('Incline Bench Press')
+        expect(picks.back).toBe('Deadlift')
+        expect(challengesForLevel(picks, [], 1)[0].label).toBe('Incline Bench Press')
     })
 
     it('gates the effective rank: XP alone cannot advance', () => {
         const onlyXp = { sessions: Array.from({ length: 20 }, (_, i) => ({ name: 'W', exercises: [lift(`Ex${i}`, 60)] })) }
         expect(computeProgress({ ...onlyXp, frozenDays: [], now: new Date('2026-08-10T12:00:00') }).rank.level).toBe(1)
 
-        const allGroups = {
+        const allCleared = {
             sessions: Array.from({ length: 20 }, (_, i) => ({ name: 'W', exercises: [lift(`Ex${i}`, 60)] })).concat([{
-                name: 'W', exercises: [
-                    lift('Bench', 20),
-                    lift('Deadlift', 35),
-                    lift('Curl', 10),
-                    lift('Squat', 30),
-                    timer('Rope', '4:00')
-                ]
+                name: 'W', exercises: [lift('Flat Bench Press', 20), lift('Deadlift', 35), lift('Barbell Curl', 10), lift('Squat', 30), timer('Sprint', '4:00')]
             }])
         }
-        const progress = computeProgress({ ...allGroups, frozenDays: [], now: new Date('2026-08-10T12:00:00') })
+        const progress = computeProgress({ ...allCleared, frozenDays: [], now: new Date('2026-08-10T12:00:00') })
         expect(progress.rank.level).toBeGreaterThan(1)
         expect(progress.challenges.length).toBe(MAX_LEVEL)
         expect(progress.challenges[0].groups.every((g) => g.done)).toBe(true)
     })
 
-    it('places experienced users at their granted rank with lower groups complete', () => {
+    it('places experienced users at their granted rank with lower challenges complete', () => {
         const progress = computeProgress({ sessions: [], frozenDays: [], now: new Date('2026-08-10T12:00:00'), startRank: 4 })
         expect(progress.rank.level).toBe(4)
         expect(progress.rank.name).toBe('Intermediate')
         expect(progress.xp).toBe(xpThresholdForLevel(4))
+        // Ranks strictly below the start rank are granted...
         expect(progress.challenges[0].groups.every((g) => g.done)).toBe(true)
-        expect(progress.challenges[3].groups.every((g) => g.done)).toBe(true)
+        expect(progress.challenges[2].groups.every((g) => g.done)).toBe(true)
+        // ...but the start rank itself is a real checklist, never pre-filled.
+        expect(progress.challenges[3].groups.every((g) => g.done)).toBe(false)
         expect(progress.challenges[4].groups.every((g) => g.done)).toBe(false)
+    })
+
+    it('does not pre-fill the Rookie checklist for a fresh beginner', () => {
+        const progress = computeProgress({ sessions: [], frozenDays: [], now: new Date('2026-08-10T12:00:00'), startRank: 1 })
+        expect(progress.rank.level).toBe(1)
+        expect(progress.rank.name).toBe('Rookie')
+        expect(progress.challenges[0].groups.every((g) => g.done)).toBe(false)
     })
 
     it('start rank can still be gated by challenges above it', () => {

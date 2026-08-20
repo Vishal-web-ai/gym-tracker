@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { ArrowLeft, Volume2, Play, X } from 'lucide-react'
-import { RiEditLine, RiCalendarLine, RiVolumeUpLine, RiDownloadLine, RiUploadLine } from '@remixicon/react'
+import { RiEditLine, RiCalendarLine, RiTrophyLine, RiVolumeUpLine, RiDownloadLine, RiUploadLine } from '@remixicon/react'
 import ScheduleEditor from './ScheduleEditor'
+import ChallengePicker from './ChallengePicker'
 import { playBeep } from '../services/audio'
-import { setName, getSchedule, saveSchedule, getRestSound, saveRestSound } from '../services/storage'
+import { setName, getSchedule, saveSchedule, getRestSound, saveRestSound, getCustomExercises } from '../services/storage'
+import { getChallengePicks, saveChallengePicks } from '../services/progression'
 import { exportBackup, importBackup } from '../services/backup'
 import { getErrorMessage } from '../services/errors'
 
@@ -12,7 +14,7 @@ function formatBytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-const Settings = ({ onClose, name, onNameChange, onScheduleSaved }) => {
+const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSaved }) => {
     const [showNameModal, setShowNameModal] = useState(false)
     const [newName, setNewName] = useState('')
     const [saving, setSaving] = useState(false)
@@ -21,6 +23,9 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved }) => {
     const [storageInfo, setStorageInfo] = useState(null)
     const [showScheduleEditor, setShowScheduleEditor] = useState(false)
     const [schedule, setSchedule] = useState({})
+    const [showChallengePicker, setShowChallengePicker] = useState(false)
+    const [picks, setPicks] = useState({})
+    const [customExercises, setCustomExercises] = useState([])
     const [sound, setSound] = useState(null)
     const [showSoundModal, setShowSoundModal] = useState(false)
     const restoreInputRef = useRef(null)
@@ -31,6 +36,16 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved }) => {
         getSchedule()
             .then(schedule => {
                 if (!cancelled) setSchedule(schedule)
+            })
+            .catch(() => {})
+        getChallengePicks()
+            .then(picks => {
+                if (!cancelled) setPicks(picks)
+            })
+            .catch(() => {})
+        getCustomExercises()
+            .then(list => {
+                if (!cancelled) setCustomExercises(list)
             })
             .catch(() => {})
         getRestSound()
@@ -72,6 +87,16 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved }) => {
             await saveSchedule(schedule)
             setShowScheduleEditor(false)
             onScheduleSaved?.()
+        } catch (err) {
+            alert(getErrorMessage(err))
+        }
+    }
+
+    const handleSaveChallenges = async () => {
+        try {
+            await saveChallengePicks(picks)
+            setShowChallengePicker(false)
+            onChallengesSaved?.()
         } catch (err) {
             alert(getErrorMessage(err))
         }
@@ -198,6 +223,13 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved }) => {
                     Workout Schedule
                 </button>
                 <button
+                    onClick={() => setShowChallengePicker(true)}
+                    className='w-full flex items-center justify-center gap-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 font-mono font-bold py-3 px-4 rounded-xl transition-all cursor-pointer'
+                >
+                    <RiTrophyLine size={20} />
+                    Challenge Exercises
+                </button>
+                <button
                     onClick={() => setShowSoundModal(true)}
                     className='w-full flex items-center justify-center gap-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 font-mono font-bold py-3 px-4 rounded-xl transition-all cursor-pointer'
                 >
@@ -257,6 +289,38 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved }) => {
                             </button>
                             <button
                                 onClick={handleSaveSchedule}
+                                className='flex-1 bg-orange-500 text-black font-bold py-3 rounded-xl hover:bg-orange-400 transition-all cursor-pointer font-mono'
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Challenge picker modal */}
+            {showChallengePicker && (
+                <div
+                    className='fixed inset-0 bg-neutral-900 z-[60] flex items-center justify-center p-4'
+                    onClick={() => setShowChallengePicker(false)}
+                >
+                    <div
+                        className='bg-neutral-800 border border-orange-500/40 rounded-2xl p-5 w-full max-w-md max-h-[85vh] overflow-y-auto scroll animate-popIn'
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h2 className='font-bebas text-orange-500 tracking-[2px] text-2xl mb-1 text-center'>
+                            CHALLENGE EXERCISES
+                        </h2>
+                        <ChallengePicker schedule={schedule} customExercises={customExercises} picks={picks} onChange={setPicks} />
+                        <div className='flex gap-3 mt-4'>
+                            <button
+                                onClick={() => setShowChallengePicker(false)}
+                                className='flex-1 border border-neutral-600 text-white font-semibold py-3 rounded-xl hover:bg-neutral-700 transition-all cursor-pointer font-mono'
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveChallenges}
                                 className='flex-1 bg-orange-500 text-black font-bold py-3 rounded-xl hover:bg-orange-400 transition-all cursor-pointer font-mono'
                             >
                                 Save

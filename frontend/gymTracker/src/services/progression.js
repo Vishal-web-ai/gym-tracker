@@ -1,5 +1,6 @@
 import { dbGet, dbPut } from './idb'
-import { getSessions, toDayKey, getUserProfile } from './storage'
+import { getSessions, toDayKey, getUserProfile, getCustomExercises } from './storage'
+import { exerciseMetaByName, inferCategoryByName } from './exercises'
 
 // ---------------------------------------------------------------------------
 // Ranks (player level ladder, driven by total XP)
@@ -60,6 +61,29 @@ export function parseReps(v) {
     return Number.isFinite(n) ? n : 0
 }
 
+// Timer durations are stored as "M:SS" (e.g. "1:30") by the stopwatch, while
+// older data and tests may use bare seconds. Always resolve to seconds.
+export function parseDurationSeconds(v) {
+    if (v == null) return 0
+    if (typeof v === 'number') return v
+    const s = String(v).trim()
+    if (!s || s === '—') return 0
+    if (s.includes(':')) {
+        const [m, sec] = s.split(':')
+        return (parseFloat(m) || 0) * 60 + (parseFloat(sec) || 0)
+    }
+    const n = parseFloat(s)
+    return Number.isFinite(n) ? n : 0
+}
+
+// Formats a duration in seconds back to the app's "M:SS" display style.
+export function formatDuration(seconds) {
+    if (!(seconds > 0)) return '—'
+    const m = Math.floor(seconds / 60)
+    const s = Math.round(seconds % 60)
+    return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`
+}
+
 // All-time bests per exercise from a set of sessions: heaviest weight, best
 // reps at each weight, and best duration for timer exercises.
 export function buildHistoryIndex(sessions) {
@@ -69,7 +93,7 @@ export function buildHistoryIndex(sessions) {
             const entry = index[ex.name] || (index[ex.name] = { bestWeight: -Infinity, bestRepsAtWeight: {}, bestDuration: 0 })
             if (ex.mode === 'timer') {
                 for (const set of (ex?.sets || [])) {
-                    const r = parseReps(set?.reps)
+                    const r = parseDurationSeconds(set?.reps)
                     if (r > entry.bestDuration) entry.bestDuration = r
                 }
             } else {
@@ -90,12 +114,15 @@ export function buildHistoryIndex(sessions) {
 // Per-exercise bonus against a history index. Returns null, or a bonus object.
 // A weight PR (+10) beats an extra-rep bonus (+5); they never stack.
 function exerciseBonus(ex, index) {
-    const sets = (ex?.sets || []).filter((s) => parseReps(s?.reps) > 0)
+    const sets = (ex?.sets || []).filter((s) => {
+        const v = s?.reps
+        return v != null && String(v).trim() !== '' && String(v).trim() !== '—'
+    })
     if (!sets.length) return null
     const entry = index[ex.name]
 
     if (ex.mode === 'timer') {
-        const best = Math.max(...sets.map((s) => parseReps(s.reps)))
+        const best = Math.max(...sets.map((s) => parseDurationSeconds(s.reps)))
         if (!entry || best > entry.bestDuration) {
             return { type: 'timer-record', points: PR_XP, name: ex.name, value: best }
         }
@@ -149,11 +176,18 @@ export function analyzeSession(session, history = []) {
     }
 }
 
+// Total XP across all sessions. Bonuses are awarded against only the sessions
+// that came BEFORE each one, so a record is credited the moment it is set and
+// keeps its credit even after a later session beats it. "Always reward PRs".
 export function totalXp(sessions) {
-    return sessions.reduce(
-        (sum, s) => sum + sessionXp(s, sessions.filter((o) => (o.id ? o.id !== s.id : o !== s))),
-        0
-    )
+    const sorted = [...sessions].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+    let xp = 0
+    const prior = []
+    for (const s of sorted) {
+        xp += sessionXp(s, prior)
+        prior.push(s)
+    }
+    return xp
 }
 
 // Adds auto-detected PRs to the manual PR list, upgrading an existing entry
@@ -299,10 +333,10 @@ export function bestExerciseEffort(sessions) {
         for (const ex of (s?.exercises || [])) {
             const mode = ex.mode === 'timer' ? 'timer' : 'weight'
             const entry = best[ex.name] || (best[ex.name] = { weight: 0, duration: 0, category: ex.category || null, mode })
-            if (ex.category) entry.category = ex.category
+            entry.category = entry.category || ex.category || exerciseMetaByName(ex.name)?.category || inferCategoryByName(ex.name) || null
             if (mode === 'timer') {
                 for (const set of (ex?.sets || [])) {
-                    const d = parseReps(set?.reps)
+                    const d = parseDurationSeconds(set?.reps)
                     if (d > entry.duration) entry.duration = d
                 }
             } else {
@@ -338,60 +372,52 @@ export function computeExerciseRanks(sessions, bodyweight = 0) {
 }
 
 // ---------------------------------------------------------------------------
-// Rank challenges (muscle-group gates you must clear to advance a rank)
+// Rank challenges (personal gates built from one chosen exercise per muscle
+// group)
 // ---------------------------------------------------------------------------
-// Each rank requires ALL five groups (Chest, Back, Arms, Legs, Cardio). A
-// group is cleared by meeting ANY of its target exercises, so Squat OR Leg
-// Press satisfies Legs, Deadlift OR Pull-Ups OR Lat Pulldown satisfies Back.
-// Thresholds are "working set" weights, so they sit below 1RM standards.
+// Every user picks ONE exercise per muscle group (Chest, Back, Arms, Legs,
+// Cardio) — from their schedule first, plus the full library — and those 5
+// become their personal challenges. Each challenge uses the ladder of its
+// group (Chest uses the bench ladder, Back the deadlift ladder, etc.), while
+// bodyweight picks are scored on reps and cardio picks on duration. To
+// advance a rank you must complete ALL 5 challenges at that rank's threshold
+// AND have enough XP. The 8+ rep rule applies to every lift.
 
 const BENCH_LADDER = [5, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
 const SQUAT_LADDER = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
 const DEADLIFT_LADDER = [20, 35, 50, 65, 80, 95, 110, 125, 140, 155, 170, 185]
-const LEG_PRESS_LADDER = [20, 60, 100, 140, 180, 220, 260, 300, 340, 380, 420, 460]
 const CURL_LADDER = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
-const PUSHDOWN_LADDER = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
 const PULLUP_LADDER = [8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 30, 35]
-const LAT_LADDER = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
 const CARDIO_LADDER = [2, 4, 6, 8, 10, 12, 15, 18, 22, 26, 30, 35]
 
-const CHALLENGE_GROUPS = [
-    {
-        key: 'chest',
-        label: 'Chest',
-        options: [{ kind: 'weight', match: /bench/, ladder: BENCH_LADDER, hint: 'Bench Press' }]
-    },
-    {
-        key: 'back',
-        label: 'Back',
-        options: [
-            { kind: 'weight', match: /deadlift|\bdl\b/, ladder: DEADLIFT_LADDER, hint: 'Deadlift' },
-            { kind: 'reps', match: /pull\s?ups?|pullup|chin\s?ups?|chinup/, ladder: PULLUP_LADDER, hint: 'Pull-Ups' },
-            { kind: 'weight', match: /lat\s?pull|pull\s?down|lats?/, ladder: LAT_LADDER, hint: 'Lat Pulldown' }
-        ]
-    },
-    {
-        key: 'arms',
-        label: 'Arms',
-        options: [
-            { kind: 'weight', match: /curl/, ladder: CURL_LADDER, hint: 'Biceps Curl' },
-            { kind: 'weight', match: /push\s?down|triceps?/, ladder: PUSHDOWN_LADDER, hint: 'Tricep Pushdown' }
-        ]
-    },
-    {
-        key: 'legs',
-        label: 'Legs',
-        options: [
-            { kind: 'weight', match: /squat/, ladder: SQUAT_LADDER, hint: 'Squat' },
-            { kind: 'weight', match: /leg\s?press/, ladder: LEG_PRESS_LADDER, hint: 'Leg Press' }
-        ]
-    },
-    {
-        key: 'cardio',
-        label: 'Cardio',
-        options: [{ kind: 'duration', match: /sprint|skip|rope/, ladder: CARDIO_LADDER, hint: 'Sprint / Skipping / Rope' }]
-    }
+// The five challenge groups. `categories` drives the picker (scheduled +
+// library exercises shown for that group), `ladder` is the weight threshold
+// ladder, and `defaultExercise` covers users who never picked.
+export const CHALLENGE_GROUPS = [
+    { key: 'chest', label: 'Chest', categories: ['Chest'], ladder: BENCH_LADDER, defaultExercise: 'Flat Bench Press' },
+    { key: 'back', label: 'Back', categories: ['Back'], ladder: DEADLIFT_LADDER, defaultExercise: 'Deadlift' },
+    { key: 'arms', label: 'Arms', categories: ['Biceps', 'Triceps', 'Arms'], ladder: CURL_LADDER, defaultExercise: 'Barbell Curl' },
+    { key: 'legs', label: 'Legs', categories: ['Legs'], ladder: SQUAT_LADDER, defaultExercise: 'Squat' },
+    { key: 'cardio', label: 'Cardio', categories: ['Cardio'], ladder: CARDIO_LADDER, defaultExercise: 'Sprint' }
 ]
+
+export const DEFAULT_CHALLENGE_PICKS = {
+    chest: 'Flat Bench Press',
+    back: 'Deadlift',
+    arms: 'Barbell Curl',
+    legs: 'Squat',
+    cardio: 'Sprint'
+}
+
+// Bodyweight exercises are scored on reps; plank-style holds on time.
+const BODYWEIGHT_REPS = new Set([
+    'pushup', 'pushups', 'pullup', 'pullups', 'chinup', 'chinups',
+    'chestdip', 'chestdips', 'dips', 'tricepsdip', 'tricepsdips',
+    'situp', 'situps', 'crunch', 'crunches', 'benchcrunch', 'declinesitup',
+    'legraise', 'legraises', 'hanginglegraise', 'hanginglegraises',
+    'burpee', 'burpees', 'mountainclimbers', 'jumpingjacks', 'woodchopper'
+])
+const TIMED_REPS = new Set(['plank', 'sideplank'])
 
 function normalizeName(name) {
     return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -439,64 +465,99 @@ export function buildBestLifts(sessions) {
     return bests
 }
 
-export function challengesForLevel(level) {
-    const i = Math.max(0, Math.min(level - 1, MAX_LEVEL - 1))
-    return CHALLENGE_GROUPS.map((g) => ({
-        key: g.key,
-        label: g.label,
-        targets: g.options.map((o) => ({ kind: o.kind, value: o.ladder[i], hint: o.hint }))
-    }))
+// Resolves a picked exercise into its scoring kind + ladder: cardio group and
+// timer exercises always score on duration, bodyweight exercises on reps,
+// everything else on weight using the group's ladder.
+function resolveChallengeExercise(name, group, customExercises = []) {
+    const key = normalizeName(name)
+    const meta = exerciseMetaByName(name)
+    const custom = customExercises.find((e) => normalizeName(e.name) === key)
+    const mode = meta?.mode || custom?.mode || 'weight'
+    if (group.key === 'cardio' || mode === 'timer' || TIMED_REPS.has(key)) {
+        return { key, name, kind: 'duration', ladder: CARDIO_LADDER }
+    }
+    if (BODYWEIGHT_REPS.has(key)) {
+        return { key, name, kind: 'reps', ladder: PULLUP_LADDER }
+    }
+    return { key, name, kind: 'weight', ladder: group.ladder }
 }
 
-function meetsTarget(bests, target) {
-    const options = CHALLENGE_GROUPS.flatMap((g) => g.options)
-    return Object.entries(bests).some(([key, b]) => {
-        if (!options.some((o) => o.match.test(key))) return false
-        if (target.kind === 'weight') return b.weight >= target.value
-        if (target.kind === 'reps') return b.reps >= target.value
-        if (target.kind === 'duration') return b.duration >= target.value
-        return false
+export function challengesForLevel(picks = {}, customExercises = [], level) {
+    const i = Math.max(0, Math.min(level - 1, MAX_LEVEL - 1))
+    return CHALLENGE_GROUPS.map((g) => {
+        const ex = resolveChallengeExercise(picks[g.key] || g.defaultExercise, g, customExercises)
+        return {
+            key: g.key,
+            exerciseKey: ex.key,
+            label: ex.name,
+            kind: ex.kind,
+            value: ex.ladder[i]
+        }
     })
 }
 
-export function challengeStatusForLevel(sessions, level, grantedLevel = 1) {
+// A challenge is met when the user's best 8+ rep effort on THAT exercise
+// reaches its ladder value at the rank.
+function meetsTarget(bests, ch) {
+    const b = bests[ch.exerciseKey]
+    if (!b) return false
+    if (ch.kind === 'weight') return b.weight >= ch.value
+    if (ch.kind === 'reps') return b.reps >= ch.value
+    if (ch.kind === 'duration') return b.duration >= ch.value
+    return false
+}
+
+export function challengeStatusForLevel(sessions, level, picks = {}, customExercises = [], grantedLevel = 1) {
     const bests = buildBestLifts(sessions)
-    return challengesForLevel(level).map((ch) => ({
+    return challengesForLevel(picks, customExercises, level).map((ch) => ({
         ...ch,
-        done: level <= grantedLevel || ch.targets.some((t) => meetsTarget(bests, t))
+        done: level < grantedLevel || meetsTarget(bests, ch)
     }))
 }
 
 // Highest rank you may hold based on challenges alone (level 1 is always
-// reachable). Completions cascade: clearing rank L's challenges unlocks L+1.
-export function challengeEligibleLevel(sessions) {
+// reachable). Completions cascade: clearing all 5 chosen challenges at rank
+// L's thresholds unlocks L+1.
+export function challengeEligibleLevel(sessions, picks = {}, customExercises = []) {
     const bests = buildBestLifts(sessions)
     let level = 1
     for (let L = 1; L <= MAX_LEVEL; L++) {
-        const done = challengesForLevel(L).every((ch) => ch.targets.some((t) => meetsTarget(bests, t)))
+        const done = challengesForLevel(picks, customExercises, L).every((ch) => meetsTarget(bests, ch))
         if (!done) break
         level = L + 1
     }
     return Math.min(level, MAX_LEVEL)
 }
 
-export function challengesStatusForAll(sessions, grantedLevel = 1) {
+export function challengesStatusForAll(sessions, picks = {}, customExercises = [], grantedLevel = 1) {
     const bests = buildBestLifts(sessions)
     return Array.from({ length: MAX_LEVEL }, (_, i) => {
         const level = i + 1
-        const granted = level <= grantedLevel
+        const granted = level < grantedLevel
         return {
             level,
-            groups: challengesForLevel(level).map((ch) => ({
+            groups: challengesForLevel(picks, customExercises, level).map((ch) => ({
                 ...ch,
-                done: granted || ch.targets.some((t) => meetsTarget(bests, t))
+                done: granted || meetsTarget(bests, ch)
             }))
         }
     })
 }
 
+// The 5 picked challenge exercises. Missing groups fall back to sensible
+// defaults so users who finished onboarding before this feature still have a
+// full challenge set.
+export async function getChallengePicks() {
+    const row = await dbGet('meta', 'challengePicks')
+    return { ...DEFAULT_CHALLENGE_PICKS, ...(row?.value || {}) }
+}
+
+export async function saveChallengePicks(picks) {
+    await dbPut('meta', { key: 'challengePicks', value: picks })
+}
+
 // Starting rank granted during onboarding (1 = Rookie). All challenge groups
-// up to and including this rank are treated as complete, and the XP floor
+// up to but NOT including this rank are treated as complete, and the XP floor
 // starts at that rank's threshold so an experienced user isn't stuck at Rookie.
 export async function getStartRank() {
     const row = await dbGet('meta', 'startRank')
@@ -505,20 +566,6 @@ export async function getStartRank() {
 
 export async function saveStartRank(level) {
     await dbPut('meta', { key: 'startRank', value: level })
-}
-
-// ---------------------------------------------------------------------------
-// Manual challenge checks (user-ticked on the rank pages; layered on top of
-// the auto-detected completions so nothing is lost on either side)
-// ---------------------------------------------------------------------------
-
-export async function getChallengeChecks() {
-    const row = await dbGet('meta', 'challengeChecks')
-    return row?.value || {}
-}
-
-export async function saveChallengeChecks(checks) {
-    await dbPut('meta', { key: 'challengeChecks', value: checks })
 }
 
 // ---------------------------------------------------------------------------
@@ -610,10 +657,10 @@ export function computeStreakWithFreezes(sessions, frozenDays = [], now = new Da
 // Progression snapshot + celebration state
 // ---------------------------------------------------------------------------
 
-export function computeProgress({ sessions, frozenDays = [], now = new Date(), startRank = 1, bodyweight = 0 }) {
+export function computeProgress({ sessions, frozenDays = [], now = new Date(), startRank = 1, bodyweight = 0, picks = {}, customExercises = [] }) {
     const xp = Math.max(totalXp(sessions), xpThresholdForLevel(startRank))
     const xpRank = rankForXp(xp)
-    const eligible = Math.max(startRank, challengeEligibleLevel(sessions))
+    const eligible = Math.max(startRank, challengeEligibleLevel(sessions, picks, customExercises))
     const level = Math.min(xpRank.level, eligible)
     const threshold = xpThresholdForLevel(level)
     const nextThreshold = level < MAX_LEVEL ? xpThresholdForLevel(level + 1) : null
@@ -632,7 +679,7 @@ export function computeProgress({ sessions, frozenDays = [], now = new Date(), s
         exerciseRanks,
         totalSets: totalLoggedSets(sessions),
         workoutCount: sessions.length,
-        challenges: challengesStatusForAll(sessions, startRank)
+        challenges: challengesStatusForAll(sessions, picks, customExercises, startRank)
     }
 }
 
@@ -652,15 +699,17 @@ export async function saveProgressionState(state) {
 // Computes everything, compares against the persisted level marker, and
 // returns { progress, isLevelUp } while recording the new marker.
 export async function refreshProgress(now = new Date()) {
-    const [sessions, freezeState, marker, startRank, profile] = await Promise.all([
+    const [sessions, freezeState, marker, startRank, profile, picks, customExercises] = await Promise.all([
         getSessions(),
         getFreezeState(),
         getProgressionState(),
         getStartRank(),
-        getUserProfile()
+        getUserProfile(),
+        getChallengePicks(),
+        getCustomExercises()
     ])
     const bodyweight = parseFloat(profile?.weight) || 0
-    const progress = computeProgress({ sessions, frozenDays: freezeState.frozenDays, now, startRank, bodyweight })
+    const progress = computeProgress({ sessions, frozenDays: freezeState.frozenDays, now, startRank, bodyweight, picks, customExercises })
     const wasLevel = marker.lastLevel || 0
     const isLevelUp = progress.rank.level > wasLevel
     if (isLevelUp) {

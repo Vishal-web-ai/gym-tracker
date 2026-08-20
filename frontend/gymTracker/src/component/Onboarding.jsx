@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Camera, User, ChevronLeft, ChevronRight } from 'lucide-react'
 import FloatingDumbbell from './FloatingDumbbell'
 import ScheduleEditor from './ScheduleEditor'
+import ChallengePicker from './ChallengePicker'
 import { setName, saveUserProfile, saveSchedule } from '../services/storage'
 import { imageFileToDataUrl } from '../services/photo'
-import { saveStartRank, saveProgressionState } from '../services/progression'
+import { saveStartRank, saveProgressionState, saveChallengePicks } from '../services/progression'
 
 const inputClass =
     'bg-black/50 border border-orange-500/30 rounded-xl text-white font-mono text-center outline-none focus:border-orange-500 placeholder-neutral-600'
@@ -20,7 +21,8 @@ const STEP_TITLES = [
     'YOUR HEIGHT',
     'YOUR EXPERIENCE',
     'YOUR PROFILE',
-    'YOUR WEEK'
+    'YOUR WEEK',
+    'YOUR CHALLENGES'
 ]
 
 const EXPERIENCE_LEVELS = [
@@ -38,6 +40,7 @@ const Onboarding = ({ onDone }) => {
     const [inch, setInch] = useState('')
     const [photoUri, setPhotoUri] = useState(null)
     const [schedule, setSchedule] = useState({})
+    const [challengePicks, setChallengePicks] = useState({})
     const [experience, setExperience] = useState(null)
     const photoInputRef = useRef(null)
 
@@ -52,6 +55,7 @@ const Onboarding = ({ onDone }) => {
             case 4: return experience != null
             case 5: return Boolean(photoUri)
             case 6: return hasSchedule
+            case 7: return true
             default: return false
         }
     }
@@ -97,6 +101,7 @@ const Onboarding = ({ onDone }) => {
         if (photoUri) profile.photoData = photoUri
         await saveUserProfile(profile)
         await saveSchedule(schedule)
+        await saveChallengePicks(challengePicks)
         await saveStartRank(experience || 1)
         await saveProgressionState({ lastLevel: experience || 1 })
         onDone()
@@ -333,6 +338,15 @@ const Onboarding = ({ onDone }) => {
 
                     {step === 6 && (
                         <ScheduleEditor schedule={schedule} onChange={setSchedule} />
+                    )}
+
+                    {step === 7 && (
+                        <ChallengePicker
+                            schedule={schedule}
+                            customExercises={[]}
+                            picks={challengePicks}
+                            onChange={setChallengePicks}
+                        />
                     )}
 
                     <div className='flex gap-4 mt-6'>

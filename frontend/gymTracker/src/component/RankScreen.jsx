@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import RankIcon from './RankIcon'
-import { RANKS, EXERCISE_RANKS, refreshProgress, xpThresholdForLevel, getChallengeChecks, saveChallengeChecks } from '../services/progression'
+import { RANKS, EXERCISE_RANKS, refreshProgress, xpThresholdForLevel, formatDuration } from '../services/progression'
 
 const slideVariants = {
     enter: (dir) => ({ y: dir > 0 ? '100%' : '-100%', opacity: 0 }),
@@ -15,30 +15,19 @@ export default function RankScreen({ onClose }) {
     const [view, setView] = useState('rank')
     const [activeIndex, setActiveIndex] = useState(0)
     const [dir, setDir] = useState(0)
-    const [checks, setChecks] = useState({})
 
     useEffect(() => {
         let cancelled = false
-        Promise.all([refreshProgress(), getChallengeChecks()])
-            .then(([result, savedChecks]) => {
+        refreshProgress()
+            .then((result) => {
                 if (cancelled) return
                 const level = result.progress.rank.level
                 setProgress(result.progress)
                 setActiveIndex(level - 1)
-                setChecks(savedChecks)
             })
             .catch(() => {})
         return () => { cancelled = true }
     }, [])
-
-    const toggleCheck = (level, groupKey) => {
-        setChecks((prev) => {
-            const key = `${level}:${groupKey}`
-            const next = { ...prev, [key]: !prev[key] }
-            saveChallengeChecks(next)
-            return next
-        })
-    }
 
     const goTo = (i) => {
         const clamped = Math.max(0, Math.min(i, RANKS.length - 1))
@@ -49,11 +38,11 @@ export default function RankScreen({ onClose }) {
     const rank = progress?.rank
     const rankLevel = progress?.rank?.level
 
-    const challengeLabel = (ch) => ch.targets.map((t) => {
-        if (t.kind === 'weight') return `${t.hint} ${t.value}kg`
-        if (t.kind === 'reps') return `${t.hint} x${t.value}`
-        return `${t.hint} ${t.value}min`
-    }).join(' · ')
+    const challengeLabel = (ch) => {
+        if (ch.kind === 'weight') return `${ch.value}kg with 8+ reps`
+        if (ch.kind === 'reps') return `${ch.value} reps`
+        return `${ch.value} min`
+    }
 
     return (
         <div className='fixed inset-0 bg-neutral-900 z-50 flex flex-col'>
@@ -136,15 +125,18 @@ export default function RankScreen({ onClose }) {
                                                     )}
                                                 </p>
                                                 <div className='flex flex-col gap-1 w-full mt-1'>
-                                                    <p className='font-mono text-[9px] tracking-[2px] text-white/40 text-center'>CHALLENGES</p>
-                                                    <p className='font-mono text-[8px] leading-snug text-white/30 text-center'>(RULES: 8 REPS PER SET · CLEAR ANY 1 EXERCISE IN A GROUP)</p>
-                                                    {(progress?.challenges?.[i]?.groups || []).map((ch) => {
-                                                        const checked = ch.done || !!checks[`${i + 1}:${ch.key}`]
+                                                    <p className='font-mono text-[9px] tracking-[2px] text-white/40 text-center'>YOUR CHALLENGES</p>
+                                                    <p className='font-mono text-[8px] leading-snug text-white/30 text-center'>(RULES: 8 REPS PER SET · CLEAR ALL 5 CHALLENGE EXERCISES)</p>
+                                                    {(progress?.challenges?.[i]?.groups || []).length === 0 ? (
+                                                        <p className='font-mono text-[9px] text-white/30 text-center'>Pick your challenge exercises in Settings.</p>
+                                                    ) : (
+                                                        (progress?.challenges?.[i]?.groups || []).map((ch) => {
+                                                        const checked = ch.done
                                                         return (
-                                                            <div key={ch.key} className='cursor-pointer select-none group' onClick={() => toggleCheck(i + 1, ch.key)}>
+                                                            <div key={ch.key} className='select-none group'>
                                                                 <div className='flex items-center gap-2'>
                                                                     <span className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 transition-all ${
-                                                                        checked ? 'bg-emerald-500 border-emerald-500' : 'border-white/25 group-hover:border-white/60'
+                                                                        checked ? 'bg-emerald-500 border-emerald-500' : 'border-white/25'
                                                                     }`}>
                                                                         {checked && (
                                                                             <svg width='10' height='10' viewBox='0 0 24 24' fill='none'>
@@ -161,7 +153,7 @@ export default function RankScreen({ onClose }) {
                                                                 </p>
                                                             </div>
                                                         )
-                                                    })}
+                                                    }))}
                                                 </div>
                                             </motion.div>
                                         )
@@ -193,7 +185,7 @@ export default function RankScreen({ onClose }) {
                                                     {e.rank.name.toUpperCase()}
                                                 </p>
                                                 <p className='font-mono text-white/30 text-[10px]'>
-                                                    {cur ? (isTimer ? `${cur}s` : `${cur}kg`) : '—'}
+                                                    {cur ? (isTimer ? formatDuration(cur) : `${cur}kg`) : '—'}
                                                     {nextVal != null ? ` / ${nextVal}${isTimer ? 's' : 'kg'}` : ''}
                                                 </p>
                                             </div>

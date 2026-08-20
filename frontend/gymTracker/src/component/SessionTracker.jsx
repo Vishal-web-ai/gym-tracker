@@ -7,7 +7,8 @@ import RestTimer from './RestTimer'
 import { createSession, getRestSound } from '../services/storage'
 import { addMedia } from '../services/media'
 import { getErrorMessage } from '../services/errors'
-import { strengthScore, durationScore, exerciseRankForScore, strengthFactorForCategory, timeFactorForCategory, buildHistoryIndex } from '../services/progression'
+import { strengthScore, durationScore, exerciseRankForScore, strengthFactorForCategory, timeFactorForCategory, buildHistoryIndex, parseDurationSeconds, formatDuration } from '../services/progression'
+import { exerciseMetaByName, inferCategoryByName } from '../services/exercises'
 
 const XP_BURST = Array.from({ length: 12 }, (_, i) => {
     const angle = (i / 12) * Math.PI * 2
@@ -51,6 +52,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const dragRef = useRef(null)
     const rafRef = useRef(null)
     const snapTimerRef = useRef(null)
+    const blurTimerRef = useRef(null)
     const isTimer = exercise.mode === 'timer'
     const setCount = Math.max(3, Math.min(10, exerciseSetCount?.[idx] || 3))
     const prevSetCount = useRef(setCount)
@@ -58,26 +60,59 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const gutter = 12
     const CW = Math.max(200, width - gutter * 2)
     const shift = CW - 40
+    const enterOffset = Math.max(90, Math.round(shift * 0.42))
 
     const setCardTransform = (px, ms = 0) => {
         const el = cardRef.current
         if (!el) return
         const prog = Math.min(1, Math.abs(px) / shift)
+        const rot = prog * 7 * Math.sign(px)
         el.style.transition = ms > 0 ? `transform ${ms}ms cubic-bezier(0.16, 1, 0.3, 1)` : 'none'
-        el.style.transform = `translateX(${px}px) scale(${1 - 0.03 * prog})`
+        el.style.transform = `translateX(${px}px) rotate(${rot}deg) scale(${1 - 0.04 * prog})`
+        el.style.willChange = 'transform'
         if (glowRef.current) glowRef.current.style.opacity = 0.55 * prog
+        clearTimeout(blurTimerRef.current)
+        if (px !== 0) {
+            // backdrop-blur is very expensive on weak devices while a layer is
+            // moving (it re-samples the backdrop every frame). Drop it during
+            // motion and restore once the card settles.
+            el.style.backdropFilter = 'none'
+        } else if (ms > 0) {
+            blurTimerRef.current = setTimeout(() => {
+                el.style.willChange = ''
+                el.style.backdropFilter = ''
+            }, ms + 50)
+        } else {
+            el.style.willChange = ''
+            el.style.backdropFilter = ''
+        }
     }
 
     const snapBack = () => setCardTransform(0, 220)
+
+    // Flings the card fully off-screen in the given direction, then advances.
+    const flyOut = (dir) => {
+        const el = cardRef.current
+        if (!el) return
+        const exit = (width + CW) / 2 + 30
+        clearTimeout(blurTimerRef.current)
+        el.style.transition = 'transform 340ms cubic-bezier(0.22, 1, 0.36, 1)'
+        el.style.transform = `translateX(${exit * dir}px) rotate(${22 * dir}deg) scale(0.95)`
+        el.style.willChange = 'transform'
+        el.style.backdropFilter = 'none'
+        snapTimerRef.current = setTimeout(dir < 0 ? onGoNext : onGoPrev, 310)
+    }
 
     const handlePointerDown = (e) => {
         if (e.target.closest('button, input, textarea')) return
         const el = cardRef.current
         if (!el) return
         clearTimeout(snapTimerRef.current)
+        clearTimeout(blurTimerRef.current)
         dragRef.current = { id: e.pointerId, startX: e.clientX, lastX: e.clientX, lastT: performance.now(), vx: 0 }
         try { el.setPointerCapture(e.pointerId) } catch { /* pointer capture is optional */ }
         el.style.transition = 'none'
+        el.style.backdropFilter = 'none'
     }
 
     const handlePointerMove = (e) => {
@@ -107,11 +142,9 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
         const dx = e.clientX - d.startX
         if ((dx < -60 || d.vx < -500) && canNext) {
-            setCardTransform(-shift, 200)
-            snapTimerRef.current = setTimeout(onGoNext, 170)
+            flyOut(-1)
         } else if ((dx > 60 || d.vx > 500) && canPrev) {
-            setCardTransform(shift, 200)
-            snapTimerRef.current = setTimeout(onGoPrev, 170)
+            flyOut(1)
         } else {
             snapBack()
         }
@@ -128,15 +161,21 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     useLayoutEffect(() => {
         const el = cardRef.current
         if (!el) return
-        const from = enterDir === 'prev' ? -shift : shift
+        const from = enterDir === 'prev' ? -enterOffset : enterOffset
         el.style.transition = 'none'
         el.style.transform = `translateX(${from}px)`
+        el.style.willChange = 'transform'
+        el.style.backdropFilter = 'none'
         const raf = requestAnimationFrame(() => {
-            el.style.transition = 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)'
+            el.style.transition = 'transform 240ms cubic-bezier(0.16, 1, 0.3, 1)'
             el.style.transform = 'translateX(0px)'
         })
-        return () => cancelAnimationFrame(raf)
-    }, [shift, enterDir])
+        const settle = setTimeout(() => {
+            el.style.willChange = ''
+            el.style.backdropFilter = ''
+        }, 340)
+        return () => { cancelAnimationFrame(raf); clearTimeout(settle) }
+    }, [enterOffset, enterDir])
 
     useLayoutEffect(() => {
         const el = setsScrollRef.current
@@ -172,11 +211,12 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const savedEntry = useMemo(() => buildHistoryIndex(sessions)[exercise.name], [sessions, exercise.name])
     const savedWeight = savedEntry && savedEntry.bestWeight > 0 ? savedEntry.bestWeight : 0
     const savedDuration = savedEntry?.bestDuration || 0
+    const category = exercise.category || exerciseMetaByName(exercise.name)?.category || inferCategoryByName(exercise.name)
     let liveWeight = 0
     let liveDuration = 0
     if (isTimer) {
         for (let si = 0; si < setCount; si++) {
-            const d = parseFloat(exerciseSets[idx]?.[si]) || 0
+            const d = parseDurationSeconds(exerciseSets[idx]?.[si])
             if (d > liveDuration) liveDuration = d
         }
     } else {
@@ -189,16 +229,16 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const bestWeight = Math.max(savedWeight, liveWeight)
     const bestDuration = Math.max(savedDuration, liveDuration)
     const score = isTimer
-        ? durationScore({ seconds: bestDuration, category: exercise.category })
-        : strengthScore({ weight: bestWeight, bodyweight, category: exercise.category })
+        ? durationScore({ seconds: bestDuration, category })
+        : strengthScore({ weight: bestWeight, bodyweight, category })
     const rank = exerciseRankForScore(score)
     const nextScore = rank.nextScore
     const nextTarget = nextScore != null
         ? isTimer
-            ? Math.round(timeFactorForCategory(exercise.category) * nextScore)
-            : Math.round(bodyweight * strengthFactorForCategory(exercise.category) * nextScore)
+            ? Math.round(timeFactorForCategory(category) * nextScore)
+            : Math.round(bodyweight * strengthFactorForCategory(category) * nextScore)
         : null
-    const displayCur = isTimer ? (bestDuration || '—') + 's' : (bestWeight || '—') + 'kg'
+    const displayCur = isTimer ? (formatDuration(bestDuration) || '—') : bestWeight ? `${bestWeight}kg` : '—'
     const displayNext = nextTarget != null ? `${nextTarget}${isTimer ? 's' : 'kg'}` : null
     const pr = savedEntry && savedEntry.bestWeight > 0
         ? { name: exercise.name, weight: savedEntry.bestWeight, reps: savedEntry.bestRepsAtWeight?.[savedEntry.bestWeight] || '—' }
@@ -233,7 +273,9 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                 }
             }
             const index = buildHistoryIndex([...(sessions || []), { exercises: [{ name: exercise.name, mode: exercise.mode, sets: doneSets }] }])
-            const reps = parseFloat(exerciseSets[idx]?.[setIdx]) || 0
+            const reps = isTimer
+                ? parseDurationSeconds(exerciseSets[idx]?.[setIdx])
+                : parseFloat(exerciseSets[idx]?.[setIdx]) || 0
             const weight = parseFloat(String(exerciseWeights[idx]?.[setIdx]).replace('kg', '')) || 0
             const entry = index[exercise.name]
             let bonus = null
@@ -259,7 +301,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerCancel}
-            className='absolute top-0 bottom-0 left-3 right-3 rounded-3xl border border-white/15 bg-white/5 backdrop-blur-2xl overflow-hidden touch-pan-y cursor-grab active:cursor-grabbing shadow-[0_20px_45px_rgba(0,0,0,0.6)]'
+            className='absolute top-0 bottom-10 left-3 right-3 rounded-3xl border border-white/15 bg-white/5 backdrop-blur-2xl overflow-hidden touch-pan-y cursor-grab active:cursor-grabbing shadow-[0_20px_45px_rgba(0,0,0,0.6)]'
         >
             <div
                 ref={glowRef}
@@ -651,38 +693,38 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                     </div>
                 </div>
 
-                {/* Main exercise card — deck of prev / current / next */}
+                {/* Main exercise card — tinder-style deck */}
                 <div className='relative flex-1 min-h-0 mt-3 mb-3 overflow-hidden'>
                     {exercises.length > 0 ? (
                         <ExerciseCard
                             key={exercises[current].id}
                             enterDir={enterDir}
-                            exercise={exercises[current]}
-                            idx={current}
-                            onRemove={onRemove}
-                            exerciseWeights={exerciseWeights}
-                            exerciseSets={exerciseSets}
-                            exerciseNotes={exerciseNotes}
-                            exerciseMedia={exerciseMedia}
-                            exerciseDone={exerciseDone}
-                            exerciseSetCount={exerciseSetCount}
-                            setWeight={setWeight}
-                            setReps={setReps}
-                            setNotes={setNotes}
-                            setMedia={setMedia}
-                            setDone={setDone}
-                            setSetCount={setSetCount}
-                            showNotes={showNotes}
-                            setShowNotes={setShowNotes}
-                            sound={restSound}
-                            bodyweight={bodyweight}
-                            sessions={sessions}
-                            onXpFlash={setXpFlash}
-                            canPrev={current > 0}
-                            canNext={!isLast}
-                            onGoPrev={() => { setEnterDir('prev'); setCurrentIndex(current - 1) }}
-                            onGoNext={() => { setEnterDir('next'); setCurrentIndex(current + 1) }}
-                        />
+                                exercise={exercises[current]}
+                                idx={current}
+                                onRemove={onRemove}
+                                exerciseWeights={exerciseWeights}
+                                exerciseSets={exerciseSets}
+                                exerciseNotes={exerciseNotes}
+                                exerciseMedia={exerciseMedia}
+                                exerciseDone={exerciseDone}
+                                exerciseSetCount={exerciseSetCount}
+                                setWeight={setWeight}
+                                setReps={setReps}
+                                setNotes={setNotes}
+                                setMedia={setMedia}
+                                setDone={setDone}
+                                setSetCount={setSetCount}
+                                showNotes={showNotes}
+                                setShowNotes={setShowNotes}
+                                sound={restSound}
+                                bodyweight={bodyweight}
+                                sessions={sessions}
+                                onXpFlash={setXpFlash}
+                                canPrev={current > 0}
+                                canNext={!isLast}
+                                onGoPrev={() => { setEnterDir('prev'); setCurrentIndex(current - 1) }}
+                                onGoNext={() => { setEnterDir('next'); setCurrentIndex(current + 1) }}
+                            />
                     ) : (
                         <div className='h-full flex flex-col items-center justify-center'>
                             <p className='text-orange-500/50 tracking-wide text-center font-mono'>

@@ -111,7 +111,7 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
     }
 
     const renderGroups = (rows) => (
-        <div className='flex flex-col gap-1 max-h-40 overflow-y-auto scroll'>
+        <div className='flex flex-col gap-1 max-h-64 overflow-y-auto scroll'>
             {visibleGroups.map(group => (
                 <div key={group.category} className='flex flex-col'>
                     <p className='font-bebas text-orange-500/80 text-sm tracking-[1px] mt-1.5 mb-0.5'>{group.category.toUpperCase()}</p>
@@ -156,7 +156,7 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
                     <p className='font-bebas tracking-[2px] text-orange-500'>{activeLabel}</p>
                 </div>
 
-                <div className='flex flex-col gap-1 h-12 overflow-y-auto scroll mb-2'>
+                <div className='flex flex-col gap-1 h-32 overflow-y-auto scroll mb-2'>
                     {assigned.length === 0 ? (
                         <p className='font-mono text-white/30 text-xs'>Rest day — no exercises.</p>
                     ) : (

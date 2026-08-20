@@ -108,3 +108,38 @@ export const defaultExercises = [
         ]
     }
 ]
+
+const normName = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
+const BY_NAME = new Map()
+for (const cat of defaultExercises) {
+    for (const item of cat.items) {
+        BY_NAME.set(normName(item.name), { category: cat.category, muscle: item.muscle, image: item.image || '', mode: item.mode || 'weight' })
+    }
+}
+
+// Looks up the built-in metadata (category, muscle, image, mode) for an
+// exercise by name. Used to recover a category that wasn't carried into a
+// session, so rank factors stay correct even for old data.
+export function exerciseMetaByName(name) {
+    return BY_NAME.get(normName(name))
+}
+
+// Best-effort category guess from an exercise name. Used when a custom
+// exercise has no (or an incorrect) category so rank factors don't all
+// collapse to the neutral 1.0 — e.g. a "Biceps Curl" created from the search
+// bar would otherwise default to 'Chest' and show the same next-tier target
+// as a bench press.
+export function inferCategoryByName(name) {
+    const n = String(name || '').toLowerCase()
+    if (/(tricep|skull ?crusher|pushdown)/.test(n)) return 'Triceps'
+    if (/(bicep|curl|preacher|hammer)/.test(n)) return 'Biceps'
+    if (/(chest|bench|fly|crossover|push-?up|pec|dip)/.test(n)) return 'Chest'
+    if (/(back|row|pulldown|pull-?up|chin-?up|deadlift|lats?|pullover|face ?pull)/.test(n)) return 'Back'
+    if (/(shoulder|delt|lateral|raise|shrug|upright|overhead|military|press)/.test(n)) return 'Shoulders'
+    if (/(leg|squat|lunge|quad|hamstring|glute|calf|thrust|kickback|hack|adductor|abductor)/.test(n)) return 'Legs'
+    if (/(core|abs?|plank|crunch|sit-?up|wood ?chop|oblique|torso|hanging)/.test(n)) return 'Core'
+    if (/(arm|forearm|wrist|brachioradialis)/.test(n)) return 'Arms'
+    if (/(cardio|sprint|run|jump|skip|cycle|bike|rowing|treadmill|stair|elliptical)/.test(n)) return 'Cardio'
+    return null
+}

@@ -42,13 +42,8 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
         }
     }
 
-    const openViewer = async (sessionId, exerciseIndex, items, index) => {
-        try {
-            await readMediaFile(items[index].id)
-            setViewer({ sessionId, exerciseIndex, items, index, url: null })
-        } catch {
-            alert('This photo/video could not be opened. It may have been removed.')
-        }
+    const openViewer = (sessionId, exerciseIndex, items, index) => {
+        loadViewerUrl(sessionId, exerciseIndex, items, index)
     }
 
     const loadViewerUrl = async (sessionId, exerciseIndex, items, index) => {
@@ -74,13 +69,12 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
             } else {
                 const nextIndex = index === items.length - 1 ? index - 1 : index
                 setViewer(null)
-                setViewer({
+                loadViewerUrl(
                     sessionId,
                     exerciseIndex,
-                    items: items.filter((_, i) => i !== index),
-                    index: nextIndex,
-                    url: null
-                })
+                    items.filter((_, i) => i !== index),
+                    nextIndex
+                )
             }
         } catch (err) {
             alert(getErrorMessage(err))
