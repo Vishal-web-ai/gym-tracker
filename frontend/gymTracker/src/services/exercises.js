@@ -143,3 +143,15 @@ export function inferCategoryByName(name) {
     if (/(cardio|sprint|run|jump|skip|cycle|bike|rowing|treadmill|stair|elliptical)/.test(n)) return 'Cardio'
     return null
 }
+
+// Equipment class inferred from the exercise name. Used to scale a beginner's
+// starting target — machines, cables and dumbbells load very differently than
+// a barbell for the same muscles.
+export function inferEquipmentByName(name) {
+    const n = String(name || '').toLowerCase()
+    if (/cable|pull-?down|pullover/.test(n)) return 'cable'
+    if (/(dumbbell|dumbell)/.test(n)) return 'dumbbell'
+    if (/(machine|smith|leg ?press|pec ?deck|hack)/.test(n)) return 'machine'
+    if (/(push-?up|pull-?up|chin-?up|chest dip|plank|crunch|sit-?up|leg raise|burpee|mountain climber|jumping jack|wood ?chop)/.test(n)) return 'bodyweight'
+    return 'barbell'
+}

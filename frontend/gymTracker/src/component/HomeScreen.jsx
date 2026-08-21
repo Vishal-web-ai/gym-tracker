@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RiMenuLine, RiCloseLine } from '@remixicon/react'
-import { Check, Zap, Edit3, Plus, BicepsFlexed, User, CalendarDays, RotateCcw } from 'lucide-react'
+import { Check, Zap, Edit3, Plus, BicepsFlexed, User, CalendarDays, RotateCcw, Trophy } from 'lucide-react'
 import ExercisesList from './ExercisesList'
 import SessionTracker from './SessionTracker'
 import ExerciseDetail from './ExerciseDetail'
@@ -16,7 +16,7 @@ import PrsBadge from './PrsBadge'
 import RankBadge from './RankBadge'
 import RankScreen from './RankScreen'
 import LevelUpOverlay from './LevelUpOverlay'
-import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, computePrsFromSessions, challengeStatusForLevel, getChallengePicks } from '../services/progression'
+import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, computePrsFromSessions, challengeStatusForLevel, getChallengePicks, ensureLadders, recordSessionLadders } from '../services/progression'
 import { exerciseMetaByName } from '../services/exercises'
 import {
     getName,
@@ -126,6 +126,9 @@ const HomeScreen = () => {
     const [savedWorkoutName, setSavedWorkoutName] = useState('')
     const [challengeToasts, setChallengeToasts] = useState([])
     const challengeToastTimer = useRef(null)
+    const [badgeToasts, setBadgeToasts] = useState([])
+    const badgeToastTimer = useRef(null)
+    const [ladders, setLadders] = useState(null)
     const [monthlyCount, setMonthlyCount] = useState(0)
     const [statKey, setStatKey] = useState(0)
     const [prs, setPrs] = useState([])
@@ -197,7 +200,11 @@ const HomeScreen = () => {
     const handleDeletedSession = useCallback(() => {
         refreshSessionsAndPrs()
         refreshProgress()
-            .then(result => { if (result) setProgress(result.progress) })
+            .then(result => {
+                if (!result) return
+                setProgress(result.progress)
+                if (result.ladders) setLadders(result.ladders)
+            })
             .catch(() => {})
     }, [refreshSessionsAndPrs])
 
@@ -225,6 +232,10 @@ const HomeScreen = () => {
             .catch(() => {})
         refreshTodaysSchedule()
         refreshStats()
+        Promise.all([getSessions(), getUserProfile().catch(() => ({}))])
+            .then(([sess, profile]) => ensureLadders(sess, parseFloat(profile?.weight) || 0))
+            .then(setLadders)
+            .catch(() => {})
     }, [refreshSessionsAndPrs, refreshStats, refreshTodaysSchedule])
 
     useEffect(() => {
@@ -235,6 +246,7 @@ const HomeScreen = () => {
                 if (cancelled) return
                 setFrozenDays(freezeState.frozenDays || [])
                 setProgress(result.progress)
+                if (result.ladders) setLadders(result.ladders)
             })
             .catch(() => {})
         return () => { cancelled = true }
@@ -452,6 +464,16 @@ const HomeScreen = () => {
         refreshSessionsAndPrs()
         setStatKey(k => k + 1)
 
+        let promotions = []
+        if (session) {
+            await recordSessionLadders(session, bodyweight)
+                .then(res => {
+                    setLadders(res.ladders)
+                    promotions = res.promotions || []
+                })
+                .catch(() => {})
+        }
+
         const result = await refreshProgress().catch(() => null)
         if (!result) {
             setShowSuccess(true)
@@ -463,6 +485,7 @@ const HomeScreen = () => {
             return
         }
         setProgress(result.progress)
+        if (result.ladders) setLadders(result.ladders)
 
         let breakdown = null
         if (session) {
@@ -482,6 +505,12 @@ const HomeScreen = () => {
             }
         }
 
+        if (promotions.length) {
+            if (badgeToastTimer.current) clearTimeout(badgeToastTimer.current)
+            setBadgeToasts(promotions)
+            badgeToastTimer.current = setTimeout(() => setBadgeToasts([]), 4000)
+        }
+
         if (result.isLevelUp || (breakdown && breakdown.bonuses.length)) {
             setShowSession(false)
             setCelebration({
@@ -498,7 +527,7 @@ const HomeScreen = () => {
                 setSavedWorkoutName('')
             }, 1800)
         }
-    }, [refreshStats, refreshSessionsAndPrs, customExercises, challengePicks])
+    }, [refreshStats, refreshSessionsAndPrs, customExercises, challengePicks, bodyweight])
 
     const persistPrs = (next) => {
         const manual = [...next]
@@ -799,6 +828,7 @@ const HomeScreen = () => {
                                     showNotes={showNotes}
                                     setShowNotes={setShowNotes}
                                     bodyweight={bodyweight}
+                                    ladders={ladders}
                                     sessions={sessions}
                                 />
                             </div>
@@ -856,6 +886,27 @@ const HomeScreen = () => {
                                     <path d='M5 13l4 4L19 7' stroke='black' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round' />
                                 </svg>
                                 {label} challenge complete!
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Badge promotion toasts */}
+            <AnimatePresence>
+                {badgeToasts.length > 0 && (
+                    <motion.div
+                        key='badge-toasts'
+                        className='fixed bottom-40 left-1/2 -translate-x-1/2 z-[70] flex flex-col items-center gap-2 px-4 pointer-events-none'
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 16 }}
+                        transition={{ duration: 0.25 }}
+                    >
+                        {badgeToasts.map(b => (
+                            <div key={b.name} className='flex items-center gap-2 rounded-full px-4 py-2 font-mono text-sm font-bold text-black shadow-[0_0_24px_rgba(249,115,22,0.6)]' style={{ background: b.color }}>
+                                <Trophy size={14} className='text-black/80' />
+                                {b.name} → {b.levelName}!
                             </div>
                         ))}
                     </motion.div>

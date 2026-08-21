@@ -8,12 +8,16 @@ import {
     rankForXp,
     xpThresholdForLevel,
     MAX_LEVEL,
-    exerciseRankForScore,
-    computeExerciseRanks,
+    LADDER_LEVELS,
+    beginnerTarget,
+    nextWeightTarget,
+    nextTimeTarget,
+    applySessionToLadders,
+    seedLaddersFromHistory,
+    ladderView,
+    computeExerciseLadders,
     buildHistoryIndex,
     parseDurationSeconds,
-    strengthScore,
-    durationScore,
     weekKeyFor,
     planFreezeProtection,
     computeStreakWithFreezes,
@@ -33,7 +37,7 @@ import {
     saveChallengePicks,
     DEFAULT_CHALLENGE_PICKS
 } from '../progression'
-import { createSession } from '../storage'
+import { createSession, saveUserProfile } from '../storage'
 import { resetDb } from '../../test/resetDb'
 
 beforeEach(resetDb)
@@ -262,106 +266,186 @@ describe('player ranks', () => {
     })
 })
 
-describe('exercise ranks', () => {
-    it('tiers by strength score', () => {
-        expect(exerciseRankForScore(0).name).toBe('Wood')
-        expect(exerciseRankForScore(0.3).name).toBe('Wood')
-        expect(exerciseRankForScore(0.54).name).toBe('Wood')
-        expect(exerciseRankForScore(0.55).name).toBe('Bronze')
-        expect(exerciseRankForScore(0.8).name).toBe('Silver')
-        expect(exerciseRankForScore(1.0).name).toBe('Gold')
-        expect(exerciseRankForScore(1.25).name).toBe('Platinum')
-        expect(exerciseRankForScore(1.5).name).toBe('Diamond')
-        expect(exerciseRankForScore(2.0).name).toBe('Diamond')
-        expect(exerciseRankForScore(2.0).nextScore).toBeNull()
+describe('exercise badge ladders', () => {
+    const bench = (sets, category = 'Chest') => ({
+        exercises: [{ name: 'Flat Bench Press', mode: 'weight', category, sets }]
     })
 
-    it('scales weight against bodyweight and category factor', () => {
-        expect(strengthScore({ weight: 70, bodyweight: 70, category: 'Chest' })).toBeCloseTo(1.0)
-        expect(strengthScore({ weight: 14, bodyweight: 70, category: 'Biceps' })).toBeCloseTo(0.5)
-        expect(strengthScore({ weight: 105, bodyweight: 70, category: 'Legs' })).toBeCloseTo(1.0)
-        expect(strengthScore({ weight: 40, bodyweight: 0, category: 'Chest' })).toBe(0)
+    it('seeds beginner targets from bodyweight, category and equipment', () => {
+        expect(beginnerTarget({ bodyweight: 60, category: 'Chest', mode: 'weight', name: 'Flat Bench Press' })).toBe(17.5)
+        expect(beginnerTarget({ bodyweight: 80, category: 'Chest', mode: 'weight', name: 'Flat Bench Press' })).toBe(25)
+        expect(beginnerTarget({ bodyweight: 60, category: 'Biceps', mode: 'weight', name: 'Barbell Curl' })).toBe(7.5)
+        expect(beginnerTarget({ bodyweight: 60, category: 'Biceps', mode: 'weight', name: 'Dumbbell Curl' })).toBe(2.5)
+        expect(beginnerTarget({ bodyweight: 60, category: 'Chest', mode: 'weight', name: 'Machine Chest Press' })).toBe(12.5)
+        expect(beginnerTarget({ bodyweight: 60, category: 'Core', mode: 'timer', name: 'Plank' })).toBe(25)
     })
 
-    it('scores timer exercises by duration against category time factor', () => {
-        expect(durationScore({ seconds: 90, category: 'Core' })).toBeCloseTo(1.0)
-        expect(durationScore({ seconds: 600, category: 'Cardio' })).toBeCloseTo(1.0)
-        expect(durationScore({ seconds: 0, category: 'Core' })).toBe(0)
+    it('steps ~8% rounded to plates, never under +2.5kg (30 → 32.5 → 35)', () => {
+        expect(nextWeightTarget(30)).toBe(32.5)
+        expect(nextWeightTarget(32.5)).toBe(35)
+        expect(nextWeightTarget(35)).toBe(37.5)
+        expect(nextWeightTarget(120)).toBe(130)
     })
 
-    it('uses heaviest weight hit for 8+ reps, ignores lighter/high-rep sets', () => {
-        const session = {
-            id: 'a',
-            name: 'Workout',
-            exercises: [
-                {
-                    name: 'Bench',
-                    mode: 'weight',
-                    category: 'Chest',
-                    sets: [
-                        { reps: '10', weight: '60kg' },
-                        { reps: '5', weight: '90kg' },
-                        { reps: '12', weight: '55kg' }
-                    ]
-                },
-                { name: 'Plank', mode: 'timer', category: 'Core', sets: [{ reps: '120' }] }
-            ]
+    it('mirrors the ladder in time for timer exercises (~10%, 5s steps)', () => {
+        expect(nextTimeTarget(30)).toBe(35)
+        expect(nextTimeTarget(90)).toBe(100)
+    })
+
+    it('case 1+6: 60kg beginner completes exactly 8 reps and earns Bronze', () => {
+        const { ladders, promotions } = applySessionToLadders({}, bench([{ reps: '8', weight: '18' }]), 60)
+        const entry = ladders['Flat Bench Press']
+        expect(promotions).toHaveLength(1)
+        expect(promotions[0].name).toBe('Bronze')
+        expect(entry.successes).toBe(1)
+        expect(entry.lastSuccess).toBe(18)
+        expect(entry.nextTarget).toBe(nextWeightTarget(18))
+        const view = ladderView(entry, 60)
+        expect(view.levelName).toBe('Bronze')
+        expect(view.strengthRatio).toBeCloseTo(0.3)
+    })
+
+    it('case 2: an 80kg beginner gets a higher starting target and climbs the same way', () => {
+        const { ladders, promotions } = applySessionToLadders({}, bench([{ reps: '10', weight: '25' }]), 80)
+        expect(ladders['Flat Bench Press'].startTarget).toBe(25)
+        expect(promotions[0].name).toBe('Bronze')
+        expect(ladders['Flat Bench Press'].nextTarget).toBe(27.5)
+    })
+
+    it('grants Bronze to verified history that clears the starter target', () => {
+        // 20kg @ 60kg sits below the relative-strength seed line, but it still
+        // proves the starter challenge (17.5kg × 8) — no trained user stays Unranked.
+        const seeded = seedLaddersFromHistory([bench([{ reps: '10', weight: '20' }])], 60, {})
+        expect(seeded['Flat Bench Press'].successes).toBe(1)
+        expect(ladderView(seeded['Flat Bench Press'], 60).levelName).toBe('Bronze')
+        expect(seeded['Flat Bench Press'].nextTarget).toBe(22.5)
+    })
+
+    it('defaults to a 60kg reference when the profile has no bodyweight', () => {
+        const seeded = seedLaddersFromHistory([bench([{ reps: '10', weight: '30' }])], 0, {})
+        expect(seeded['Flat Bench Press'].successes).toBeGreaterThanOrEqual(1)
+        expect(ladderView(seeded['Flat Bench Press'], 0).levelName).not.toBe('Unranked')
+    })
+
+    it('repairs entries stranded at Unranked by the pre-fix placement', () => {
+        const stranded = {
+            'Flat Bench Press': {
+                mode: 'weight', category: 'Chest', startTarget: 17.5, lastSuccess: 20,
+                personalBest: 20, nextTarget: 22.5, successes: 0, highestLevel: 0,
+                bodyweightAtTime: 60, updatedAt: '2026-01-01T00:00:00Z'
+            }
         }
-        const ranks = computeExerciseRanks([session], 70)
-        const bench = ranks.find((r) => r.name === 'Bench')
-        expect(bench.weight).toBe(60)
-        expect(bench.rank.name).toBe('Silver')
-        const plank = ranks.find((r) => r.name === 'Plank')
-        expect(plank.duration).toBe(120)
-        expect(plank.rank.name).toBe('Platinum')
-        expect(ranks[0].name).toBe('Plank')
+        const repaired = seedLaddersFromHistory([bench([{ reps: '10', weight: '20' }])], 60, stranded)
+        expect(repaired['Flat Bench Press'].successes).toBe(1)
+        // Earned progress is never touched
+        const earned = { ...stranded['Flat Bench Press'], successes: 3 }
+        const untouched = seedLaddersFromHistory([bench([{ reps: '10', weight: '20' }])], 60, {
+            'Flat Bench Press': earned
+        })
+        expect(untouched).toBeNull()
     })
 
-    it('falls back to the built-in category when a session drops it', () => {
-        // "Barbell Curl" is a Biceps exercise (factor 0.4), but the session
-        // record has no category. The name lookup must recover it, so 20kg at
-        // 70kg bodyweight scores 0.71 (Bronze) instead of defaulting to 0.29 (below Wood).
-        const session = {
-            id: 'b',
+    it('end-to-end: history saved through storage ranks on the next launch', async () => {
+        await saveUserProfile({ weight: '60' })
+        await createSession({
             name: 'W',
-            exercises: [
-                { name: 'Barbell Curl', mode: 'weight', sets: [{ reps: '10', weight: '20kg' }] }
-            ]
-        }
-        const ranks = computeExerciseRanks([session], 70)
-        const curl = ranks[0]
-        expect(curl.category).toBe('Biceps')
-        expect(curl.score).toBeCloseTo(20 / (70 * 0.4))
-        expect(curl.rank.name).toBe('Bronze')
+            createdAt: new Date('2026-08-10T09:00:00').toISOString(),
+            exercises: [{ name: 'Flat Bench Press', mode: 'weight', category: 'Chest', sets: [{ reps: '10', weight: '40kg' }] }]
+        })
+        const result = await refreshProgress()
+        const bench = result.progress.exerciseRanks.find(r => r.name === 'Flat Bench Press')
+        expect(bench.levelName).toBe('Bronze')
     })
 
-    it('infers a category for custom exercises so every exercise gets its own ladder', () => {
-        // A custom "Biceps Curl" stored with no category must resolve to
-        // Biceps (factor 0.4), not the neutral 1.0 — otherwise its next-tier
-        // target matches a bench press instead of its own lighter ladder.
-        const session = {
-            id: 'd',
-            name: 'W',
-            exercises: [
-                { name: 'Biceps Curl', mode: 'weight', sets: [{ reps: '10', weight: '20kg' }] }
-            ]
-        }
-        const ranks = computeExerciseRanks([session], 70)
-        expect(ranks[0].category).toBe('Biceps')
-        expect(ranks[0].score).toBeCloseTo(20 / (70 * 0.4))
+    it('case 3: a 60kg user already benching 80kg starts at Platinum from history', () => {
+        const seeded = seedLaddersFromHistory([bench([{ reps: '10', weight: '80' }])], 60, {})
+        const entry = seeded['Flat Bench Press']
+        expect(entry.successes).toBe(4)
+        expect(entry.lastSuccess).toBe(80)
+        expect(entry.nextTarget).toBe(87.5)
+        expect(ladderView(entry, 60).levelName).toBe('Platinum')
     })
 
-    it('parses "M:SS" timer reps in exercise-rank durations', () => {
+    it('case 4: a 60kg user benching 120kg is recognized as Elite, not a beginner', () => {
+        const seeded = seedLaddersFromHistory([bench([{ reps: '8', weight: '120' }])], 60, {})
+        const entry = seeded['Flat Bench Press']
+        expect(entry.successes).toBe(6)
+        expect(ladderView(entry, 60).levelName).toBe('Elite')
+        expect(entry.nextTarget).toBe(130)
+    })
+
+    it('case 5: failing the 8-rep requirement keeps level and target untouched', () => {
+        const first = applySessionToLadders({}, bench([{ reps: '8', weight: '18' }]), 60)
+        const before = first.ladders['Flat Bench Press']
+        const second = applySessionToLadders(first.ladders, bench([{ reps: '6', weight: '40' }]), 60)
+        const after = second.ladders['Flat Bench Press']
+        expect(second.promotions).toHaveLength(0)
+        expect(after.successes).toBe(before.successes)
+        expect(after.nextTarget).toBe(before.nextTarget)
+        expect(after.lastSuccess).toBe(before.lastSuccess)
+    })
+
+    it('case 7: Master users keep progressing past level 7 without a new badge', () => {
+        const seeded = seedLaddersFromHistory([bench([{ reps: '8', weight: '150' }])], 60, {})
+        expect(seeded['Flat Bench Press'].successes).toBe(7)
+        // Seeded next target is step(150) = 162.5, so 155 alone doesn't complete it
+        const mid = applySessionToLadders(seeded, bench([{ reps: '8', weight: '155' }]), 60)
+        expect(mid.ladders['Flat Bench Press'].successes).toBe(7)
+        const { ladders, promotions } = applySessionToLadders(seeded, bench([{ reps: '8', weight: '165' }]), 60)
+        const entry = ladders['Flat Bench Press']
+        expect(promotions).toHaveLength(0)
+        expect(entry.successes).toBe(8)
+        const view = ladderView(entry, 60)
+        expect(view.levelName).toBe('Master')
+        expect(view.isMax).toBe(true)
+        expect(entry.nextTarget).toBe(177.5)
+    })
+
+    it('case 8: changing bodyweight updates the ratio but never resets earned progress', () => {
+        const seeded = seedLaddersFromHistory([bench([{ reps: '10', weight: '80' }])], 60, {})
+        const entry = seeded['Flat Bench Press']
+        const lighter = ladderView(entry, 55)
+        const heavier = ladderView(entry, 70)
+        expect(lighter.successes).toBe(heavier.successes)
+        expect(lighter.nextTarget).toBe(heavier.nextTarget)
+        expect(lighter.strengthRatio).toBeGreaterThan(heavier.strengthRatio)
+        expect(heavier.strengthRatio).toBeCloseTo(80 / 70, 2)
+    })
+
+    it('case 9: each exercise keeps its own ladder with its own factors', () => {
         const session = {
-            id: 'c',
-            name: 'W',
             exercises: [
-                { name: 'Plank', mode: 'timer', category: 'Core', sets: [{ reps: '1:30' }] }
+                { name: 'Flat Bench Press', mode: 'weight', category: 'Chest', sets: [{ reps: '8', weight: '18' }] },
+                { name: 'Barbell Curl', mode: 'weight', sets: [{ reps: '8', weight: '8' }] },
+                { name: 'Plank', mode: 'timer', category: 'Core', sets: [{ reps: '0:30' }] }
             ]
         }
-        const ranks = computeExerciseRanks([session], 70)
-        expect(ranks[0].duration).toBe(90)
-        expect(ranks[0].rank.name).toBe('Gold')
+        const { ladders } = applySessionToLadders({}, session, 60)
+        expect(ladders['Flat Bench Press'].successes).toBe(1)
+        expect(ladders['Barbell Curl'].category).toBe('Biceps')
+        expect(ladders['Barbell Curl'].successes).toBe(1)
+        expect(ladders['Plank'].successes).toBe(1)
+        expect(ladders['Plank'].nextTarget).toBe(35)
+        expect(ladders['Flat Bench Press'].nextTarget).not.toBe(ladders['Barbell Curl'].nextTarget)
+    })
+
+    it('parses "M:SS" timer holds when completing challenges', () => {
+        const { ladders } = applySessionToLadders({}, {
+            exercises: [{ name: 'Plank', mode: 'timer', category: 'Core', sets: [{ reps: '1:30' }] }]
+        }, 60)
+        expect(ladders.Plank.personalBest).toBe(90)
+        expect(ladders.Plank.successes).toBe(1)
+    })
+
+    it('orders the badge list by tier then relative strength', () => {
+        const seeded = seedLaddersFromHistory([
+            bench([{ reps: '10', weight: '80' }]),
+            { exercises: [{ name: 'Barbell Curl', mode: 'weight', category: 'Biceps', sets: [{ reps: '12', weight: '15' }] }] }
+        ], 60, {})
+        const ranks = computeExerciseLadders(seeded, 60)
+        expect(ranks[0].name).toBe('Flat Bench Press')
+        expect(ranks[0].tier).toBeGreaterThanOrEqual(ranks[1].tier)
+        expect(LADDER_LEVELS.length).toBe(7)
     })
 })
 
@@ -435,7 +519,8 @@ describe('computeProgress / refreshProgress', () => {
     it('builds a full snapshot', async () => {
         const sessions = [iso('2026-08-10T09:00:00'), iso('2026-08-11T09:00:00')]
         const prs = [{ name: 'DL' }]
-        const progress = computeProgress({ sessions, prs, frozenDays: [], now: new Date('2026-08-11T12:00:00') })
+        const ladders = seedLaddersFromHistory(sessions, 70, {})
+        const progress = computeProgress({ sessions, prs, frozenDays: [], now: new Date('2026-08-11T12:00:00'), ladders })
         expect(progress.workoutCount).toBe(2)
         expect(progress.totalSets).toBe(2)
         expect(progress.streak).toBe(2)

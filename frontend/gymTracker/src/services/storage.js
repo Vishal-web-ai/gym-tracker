@@ -140,6 +140,19 @@ export async function savePrs(prs) {
 }
 
 // ---------------------------------------------------------------------------
+// Exercise badge ladders (per-exercise hybrid progression state)
+// ---------------------------------------------------------------------------
+
+export async function getLadders() {
+    const row = await dbGet('meta', 'ladders')
+    return row?.value || {}
+}
+
+export async function saveLadders(ladders) {
+    await dbPut('meta', { key: 'ladders', value: ladders })
+}
+
+// ---------------------------------------------------------------------------
 // Rest timer alarm sound ({ name, blob } or null for the default beep)
 // ---------------------------------------------------------------------------
 

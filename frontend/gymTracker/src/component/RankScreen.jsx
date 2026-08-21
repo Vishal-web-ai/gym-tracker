@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import RankIcon from './RankIcon'
-import { RANKS, EXERCISE_RANKS, refreshProgress, xpThresholdForLevel, formatDuration } from '../services/progression'
+import { RANKS, LADDER_LEVELS, refreshProgress, xpThresholdForLevel, formatDuration } from '../services/progression'
 
 const slideVariants = {
     enter: (dir) => ({ y: dir > 0 ? '100%' : '-100%', opacity: 0 }),
@@ -171,33 +171,38 @@ export default function RankScreen({ onClose }) {
                             ) : (
                                 <div className='flex-1 overflow-y-auto scroll flex flex-col gap-2.5 pr-1'>
                                     {progress.exerciseRanks.map((e) => {
-                                    const isTimer = e.mode === 'timer'
-                                    const cur = isTimer ? e.duration : e.weight
-                                    const nextVal = e.score > 0 && e.rank.nextScore != null
-                                        ? Math.round((cur / e.score) * e.rank.nextScore)
-                                        : null
-                                    const nextName = e.rank.nextScore != null ? EXERCISE_RANKS[e.rank.tier + 1].name : null
-                                    return (
-                                        <div key={e.name} className='flex flex-col gap-1'>
-                                            <div className='flex items-center gap-2'>
-                                                <p className='font-mono text-white/80 text-sm flex-1 truncate'>{e.name}</p>
-                                                <p className='font-bebas text-xs tracking-[1px]' style={{ color: e.rank.color }}>
-                                                    {e.rank.name.toUpperCase()}
+                                        const isTimer = e.mode === 'timer'
+                                        const fmt = (v) => (v == null || !(v > 0) ? '—' : isTimer ? formatDuration(v) : `${v}kg`)
+                                        const nextLevelName = e.tier > 0 && e.tier < LADDER_LEVELS.length ? LADDER_LEVELS[e.tier].name : null
+                                        return (
+                                            <div key={e.name} className='flex flex-col gap-1'>
+                                                <div className='flex items-center gap-2'>
+                                                    <p className='font-mono text-white/80 text-sm flex-1 truncate'>{e.name}</p>
+                                                    <p className='font-bebas text-xs tracking-[1px]' style={{ color: e.color }}>
+                                                        {e.levelName.toUpperCase()}
+                                                    </p>
+                                                    <p className='font-mono text-white/30 text-[10px]'>
+                                                        {fmt(e.lastSuccess)}{e.isMax ? '' : ` → ${fmt(e.nextTarget)}`}
+                                                    </p>
+                                                </div>
+                                                <div className='h-1.5 rounded-full bg-white/10 overflow-hidden'>
+                                                    <div className='h-full rounded-full' style={{ width: `${Math.round(e.progress * 100)}%`, background: e.color }} />
+                                                </div>
+                                                <p className='font-mono text-white/30 text-[9px]'>
+                                                    {e.isMax
+                                                        ? `PR MODE — next challenge ${fmt(e.nextTarget)}`
+                                                        : e.tier === 0
+                                                            ? `${fmt(e.nextTarget)} × 8 reps earns BRONZE`
+                                                            : `${fmt(Math.max(0, (e.nextTarget || 0) - (e.lastSuccess || 0)))} to go for ${nextLevelName.toUpperCase()}`}
                                                 </p>
-                                                <p className='font-mono text-white/30 text-[10px]'>
-                                                    {cur ? (isTimer ? formatDuration(cur) : `${cur}kg`) : '—'}
-                                                    {nextVal != null ? ` / ${nextVal}${isTimer ? 's' : 'kg'}` : ''}
-                                                </p>
+                                                {e.strengthRatio != null && (
+                                                    <p className='font-mono text-white/20 text-[9px]'>
+                                                        {e.strengthRatio.toFixed(2)}× bodyweight{e.personalBest > (e.lastSuccess || 0) ? ` · PB ${fmt(e.personalBest)}` : ''}
+                                                    </p>
+                                                )}
                                             </div>
-                                            <div className='h-1.5 rounded-full bg-white/10 overflow-hidden'>
-                                                <div className='h-full rounded-full' style={{ width: `${Math.round(e.rank.progress * 100)}%`, background: e.rank.color }} />
-                                            </div>
-                                            <p className='font-mono text-white/30 text-[9px]'>
-                                                {nextVal != null ? `${Math.max(0, nextVal - cur)}${isTimer ? 's' : 'kg'} to ${nextName.toUpperCase()}` : 'MAX TIER'}
-                                            </p>
-                                        </div>
-                                    )
-                                })}
+                                        )
+                                    })}
                                 </div>
                             )}
                         </>

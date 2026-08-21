@@ -1,6 +1,6 @@
 import { dbGet, dbPut } from './idb'
-import { getSessions, toDayKey, getUserProfile, getCustomExercises } from './storage'
-import { exerciseMetaByName, inferCategoryByName } from './exercises'
+import { getSessions, toDayKey, getUserProfile, getCustomExercises, getLadders, saveLadders } from './storage'
+import { exerciseMetaByName, inferCategoryByName, inferEquipmentByName } from './exercises'
 
 // ---------------------------------------------------------------------------
 // Ranks (player level ladder, driven by total XP)
@@ -247,21 +247,26 @@ export function rankForXp(xp) {
 }
 
 // ---------------------------------------------------------------------------
-// Per-exercise ranks (weight-based, relative to bodyweight, minimum 8 reps)
+// Exercise badge ladders (hybrid: bodyweight seeds the START, actual 8-rep
+// performance drives every step after that). Each exercise climbs its own
+// chain — one successful challenge = one level — so nothing here can cap a
+// strong user. Levels are chain positions, not bodyweight multiples.
 // ---------------------------------------------------------------------------
 
-export const EXERCISE_RANKS = [
-    { name: 'Wood', color: '#a16207', threshold: 0.3 },
-    { name: 'Bronze', color: '#cd7f32', threshold: 0.55 },
-    { name: 'Silver', color: '#cbd5e1', threshold: 0.8 },
-    { name: 'Gold', color: '#facc15', threshold: 1.0 },
-    { name: 'Platinum', color: '#22d3ee', threshold: 1.25 },
-    { name: 'Diamond', color: '#818cf8', threshold: 1.5 }
+export const LADDER_LEVELS = [
+    { name: 'Bronze', color: '#cd7f32' },
+    { name: 'Silver', color: '#cbd5e1' },
+    { name: 'Gold', color: '#facc15' },
+    { name: 'Platinum', color: '#22d3ee' },
+    { name: 'Diamond', color: '#818cf8' },
+    { name: 'Elite', color: '#f43f5e' },
+    { name: 'Master', color: '#a855f7' }
 ]
+export const LADDER_MAX = LADDER_LEVELS.length
 
 // Strength factor = the typical bodyweight multiple an intermediate lifter hits
-// for that category. Weight score = weight / (bodyweight × factor), so a score
-// of 1.0 always means "intermediate for your size" regardless of exercise.
+// for that category. Used ONLY for initial placement (beginner targets and
+// history seeding) — never as a progression ceiling.
 const CATEGORY_FACTORS = {
     Chest: 1.0,
     Back: 1.1,
@@ -275,7 +280,7 @@ const CATEGORY_FACTORS = {
 }
 
 // Seconds that count as an "intermediate" effort for that category, so timer
-// exercises use the exact same threshold table as weight lifts.
+// exercises mirror the weight ladder in time.
 const CATEGORY_TIME_FACTORS = {
     Chest: 60,
     Back: 60,
@@ -288,41 +293,58 @@ const CATEGORY_TIME_FACTORS = {
     Cardio: 600
 }
 
-export function strengthFactorForCategory(category) {
+function strengthFactorForCategory(category) {
     return CATEGORY_FACTORS[category] ?? 1.0
 }
 
-export function timeFactorForCategory(category) {
+function timeFactorForCategory(category) {
     return CATEGORY_TIME_FACTORS[category] ?? 60
 }
 
-export function strengthScore({ weight, bodyweight, category }) {
-    const bw = parseFloat(bodyweight)
-    if (!bw || !(weight > 0)) return 0
-    return weight / (bw * strengthFactorForCategory(category))
+// Equipment loading class → multiplier on the starting target only. Machines
+// and cables let you move more iron than free weights for the same muscles;
+// dumbbell names assume the logged weight is per-hand.
+const EQUIPMENT_FACTORS = { barbell: 1.0, machine: 0.75, cable: 0.55, dumbbell: 0.4, bodyweight: 1.0 }
+
+// Fraction of an intermediate effort a brand-new user starts at — deliberately
+// achievable so the first badge comes fast and motivation sticks.
+const BEGINNER_SEED = 0.3
+
+// Verified strength relative to bodyweight → starting level for users who
+// already train. Passing index i places them at level i+1 on first launch.
+const SEED_SCORES = [0.55, 0.8, 1.0, 1.25, 1.5, 2.0, 2.5]
+
+function roundTo(value, step) {
+    return Math.round(value / step) * step
 }
 
-export function durationScore({ seconds, category }) {
-    if (!(seconds > 0)) return 0
-    return seconds / timeFactorForCategory(category)
+// Practical gym increments: ~8% up, rounded to available plates, never under
+// +2.5kg. Example chain: 30 → 32.5 → 35 → 37.5.
+export function nextWeightTarget(lastSuccess) {
+    return Math.max(roundTo(lastSuccess * 1.08, 2.5), lastSuccess + 2.5)
 }
 
-export function exerciseRankForScore(score) {
-    let tier = 0
-    for (let i = 1; i < EXERCISE_RANKS.length; i++) {
-        if (score >= EXERCISE_RANKS[i].threshold) tier = i
-        else break
+// Timer mirror: ~10% longer holds, rounded to 5s, never under +5s.
+export function nextTimeTarget(lastSuccess) {
+    return Math.max(roundTo(lastSuccess * 1.1, 5), lastSuccess + 5)
+}
+
+// Initial placement ONLY. The first challenge is a fraction of an
+// intermediate effort so beginners earn Bronze quickly; strong users skip
+// ahead via seedLaddersFromHistory instead of grinding from here.
+export function beginnerTarget({ bodyweight, category, mode, name }) {
+    if (mode === 'timer') {
+        return Math.max(15, roundTo(timeFactorForCategory(category) * BEGINNER_SEED, 5))
     }
-    const current = EXERCISE_RANKS[tier]
-    const next = tier < EXERCISE_RANKS.length - 1 ? EXERCISE_RANKS[tier + 1] : null
-    return {
-        tier,
-        name: current.name,
-        color: current.color,
-        score,
-        nextScore: next ? next.threshold : null,
-        progress: next ? Math.min((score - current.threshold) / (next.threshold - current.threshold), 1) : 1
-    }
+    const bw = parseFloat(bodyweight) || 60
+    const equip = EQUIPMENT_FACTORS[inferEquipmentByName(name)] ?? 1.0
+    return Math.max(2.5, roundTo(bw * strengthFactorForCategory(category) * equip * BEGINNER_SEED, 2.5))
+}
+
+function badgeFor(successes) {
+    if (!(successes > 0)) return null
+    const tier = Math.min(successes, LADDER_MAX)
+    return { tier, ...LADDER_LEVELS[tier - 1], isMax: successes >= LADDER_MAX }
 }
 
 // Best recorded effort per exercise across sessions: heaviest weight hit for
@@ -351,24 +373,147 @@ export function bestExerciseEffort(sessions) {
     return best
 }
 
-export function computeExerciseRanks(sessions, bodyweight = 0) {
+// Builds ladders for every exercise found in history without touching entries
+// that already exist — earned progress is never recalculated. A verified 8+
+// rep best places experienced users at their true starting level via
+// SEED_SCORES; their actual weight becomes the basis for the next target.
+export function seedLaddersFromHistory(sessions, bodyweight = 0, existing = {}) {
     const best = bestExerciseEffort(sessions)
-    return Object.entries(best)
-        .map(([name, e]) => {
-            const score = e.mode === 'timer'
-                ? durationScore({ seconds: e.duration, category: e.category })
-                : strengthScore({ weight: e.weight, bodyweight, category: e.category })
-            return {
-                name,
-                category: e.category || 'Chest',
-                mode: e.mode,
-                score,
-                weight: e.weight,
-                duration: e.duration,
-                rank: exerciseRankForScore(score)
+    const next = { ...existing }
+    let changed = false
+    for (const [name, e] of Object.entries(best)) {
+        // Re-seed only entries stranded at Unranked by the pre-fix placement
+        // bug; earned progress is never recalculated.
+        if (next[name] && !(next[name].successes === 0 && next[name].lastSuccess > 0)) continue
+        const perf = e.mode === 'timer' ? e.duration : e.weight
+        if (!(perf > 0)) continue
+        const category = e.category || 'Chest'
+        const bw = parseFloat(bodyweight) || 60
+        const factor = e.mode === 'timer'
+            ? perf / timeFactorForCategory(category)
+            : perf / (bw * strengthFactorForCategory(category))
+        let successes = 0
+        while (successes < SEED_SCORES.length && factor >= SEED_SCORES[successes]) successes++
+        const start = beginnerTarget({ bodyweight: bw, category, mode: e.mode, name })
+        // Anyone with verified history that already clears the starter challenge
+        // holds at least Bronze — no trained user should sit at Unranked.
+        if (!successes && perf >= start) successes = 1
+        const stepFn = e.mode === 'timer' ? nextTimeTarget : nextWeightTarget
+        next[name] = {
+            mode: e.mode,
+            category,
+            startTarget: start,
+            lastSuccess: perf,
+            personalBest: perf,
+            nextTarget: successes > 0 ? stepFn(perf) : Math.max(start, stepFn(perf)),
+            successes,
+            highestLevel: Math.min(successes, LADDER_MAX),
+            bodyweightAtTime: parseFloat(bodyweight) || null,
+            updatedAt: new Date().toISOString()
+        }
+        changed = true
+    }
+    return changed ? next : null
+}
+
+// Evaluates one saved session against the ladders. A set completes the current
+// challenge when it reaches the target with 8+ valid reps (timer: matches the
+// hold time). The actually-performed weight becomes the base for the next
+// target — bodyweight is never re-applied after initial placement. Failing
+// reps or weight keeps the level and target untouched.
+export function applySessionToLadders(ladders, session, bodyweight = 0, now = new Date()) {
+    const next = { ...ladders }
+    const promotions = []
+    for (const ex of (session?.exercises || [])) {
+        const isTimer = ex.mode === 'timer'
+        let entry = next[ex.name] ? { ...next[ex.name] } : null
+        if (!entry) {
+            const category = ex.category || exerciseMetaByName(ex.name)?.category || inferCategoryByName(ex.name) || 'Chest'
+            const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : 'weight', name: ex.name })
+            entry = {
+                mode: isTimer ? 'timer' : 'weight',
+                category,
+                startTarget: start,
+                lastSuccess: null,
+                personalBest: 0,
+                nextTarget: start,
+                successes: 0,
+                highestLevel: 0,
+                bodyweightAtTime: parseFloat(bodyweight) || null,
+                updatedAt: now.toISOString()
             }
-        })
-        .sort((a, b) => b.score - a.score)
+        }
+        let perf = 0
+        if (isTimer) {
+            for (const s of (ex?.sets || [])) perf = Math.max(perf, parseDurationSeconds(s?.reps))
+        } else {
+            for (const s of (ex?.sets || [])) {
+                const r = parseReps(s?.reps)
+                const w = parseWeight(s?.weight)
+                if (r >= MIN_CHALLENGE_REPS && w != null && w > perf) perf = w
+            }
+        }
+        if (perf > (entry.personalBest || 0)) entry.personalBest = perf
+        const prevTier = Math.min(entry.successes || 0, LADDER_MAX)
+        if (perf > 0 && perf >= entry.nextTarget) {
+            entry.successes = (entry.successes || 0) + 1
+            entry.lastSuccess = perf
+            entry.nextTarget = isTimer ? nextTimeTarget(perf) : nextWeightTarget(perf)
+            if (bodyweight) entry.bodyweightAtTime = parseFloat(bodyweight)
+            entry.updatedAt = now.toISOString()
+            const badge = badgeFor(entry.successes)
+            if (badge.tier > prevTier) promotions.push({ name: ex.name, ...badge })
+        }
+        entry.highestLevel = Math.max(entry.highestLevel || 0, Math.min(entry.successes || 0, LADDER_MAX))
+        next[ex.name] = entry
+    }
+    return { ladders: next, promotions }
+}
+
+export async function ensureLadders(sessions, bodyweight = 0) {
+    const existing = await getLadders()
+    const seeded = seedLaddersFromHistory(sessions, bodyweight, existing)
+    if (!seeded) return existing
+    await saveLadders(seeded)
+    return seeded
+}
+
+// Call after a session is saved. Persists ladder advances and returns the new
+// badges so the UI can celebrate them exactly once.
+export async function recordSessionLadders(session, bodyweight = 0) {
+    const current = await getLadders()
+    const { ladders, promotions } = applySessionToLadders(current, session, bodyweight)
+    await saveLadders(ladders)
+    return { ladders, promotions }
+}
+
+// Display-ready view. Relative strength uses CURRENT bodyweight, so gaining
+// or losing weight updates the ratio without ever touching earned progress.
+export function ladderView(entry, bodyweight = 0) {
+    const badge = badgeFor(entry.successes)
+    const bw = parseFloat(bodyweight) || entry.bodyweightAtTime || 0
+    const ref = entry.lastSuccess || 0
+    return {
+        mode: entry.mode,
+        category: entry.category,
+        successes: entry.successes || 0,
+        tier: badge?.tier || 0,
+        levelName: badge?.name || 'Unranked',
+        color: badge?.color || '#737373',
+        isMax: !!badge?.isMax,
+        startTarget: entry.startTarget,
+        lastSuccess: entry.lastSuccess ?? null,
+        personalBest: entry.personalBest || 0,
+        nextTarget: entry.nextTarget,
+        strengthRatio: bw > 0 && ref > 0 ? Math.round((ref / bw) * 100) / 100 : null,
+        progress: entry.nextTarget > 0 ? Math.min((entry.personalBest || 0) / entry.nextTarget, 1) : 0
+    }
+}
+
+export function computeExerciseLadders(ladders = {}, bodyweight = 0) {
+    return Object.entries(ladders)
+        .map(([name, entry]) => ({ name, ...ladderView(entry, bodyweight) }))
+        .sort((a, b) => b.tier - a.tier || (b.strengthRatio || 0) - (a.strengthRatio || 0) || a.name.localeCompare(b.name))
 }
 
 // ---------------------------------------------------------------------------
@@ -657,7 +802,7 @@ export function computeStreakWithFreezes(sessions, frozenDays = [], now = new Da
 // Progression snapshot + celebration state
 // ---------------------------------------------------------------------------
 
-export function computeProgress({ sessions, frozenDays = [], now = new Date(), startRank = 1, bodyweight = 0, picks = {}, customExercises = [] }) {
+export function computeProgress({ sessions, frozenDays = [], now = new Date(), startRank = 1, bodyweight = 0, picks = {}, customExercises = [], ladders = {} }) {
     const xp = Math.max(totalXp(sessions), xpThresholdForLevel(startRank))
     const xpRank = rankForXp(xp)
     const eligible = Math.max(startRank, challengeEligibleLevel(sessions, picks, customExercises))
@@ -665,7 +810,7 @@ export function computeProgress({ sessions, frozenDays = [], now = new Date(), s
     const threshold = xpThresholdForLevel(level)
     const nextThreshold = level < MAX_LEVEL ? xpThresholdForLevel(level + 1) : null
     const streak = computeStreakWithFreezes(sessions, frozenDays, now)
-    const exerciseRanks = computeExerciseRanks(sessions, bodyweight)
+    const exerciseRanks = computeExerciseLadders(ladders, bodyweight)
     return {
         xp,
         rank: {
@@ -709,11 +854,12 @@ export async function refreshProgress(now = new Date()) {
         getCustomExercises()
     ])
     const bodyweight = parseFloat(profile?.weight) || 0
-    const progress = computeProgress({ sessions, frozenDays: freezeState.frozenDays, now, startRank, bodyweight, picks, customExercises })
+    const ladders = await ensureLadders(sessions, bodyweight)
+    const progress = computeProgress({ sessions, frozenDays: freezeState.frozenDays, now, startRank, bodyweight, picks, customExercises, ladders })
     const wasLevel = marker.lastLevel || 0
     const isLevelUp = progress.rank.level > wasLevel
     if (isLevelUp) {
         await saveProgressionState({ lastLevel: Math.max(wasLevel, progress.rank.level) })
     }
-    return { progress, isLevelUp }
+    return { progress, isLevelUp, ladders }
 }

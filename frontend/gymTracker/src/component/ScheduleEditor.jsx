@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react'
-import { Search, Check, X, Plus } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { Search, Check, X, Plus, ChevronDown } from 'lucide-react'
 import { getCustomExercises } from '../services/storage'
 import { defaultExercises } from '../services/exercises'
 
@@ -69,12 +69,21 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
     const [activeDay, setActiveDay] = useState(DAYS[0].key)
     const [query, setQuery] = useState('')
     const [pickerOpen, setPickerOpen] = useState(false)
+    const [openGroup, setOpenGroup] = useState(null)
     const [custom, setCustom] = useState([])
+    const listRef = useRef(null)
     const normalized = useMemo(() => normalize(schedule), [schedule])
 
     useEffect(() => {
         getCustomExercises().then(setCustom).catch(() => {})
     }, [])
+
+    useEffect(() => {
+        if (!openGroup || !listRef.current) return
+        listRef.current
+            .querySelector(`[data-group="${openGroup}"]`)
+            ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, [openGroup])
 
     const groups = useMemo(() => buildGroups(custom), [custom])
     const modeByName = useMemo(() => buildModeMap(custom), [custom])
@@ -100,24 +109,32 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
         onChange({ ...normalized, [activeDay]: next })
     }
 
-    const add = (name) => {
-        if (!assignedNames.has(name.toLowerCase())) {
-            onChange({ ...normalized, [activeDay]: [...assigned, { name, mode: modeByName.get(name.toLowerCase()) }] })
-        }
-    }
-
     const removeAt = (index) => {
         onChange({ ...normalized, [activeDay]: assigned.filter((_, i) => i !== index) })
     }
 
     const renderGroups = (rows) => (
-        <div className='flex flex-col gap-1 max-h-64 overflow-y-auto scroll'>
-            {visibleGroups.map(group => (
-                <div key={group.category} className='flex flex-col'>
-                    <p className='font-bebas text-orange-500/80 text-sm tracking-[1px] mt-1.5 mb-0.5'>{group.category.toUpperCase()}</p>
-                    {group.names.map(name => rows(name))}
-                </div>
-            ))}
+        <div ref={listRef} className='flex flex-col gap-1 max-h-64 overflow-y-auto scroll'>
+            {visibleGroups.map(group => {
+                const open = q ? true : openGroup === group.category
+                const addedCount = group.names.filter(n => assignedNames.has(n.toLowerCase())).length
+                return (
+                    <div key={group.category} className='flex flex-col' data-group={group.category}>
+                        <button
+                            onClick={() => setOpenGroup(openGroup === group.category && !q ? null : group.category)}
+                            className='flex items-center gap-1.5 rounded-lg px-2 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 transition-all cursor-pointer mt-0.5'
+                        >
+                            <ChevronDown size={12} className={`text-orange-500 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+                            <span className='font-bebas text-orange-500 text-sm tracking-[1px]'>{group.category.toUpperCase()}</span>
+                            <span className='font-mono text-[10px] text-white/40'>({group.names.length})</span>
+                            {addedCount > 0 && (
+                                <span className='font-mono text-[10px] text-emerald-400 ml-auto'>{addedCount} added</span>
+                            )}
+                        </button>
+                        {open && group.names.map(name => rows(name))}
+                    </div>
+                )
+            })}
             {visibleGroups.length === 0 && (
                 <p className='font-mono text-white/30 text-xs text-center py-2'>No exercises match.</p>
             )}
@@ -194,16 +211,23 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
                             {addableCount === 0 && !q ? (
                                 <p className='font-mono text-white/30 text-xs text-center py-2'>All exercises added.</p>
                             ) : (
-                                renderGroups(name => (
-                                    <button
-                                        key={name}
-                                        onClick={() => add(name)}
-                                        className='flex items-center justify-between rounded-lg px-2 py-1.5 font-mono text-xs bg-black/30 text-white/80 hover:bg-orange-500/10 transition-all cursor-pointer'
-                                    >
-                                        <span className='truncate'>{name}</span>
-                                        <Plus size={12} className='shrink-0 ml-2 text-orange-500' />
-                                    </button>
-                                ))
+                                renderGroups(name => {
+                                    const added = assignedNames.has(name.toLowerCase())
+                                    return (
+                                        <button
+                                            key={name}
+                                            onClick={() => toggle(name)}
+                                            className={`flex items-center justify-between rounded-lg px-2 py-1.5 font-mono text-xs transition-all cursor-pointer ${
+                                                added ? 'bg-orange-500/20 text-orange-500' : 'bg-black/30 text-white/80 hover:bg-orange-500/10'
+                                            }`}
+                                        >
+                                            <span className='truncate'>{name}</span>
+                                            {added
+                                                ? <Check size={12} className='shrink-0 ml-2' />
+                                                : <Plus size={12} className='shrink-0 ml-2 text-orange-500' />}
+                                        </button>
+                                    )
+                                })
                             )}
                             <button
                                 onClick={() => setPickerOpen(false)}

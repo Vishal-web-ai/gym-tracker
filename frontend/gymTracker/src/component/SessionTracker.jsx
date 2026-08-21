@@ -7,8 +7,7 @@ import RestTimer from './RestTimer'
 import { createSession, getRestSound } from '../services/storage'
 import { addMedia } from '../services/media'
 import { getErrorMessage } from '../services/errors'
-import { strengthScore, durationScore, exerciseRankForScore, strengthFactorForCategory, timeFactorForCategory, buildHistoryIndex, parseDurationSeconds, formatDuration } from '../services/progression'
-import { exerciseMetaByName, inferCategoryByName } from '../services/exercises'
+import { buildHistoryIndex, parseDurationSeconds, formatDuration, ladderView } from '../services/progression'
 
 const XP_BURST = Array.from({ length: 12 }, (_, i) => {
     const angle = (i / 12) * Math.PI * 2
@@ -37,7 +36,7 @@ const WeightCell = ({ value, onChange, disabled = false }) => (
     />
 )
 
-const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, showNotes, setShowNotes, sound, bodyweight, sessions = [], onXpFlash, canPrev, canNext, onGoPrev, onGoNext }) => {
+const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, showNotes, setShowNotes, sound, bodyweight, sessions = [], ladders = null, onXpFlash, canPrev, canNext, onGoPrev, onGoNext }) => {
     const photoCaptureRef = useRef(null)
     const photoGalleryRef = useRef(null)
     const videoCaptureRef = useRef(null)
@@ -52,7 +51,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const dragRef = useRef(null)
     const rafRef = useRef(null)
     const snapTimerRef = useRef(null)
-    const blurTimerRef = useRef(null)
+    const settleTimerRef = useRef(null)
     const isTimer = exercise.mode === 'timer'
     const setCount = Math.max(3, Math.min(10, exerciseSetCount?.[idx] || 3))
     const prevSetCount = useRef(setCount)
@@ -71,14 +70,14 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         el.style.transform = `translateX(${px}px) rotate(${rot}deg) scale(${1 - 0.04 * prog})`
         el.style.willChange = 'transform'
         if (glowRef.current) glowRef.current.style.opacity = 0.55 * prog
-        clearTimeout(blurTimerRef.current)
+        clearTimeout(settleTimerRef.current)
         if (px !== 0) {
             // backdrop-blur is very expensive on weak devices while a layer is
             // moving (it re-samples the backdrop every frame). Drop it during
             // motion and restore once the card settles.
             el.style.backdropFilter = 'none'
         } else if (ms > 0) {
-            blurTimerRef.current = setTimeout(() => {
+            settleTimerRef.current = setTimeout(() => {
                 el.style.willChange = ''
                 el.style.backdropFilter = ''
             }, ms + 50)
@@ -88,6 +87,10 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         }
     }
 
+    const buzz = (pattern = 10) => {
+        try { navigator.vibrate?.(pattern) } catch { /* unsupported */ }
+    }
+
     const snapBack = () => setCardTransform(0, 220)
 
     // Flings the card fully off-screen in the given direction, then advances.
@@ -95,7 +98,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         const el = cardRef.current
         if (!el) return
         const exit = (width + CW) / 2 + 30
-        clearTimeout(blurTimerRef.current)
+        clearTimeout(settleTimerRef.current)
         el.style.transition = 'transform 340ms cubic-bezier(0.22, 1, 0.36, 1)'
         el.style.transform = `translateX(${exit * dir}px) rotate(${22 * dir}deg) scale(0.95)`
         el.style.willChange = 'transform'
@@ -108,7 +111,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         const el = cardRef.current
         if (!el) return
         clearTimeout(snapTimerRef.current)
-        clearTimeout(blurTimerRef.current)
+        clearTimeout(settleTimerRef.current)
         dragRef.current = { id: e.pointerId, startX: e.clientX, lastX: e.clientX, lastT: performance.now(), vx: 0 }
         try { el.setPointerCapture(e.pointerId) } catch { /* pointer capture is optional */ }
         el.style.transition = 'none'
@@ -141,11 +144,14 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         dragRef.current = null
         if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
         const dx = e.clientX - d.startX
-        if ((dx < -60 || d.vx < -500) && canNext) {
+        if ((dx < -40 || d.vx < -350) && canNext) {
+            buzz(12)
             flyOut(-1)
-        } else if ((dx > 60 || d.vx > 500) && canPrev) {
+        } else if ((dx > 40 || d.vx > 350) && canPrev) {
+            buzz(12)
             flyOut(1)
         } else {
+            if (Math.abs(dx) > 8) buzz(6)
             snapBack()
         }
     }
@@ -209,37 +215,22 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     }))
 
     const savedEntry = useMemo(() => buildHistoryIndex(sessions)[exercise.name], [sessions, exercise.name])
-    const savedWeight = savedEntry && savedEntry.bestWeight > 0 ? savedEntry.bestWeight : 0
-    const savedDuration = savedEntry?.bestDuration || 0
-    const category = exercise.category || exerciseMetaByName(exercise.name)?.category || inferCategoryByName(exercise.name)
-    let liveWeight = 0
-    let liveDuration = 0
-    if (isTimer) {
-        for (let si = 0; si < setCount; si++) {
-            const d = parseDurationSeconds(exerciseSets[idx]?.[si])
-            if (d > liveDuration) liveDuration = d
-        }
-    } else {
-        for (let si = 0; si < setCount; si++) {
+    const ladder = ladders?.[exercise.name] ? ladderView(ladders[exercise.name], bodyweight) : null
+    let livePerf = 0
+    for (let si = 0; si < setCount; si++) {
+        if (!exerciseDone[idx]?.[si]) continue
+        if (isTimer) {
+            livePerf = Math.max(livePerf, parseDurationSeconds(exerciseSets[idx]?.[si]))
+        } else {
             const reps = parseFloat(exerciseSets[idx]?.[si]) || 0
             const w = parseFloat(String(exerciseWeights[idx]?.[si]).replace('kg', '')) || 0
-            if (reps >= 8 && w > liveWeight) liveWeight = w
+            if (reps >= 8 && w > livePerf) livePerf = w
         }
     }
-    const bestWeight = Math.max(savedWeight, liveWeight)
-    const bestDuration = Math.max(savedDuration, liveDuration)
-    const score = isTimer
-        ? durationScore({ seconds: bestDuration, category })
-        : strengthScore({ weight: bestWeight, bodyweight, category })
-    const rank = exerciseRankForScore(score)
-    const nextScore = rank.nextScore
-    const nextTarget = nextScore != null
-        ? isTimer
-            ? Math.round(timeFactorForCategory(category) * nextScore)
-            : Math.round(bodyweight * strengthFactorForCategory(category) * nextScore)
-        : null
-    const displayCur = isTimer ? (formatDuration(bestDuration) || '—') : bestWeight ? `${bestWeight}kg` : '—'
-    const displayNext = nextTarget != null ? `${nextTarget}${isTimer ? 's' : 'kg'}` : null
+    const challengeHit = !!ladder && livePerf > 0 && livePerf >= ladder.nextTarget
+    const laddersReady = ladders != null
+    const unranked = laddersReady && (!ladder || ladder.tier === 0)
+    const fmtLoad = (v) => (v == null || !(v > 0) ? '—' : isTimer ? formatDuration(v) : `${v}kg`)
     const pr = savedEntry && savedEntry.bestWeight > 0
         ? { name: exercise.name, weight: savedEntry.bestWeight, reps: savedEntry.bestRepsAtWeight?.[savedEntry.bestWeight] || '—' }
         : null
@@ -312,25 +303,16 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                 }}
             />
             <div
-                className='absolute inset-0 pointer-events-none'
-                style={{
-                    background: 'radial-gradient(110% 85% at 90% 100%, rgba(255,255,255,0.06) 0%, transparent 62%), radial-gradient(80% 55% at 0% 0%, rgba(255,255,255,0.04) 0%, transparent 55%)'
-                }}
-            />
-            {/* Glass shine — top highlight + inner glow + diagonal streak */}
-            <div
                 className='absolute inset-0 pointer-events-none rounded-3xl'
                 style={{
+                    backgroundImage: [
+                        'linear-gradient(115deg, transparent 28%, rgba(255,255,255,0.07) 42%, transparent 56%)',
+                        'linear-gradient(180deg, rgba(255,255,255,0.10), transparent 40%)',
+                        'radial-gradient(110% 85% at 90% 100%, rgba(255,255,255,0.06) 0%, transparent 62%)',
+                        'radial-gradient(80% 55% at 0% 0%, rgba(255,255,255,0.04) 0%, transparent 55%)'
+                    ].join(', '),
                     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16), inset 0 0 50px rgba(255,255,255,0.05)'
                 }}
-            />
-            <div
-                className='absolute inset-x-0 top-0 h-2/5 pointer-events-none'
-                style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.10), transparent)' }}
-            />
-            <div
-                className='absolute inset-0 pointer-events-none'
-                style={{ background: 'linear-gradient(115deg, transparent 28%, rgba(255,255,255,0.07) 42%, transparent 56%)' }}
             />
             <div className='relative flex flex-col h-full px-4 py-2.5'>
                 {/* Title row + trash */}
@@ -576,15 +558,23 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                     )}
                 </div>
 
-                {/* Exercise rank + PR — centered between set controls and rest timer */}
+                {/* Badge ladder + PR — centered between set controls and rest timer */}
                 <div className='flex items-center justify-center gap-5 pt-1.5 mt-auto'>
                     <div className='flex items-center gap-2 min-w-0'>
-                        <span className='h-3 w-3 rounded-full shrink-0' style={{ background: rank.color }} />
-                        <span className='font-bebas text-sm tracking-[1px] whitespace-nowrap' style={{ color: rank.color }}>
-                            {rank.name.toUpperCase()}
+                        <span className='h-3 w-3 rounded-full shrink-0' style={{ background: ladder?.color || '#737373' }} />
+                        <span className='font-bebas text-sm tracking-[1px] whitespace-nowrap' style={{ color: ladder?.color || '#9ca3af' }}>
+                            {!laddersReady ? '…' : unranked ? 'UNRANKED' : ladder.levelName.toUpperCase()}
                         </span>
-                        <span className='font-mono text-[11px] text-neutral-500 whitespace-nowrap'>
-                            {displayCur}{displayNext ? ` / ${displayNext}` : ' / MAX'}
+                        <span className={`font-mono text-[11px] whitespace-nowrap ${challengeHit ? 'text-emerald-400' : 'text-neutral-500'}`}>
+                            {challengeHit
+                                ? 'CHALLENGE DONE ✓'
+                                : !laddersReady
+                                    ? ''
+                                    : !ladder
+                                        ? 'COMPLETE A SET TO RANK'
+                                        : ladder.tier === 0
+                                            ? `${isTimer ? 'HOLD' : '8 REPS @'} ${fmtLoad(ladder.nextTarget)} FOR BRONZE`
+                                            : `${fmtLoad(ladder.lastSuccess)} → ${fmtLoad(ladder.nextTarget)}`}
                         </span>
                     </div>
                     {pr && (
@@ -609,8 +599,9 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
     )
 }
 
-const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAddExercises, onSessionSaved, onJumpToExercise, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, currentIndex, setCurrentIndex, showNotes, setShowNotes, bodyweight = 0, sessions = [] }) => {
+const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAddExercises, onSessionSaved, onJumpToExercise, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, currentIndex, setCurrentIndex, showNotes, setShowNotes, bodyweight = 0, sessions = [], ladders = null }) => {
     const [showNameModal, setShowNameModal] = useState(false)
+    const [showWarnModal, setShowWarnModal] = useState(false)
     const [showPreview, setShowPreview] = useState(false)
     const [workoutName, setWorkoutName] = useState('')
     const [restSound, setRestSound] = useState(null)
@@ -630,8 +621,14 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
     const current = exercises.length === 0 ? 0 : Math.min(currentIndex, exercises.length - 1)
     const isLast = current === exercises.length - 1
     const selectedCount = plannedExercises.filter(ex => exercises.some(e => e.id === ex.id)).length
+    const exerciseStarted = (idx) => Object.values(exerciseDone?.[idx] || {}).some(Boolean)
+    const unfinished = exercises.filter((_, idx) => !exerciseStarted(idx))
 
     const handleSaveClick = () => {
+        if (unfinished.length > 0) {
+            setShowWarnModal(true)
+            return
+        }
         setWorkoutName('')
         setShowNameModal(true)
     }
@@ -679,17 +676,22 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                         <span className='text-neutral-400'> {current + 1} OF {exercises.length}</span>
                     </button>
                     <div className='flex gap-1.5'>
-                        {exercises.map((ex, i) => (
-                            <button
-                                key={ex.id}
-                                onClick={() => onJumpToExercise(ex.id)}
-                                title={ex.name}
-                                className={`h-[3px] rounded-full w-5 transition-all cursor-pointer ${i === current
-                                    ? 'bg-orange-500'
-                                    : 'bg-neutral-800 hover:bg-neutral-600'
-                                    }`}
-                            />
-                        ))}
+                        {exercises.map((ex, i) => {
+                            const started = exerciseStarted(i)
+                            return (
+                                <button
+                                    key={ex.id}
+                                    onClick={() => onJumpToExercise(ex.id)}
+                                    title={started ? `${ex.name} — started` : `${ex.name} — not started`}
+                                    className={`h-[3px] rounded-full w-5 transition-all cursor-pointer ${i === current
+                                        ? 'bg-orange-500'
+                                        : started
+                                            ? 'bg-emerald-400'
+                                            : 'bg-neutral-800 hover:bg-neutral-600'
+                                        }`}
+                                />
+                            )
+                        })}
                     </div>
                 </div>
 
@@ -719,6 +721,7 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                                 sound={restSound}
                                 bodyweight={bodyweight}
                                 sessions={sessions}
+                                ladders={ladders}
                                 onXpFlash={setXpFlash}
                                 canPrev={current > 0}
                                 canNext={!isLast}
@@ -787,6 +790,50 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                                 className='flex-1 bg-orange-500 text-black font-bold py-3 rounded-xl hover:bg-orange-400 transition-all duration-300 cursor-pointer font-mono'
                             >
                                 Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Incomplete-exercises warning modal */}
+            {showWarnModal && (
+                <div className='fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4'>
+                    <div className='bg-neutral-800 border border-orange-500/40 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-popIn'>
+                        <h2 className='text-white text-xl font-bold font-mono mb-1'>Not finished yet</h2>
+                        <p className='text-neutral-400 text-xs font-mono mb-3'>
+                            {unfinished.length} exercise{unfinished.length > 1 ? 's' : ''} with no completed sets:
+                        </p>
+                        <ul className='flex flex-col gap-1.5 max-h-48 overflow-y-auto scroll mb-5'>
+                            {unfinished.map(ex => (
+                                <li
+                                    key={ex.id}
+                                    onClick={() => {
+                                        setShowWarnModal(false)
+                                        onJumpToExercise(ex.id)
+                                    }}
+                                    className='flex items-center gap-2.5 rounded-lg bg-neutral-900/70 border border-neutral-700 px-3 py-2 cursor-pointer hover:border-orange-500/50 transition-colors'
+                                >
+                                    <span className='w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0' />
+                                    <span className='text-white text-sm font-mono truncate'>{ex.name}</span>
+                                </li>
+                            ))}
+                        </ul>
+                        <div className='flex gap-3'>
+                            <button
+                                onClick={() => setShowWarnModal(false)}
+                                className='flex-1 border border-neutral-600 text-white font-semibold py-3 rounded-xl hover:bg-neutral-700 transition-all duration-300 cursor-pointer font-mono'
+                            >
+                                Review
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowWarnModal(false)
+                                    setWorkoutName('')
+                                    setShowNameModal(true)
+                                }}
+                                className='flex-1 bg-orange-500 text-black font-bold py-3 rounded-xl hover:bg-orange-400 transition-all duration-300 cursor-pointer font-mono'
+                            >
+                                Save Anyway
                             </button>
                         </div>
                     </div>
