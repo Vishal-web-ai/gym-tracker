@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Check } from 'lucide-react'
-import { CHALLENGE_GROUPS } from '../services/progression'
+import { CHALLENGE_GROUPS, DEFAULT_CHALLENGE_PICKS } from '../services/progression'
 import { defaultExercises, exerciseMetaByName } from '../services/exercises'
 
 const normName = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -55,17 +55,33 @@ const ChallengePicker = ({ schedule = {}, customExercises = [], picks = {}, onCh
     return (
         <div className='flex flex-col gap-4 w-full'>
             <p className='font-mono text-white/50 text-center' style={{ fontSize: 11 }}>
-                Pick ONE exercise per muscle group — these become your rank challenges.
+                Pick ONE exercise per muscle group — these become your rank challenges. Cardio is optional.
             </p>
             {CHALLENGE_GROUPS.map((g) => {
                 const list = options[g.key] || []
                 const selected = picks[g.key]
+                const skipped = selected === null
                 return (
-                    <div key={g.key}>
-                        <p className='font-bebas text-orange-400 tracking-[2px] mb-1.5' style={{ fontSize: 16 }}>
-                            {g.label.toUpperCase()}
-                        </p>
-                        <div className='flex gap-2 overflow-x-auto scroll pb-1 -mx-1 px-1'>
+                    <div key={g.key} className={skipped ? 'opacity-40' : ''}>
+                        <div className='flex items-center justify-between mb-1.5'>
+                            <p className='font-bebas text-orange-400 tracking-[2px]' style={{ fontSize: 16 }}>
+                                {g.label.toUpperCase()}
+                            </p>
+                            {g.key === 'cardio' && (
+                                <button
+                                    onClick={() => select('cardio', skipped ? DEFAULT_CHALLENGE_PICKS.cardio : null)}
+                                    className={`font-mono rounded-lg px-2 py-1 border transition-all cursor-pointer ${
+                                        skipped
+                                            ? 'border-white/20 text-white/40'
+                                            : 'border-orange-500/40 text-orange-400'
+                                    }`}
+                                    style={{ fontSize: 10 }}
+                                >
+                                    {skipped ? 'SKIPPED' : 'INCLUDED'}
+                                </button>
+                            )}
+                        </div>
+                        <div className={`flex gap-2 overflow-x-auto scroll pb-1 -mx-1 px-1 ${skipped ? 'pointer-events-none' : ''}`}>
                             {list.map((name) => {
                                 const active = selected === name
                                 return (

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, X, Check, Dumbbell, Timer } from 'lucide-react'
 import { getCustomExercises, createExercise, updateExercise, deleteExercise } from '../services/storage'
+import { parseChallengeTime, formatChallengeTime } from '../services/progression'
 import ThemedSelect from './ThemedSelect'
 
 const CATEGORIES = ['Chest', 'Back', 'Biceps', 'Triceps', 'Arms', 'Shoulders', 'Legs', 'Core', 'Cardio']
@@ -24,7 +25,7 @@ function groupByCategory(exercises) {
     })
 }
 
-const formInitial = { name: '', category: 'Chest', mode: 'weight', muscle: '' }
+const formInitial = { name: '', category: 'Chest', mode: 'weight', muscle: '', challengeTime: '' }
 
 const MyExercises = ({ onClose }) => {
     const [customExercises, setCustomExercises] = useState([])
@@ -58,13 +59,23 @@ const MyExercises = ({ onClose }) => {
 
     const handleSave = async () => {
         if (!formData.name.trim() || !formData.category) return
+        const timeText = formData.challengeTime.trim()
+        let challengeTime = null
+        if (timeText) {
+            challengeTime = parseChallengeTime(timeText)
+            if (!challengeTime || challengeTime <= 0) {
+                setSaveError('Invalid challenge time — use e.g. 90s, 5m or 2:30')
+                return
+            }
+        }
         setSaving(true)
         setSaveError('')
         try {
+            const payload = { ...formData, challengeTime }
             if (editingId) {
-                await updateExercise(editingId, formData)
+                await updateExercise(editingId, payload)
             } else {
-                await createExercise(formData)
+                await createExercise(payload)
             }
             resetForm()
             await fetchExercises()
@@ -77,7 +88,7 @@ const MyExercises = ({ onClose }) => {
 
     const handleEdit = (ex) => {
         setEditingId(ex.id)
-        setFormData({ name: ex.name, category: ex.category, mode: ex.mode === 'timer' ? 'timer' : 'weight', muscle: ex.muscle || '' })
+        setFormData({ name: ex.name, category: ex.category, mode: ex.mode === 'timer' ? 'timer' : 'weight', muscle: ex.muscle || '', challengeTime: formatChallengeTime(ex.challengeTime) })
         setShowForm(true)
     }
 
@@ -151,6 +162,18 @@ const MyExercises = ({ onClose }) => {
                                 placeholder='Target muscle (optional)'
                                 className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
                             />
+                            {(formData.mode === 'timer' || formData.category === 'Cardio') && (
+                                <div>
+                                    <p className='text-[10px] font-mono tracking-widest text-teal-400/60 mb-1'>CHALLENGE TIME — RANK 1 TARGET</p>
+                                    <input
+                                        type='text'
+                                        value={formData.challengeTime}
+                                        onChange={e => setFormData(p => ({ ...p, challengeTime: e.target.value }))}
+                                        placeholder='e.g. 90s, 5m or 2:30'
+                                        className='w-full bg-black/50 border border-teal-500/30 rounded-lg px-3 py-2 text-white placeholder-teal-500/50 outline-none focus:border-teal-500 font-mono text-sm'
+                                    />
+                                </div>
+                            )}
                             <div className='flex gap-2'>
                                 <button
                                     onClick={handleSave}

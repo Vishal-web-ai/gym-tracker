@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Pencil, Trash2, X, Check, ArrowLeft, ChevronRight, Search } from 'lucide-react'
 import { getCustomExercises, createExercise, updateExercise, deleteExercise } from '../services/storage'
 import { defaultExercises, inferCategoryByName } from '../services/exercises'
+import { parseChallengeTime, formatChallengeTime } from '../services/progression'
 import ThemedSelect from './ThemedSelect'
 
 const CATEGORIES = ['Chest', 'Back', 'Biceps', 'Triceps', 'Arms', 'Shoulders', 'Legs', 'Core', 'Cardio']
@@ -21,7 +22,7 @@ const ModeTag = ({ mode }) => (
     </span>
 )
 
-const formInitial = { name: '', category: 'Chest', mode: 'weight', muscle: '' }
+const formInitial = { name: '', category: 'Chest', mode: 'weight', muscle: '', challengeTime: '' }
 
 const ExercisesList = ({ onSelectExercise, onClose }) => {
     const [customExercises, setCustomExercises] = useState([])
@@ -74,7 +75,8 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
             name,
             category: activeCategory === 'all' ? inferCategoryByName(name) || 'Chest' : activeCategory,
             mode: 'weight',
-            muscle: ''
+            muscle: '',
+            challengeTime: ''
         })
         setSaveError('')
         setShowForm(true)
@@ -86,7 +88,8 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
             name: ex.name,
             category: ex.category,
             mode: ex.mode === 'timer' ? 'timer' : 'weight',
-            muscle: ex.muscle || ''
+            muscle: ex.muscle || '',
+            challengeTime: formatChallengeTime(ex.challengeTime)
         })
         setSaveError('')
         setShowForm(true)
@@ -100,13 +103,23 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
 
     const handleSave = async () => {
         if (!formData.name.trim() || !formData.category) return
+        const timeText = formData.challengeTime.trim()
+        let challengeTime = null
+        if (timeText) {
+            challengeTime = parseChallengeTime(timeText)
+            if (!challengeTime || challengeTime <= 0) {
+                setSaveError('Invalid challenge time — use e.g. 90s, 5m or 2:30')
+                return
+            }
+        }
         setSaving(true)
         setSaveError('')
         try {
+            const payload = { ...formData, challengeTime }
             if (editingId) {
-                await updateExercise(editingId, formData)
+                await updateExercise(editingId, payload)
             } else {
-                await createExercise(formData)
+                await createExercise(payload)
             }
             resetForm()
             setCustomExercises(await getCustomExercises())
@@ -309,6 +322,18 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
                                 className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2.5 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
                             />
                         </div>
+                        {(formData.mode === 'timer' || formData.category === 'Cardio') && (
+                            <div>
+                                <p className='text-[10px] font-mono tracking-widest text-teal-400/60 mb-1'>CHALLENGE TIME — RANK 1 TARGET</p>
+                                <input
+                                    type='text'
+                                    value={formData.challengeTime}
+                                    onChange={e => setFormData(p => ({ ...p, challengeTime: e.target.value }))}
+                                    placeholder='e.g. 90s, 5m or 2:30'
+                                    className='w-full bg-black/50 border border-teal-500/30 rounded-lg px-3 py-2.5 text-white placeholder-teal-500/50 outline-none focus:border-teal-500 font-mono text-sm'
+                                />
+                            </div>
+                        )}
                         {saveError && (
                             <p className='text-red-400 text-xs font-mono bg-red-500/10 border border-red-500/30 rounded-lg p-2'>{saveError}</p>
                         )}

@@ -10,15 +10,15 @@ export const RANKS = [
     { name: 'Rookie', color: '#9ca3af', icon: '/badge/rookie.png' },
     { name: 'Beginner', color: '#a3e635', icon: '/badge/begineer.png' },
     { name: 'Learner', color: '#38bdf8', icon: '/badge/learner.png' },
-    { name: 'Intermediate', color: '#34d399' },
-    { name: 'Skilled', color: '#fbbf24' },
-    { name: 'Strong', color: '#fb923c' },
-    { name: 'Pro', color: '#f97316' },
-    { name: 'Elite', color: '#f43f5e' },
-    { name: 'Master', color: '#a855f7' },
-    { name: 'Grandmaster', color: '#e879f9' },
-    { name: 'Champion', color: '#facc15' },
-    { name: 'Legend', color: '#fde047' }
+    { name: 'Intermediate', color: '#34d399', icon: '/badge/Intermediate.png' },
+    { name: 'Skilled', color: '#fbbf24', icon: '/badge/skilled.png' },
+    { name: 'Strong', color: '#fb923c', icon: '/badge/strong.png' },
+    { name: 'Pro', color: '#f97316', icon: '/badge/pro.png' },
+    { name: 'Elite', color: '#f43f5e', icon: '/badge/elite.png' },
+    { name: 'Master', color: '#a855f7', icon: '/badge/master.png' },
+    { name: 'Grandmaster', color: '#e879f9', icon: '/badge/grandmaster.png' },
+    { name: 'Champion', color: '#facc15', icon: '/badge/champion.png' },
+    { name: 'Legend', color: '#fde047', icon: '/badge/legend.png' }
 ]
 
 export const MAX_LEVEL = RANKS.length
@@ -528,12 +528,19 @@ export function computeExerciseLadders(ladders = {}, bodyweight = 0) {
 // advance a rank you must complete ALL 5 challenges at that rank's threshold
 // AND have enough XP. The 8+ rep rule applies to every lift.
 
-const BENCH_LADDER = [5, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+const BENCH_LADDER = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
 const SQUAT_LADDER = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
-const DEADLIFT_LADDER = [20, 35, 50, 65, 80, 95, 110, 125, 140, 155, 170, 185]
+const LEG_PRESS_LADDER = [60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390]
+const DEADLIFT_LADDER = [20, 35, 50, 65, 80, 95, 110, 130, 150, 170, 190, 210]
 const CURL_LADDER = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
 const PULLUP_LADDER = [8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 30, 35]
 const CARDIO_LADDER = [2, 4, 6, 8, 10, 12, 15, 18, 22, 26, 30, 35]
+
+// A custom challenge time becomes the Rookie target; higher ranks follow the
+// default cardio ladder's shape scaled from it.
+export function scaledCardioLadder(baseMinutes) {
+    return CARDIO_LADDER.map((v) => Math.round(((v * baseMinutes) / CARDIO_LADDER[0]) * 2) / 2)
+}
 
 // The five challenge groups. `categories` drives the picker (scheduled +
 // library exercises shown for that group), `ladder` is the weight threshold
@@ -581,6 +588,30 @@ function parseDuration(v) {
     return Number.isFinite(n) ? n / 60 : 0
 }
 
+// Free-text challenge time -> minutes: "2:30" -> 2.5, "90s" -> 1.5, "5m" -> 5,
+// bare numbers are seconds (same convention as logged timer sets).
+export function parseChallengeTime(v) {
+    const s = String(v ?? '').trim().toLowerCase()
+    if (!s) return null
+    let m = s.match(/^(\d+):([0-5]?\d)$/)
+    if (m) return +m[1] + +m[2] / 60
+    m = s.match(/^(\d+(?:\.\d+)?)\s*(s|sec|secs|second|seconds)$/)
+    if (m) return +m[1] / 60
+    m = s.match(/^(\d+(?:\.\d+)?)\s*(m|min|mins|minute|minutes)$/)
+    if (m) return +m[1]
+    m = s.match(/^\d+(?:\.\d+)?$/)
+    if (m) return parseFloat(s) / 60
+    return null
+}
+
+// Minutes -> editable text ("5" -> "5m", "2.5" -> "2:30").
+export function formatChallengeTime(min) {
+    if (!min || min <= 0) return ''
+    if (Number.isInteger(min)) return `${min}m`
+    const secs = Math.round((min % 1) * 60)
+    return `${Math.floor(min)}:${String(secs).padStart(2, '0')}`
+}
+
 // Best weight / reps / duration ever recorded per normalized exercise name.
 // Weight and reps only count when the set had at least 8 reps — a 1RM-style
 // single won't clear a challenge.
@@ -619,26 +650,33 @@ function resolveChallengeExercise(name, group, customExercises = []) {
     const custom = customExercises.find((e) => normalizeName(e.name) === key)
     const mode = meta?.mode || custom?.mode || 'weight'
     if (group.key === 'cardio' || mode === 'timer' || TIMED_REPS.has(key)) {
-        return { key, name, kind: 'duration', ladder: CARDIO_LADDER }
+        const t = Number(custom?.challengeTime)
+        return { key, name, kind: 'duration', ladder: t > 0 ? scaledCardioLadder(t) : CARDIO_LADDER }
     }
     if (BODYWEIGHT_REPS.has(key)) {
         return { key, name, kind: 'reps', ladder: PULLUP_LADDER }
+    }
+    if (group.key === 'legs' && key.includes('legpress')) {
+        return { key, name, kind: 'weight', ladder: LEG_PRESS_LADDER }
     }
     return { key, name, kind: 'weight', ladder: group.ladder }
 }
 
 export function challengesForLevel(picks = {}, customExercises = [], level) {
     const i = Math.max(0, Math.min(level - 1, MAX_LEVEL - 1))
-    return CHALLENGE_GROUPS.map((g) => {
-        const ex = resolveChallengeExercise(picks[g.key] || g.defaultExercise, g, customExercises)
-        return {
-            key: g.key,
-            exerciseKey: ex.key,
-            label: ex.name,
-            kind: ex.kind,
-            value: ex.ladder[i]
-        }
-    })
+    // A pick of null opts that group out of rank challenges entirely.
+    return CHALLENGE_GROUPS
+        .filter((g) => picks[g.key] !== null)
+        .map((g) => {
+            const ex = resolveChallengeExercise(picks[g.key] || g.defaultExercise, g, customExercises)
+            return {
+                key: g.key,
+                exerciseKey: ex.key,
+                label: ex.name,
+                kind: ex.kind,
+                value: ex.ladder[i]
+            }
+        })
 }
 
 // A challenge is met when the user's best 8+ rep effort on THAT exercise

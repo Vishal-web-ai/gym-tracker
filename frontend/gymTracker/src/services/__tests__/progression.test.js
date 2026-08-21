@@ -35,6 +35,8 @@ import {
     saveStartRank,
     getChallengePicks,
     saveChallengePicks,
+    parseChallengeTime,
+    formatChallengeTime,
     DEFAULT_CHALLENGE_PICKS
 } from '../progression'
 import { createSession, saveUserProfile } from '../storage'
@@ -585,12 +587,22 @@ describe('rank challenges', () => {
         expect(level1).toHaveLength(5)
         expect(level1.map((c) => c.key)).toEqual(['chest', 'back', 'arms', 'legs', 'cardio'])
         expect(level1.map((c) => c.label)).toEqual(['Flat Bench Press', 'Deadlift', 'Barbell Curl', 'Squat', 'Sprint'])
-        expect(level1[0]).toMatchObject({ kind: 'weight', value: 5 })   // bench ladder
+        expect(level1[0]).toMatchObject({ kind: 'weight', value: 10 })  // bench ladder
         expect(level1[1]).toMatchObject({ kind: 'weight', value: 20 })  // deadlift ladder
         expect(level1[2]).toMatchObject({ kind: 'weight', value: 5 })   // curl ladder
         expect(level1[3]).toMatchObject({ kind: 'weight', value: 20 })  // squat ladder
         expect(level1[4]).toMatchObject({ kind: 'duration', value: 2 }) // cardio ladder
         expect(challengesForLevel({}, [], 12)[0].value).toBe(120)
+        // deadlift tail grows by 20kg per rank after 110
+        expect(challengesForLevel({}, [], 8)[1].value).toBe(130)
+        expect(challengesForLevel({}, [], 12)[1].value).toBe(210)
+    })
+
+    it('scores a leg press pick on its own heavier ladder', () => {
+        const legs = challengesForLevel({ legs: 'Leg Press' }, [], 1).find((c) => c.key === 'legs')
+        expect(legs).toMatchObject({ kind: 'weight', value: 60 })
+        const squat = challengesForLevel({}, [], 1).find((c) => c.key === 'legs')
+        expect(squat.value).toBe(20)
     })
 
     it('uses the picked exercise as the challenge label', () => {
@@ -601,7 +613,7 @@ describe('rank challenges', () => {
     })
 
     it('clears a challenge by logging the picked exercise at 8+ reps', () => {
-        const status = challengeStatusForLevel([session([lift('Flat Bench Press', 5)])], 1, DEFAULTS, [])
+        const status = challengeStatusForLevel([session([lift('Flat Bench Press', 10)])], 1, DEFAULTS, [])
         expect(status.find((c) => c.key === 'chest').done).toBe(true)
         expect(status.find((c) => c.key === 'cardio').done).toBe(false)
     })
@@ -630,10 +642,49 @@ describe('rank challenges', () => {
     })
 
     it('cascades eligibility only when all 5 challenges are cleared', () => {
-        const allCleared = [lift('Flat Bench Press', 5), lift('Deadlift', 20), lift('Barbell Curl', 5), lift('Squat', 20), timer('Sprint', '2:00')]
+        const allCleared = [lift('Flat Bench Press', 10), lift('Deadlift', 20), lift('Barbell Curl', 5), lift('Squat', 20), timer('Sprint', '2:00')]
         expect(challengeEligibleLevel([session(allCleared)], {}, [])).toBe(2)
         expect(challengeEligibleLevel([session([lift('Flat Bench Press', 5)])], {}, [])).toBe(1)
         expect(challengeEligibleLevel([], {}, [])).toBe(1)
+    })
+
+    it('lets the user opt out of the cardio challenge', () => {
+        const picks = { ...DEFAULTS, cardio: null }
+        expect(challengesForLevel(picks, [], 1).map((c) => c.key)).toEqual(['chest', 'back', 'arms', 'legs'])
+        const allCleared = [lift('Flat Bench Press', 10), lift('Deadlift', 20), lift('Barbell Curl', 5), lift('Squat', 20)]
+        expect(challengeEligibleLevel([session(allCleared)], picks, [])).toBe(2)
+    })
+
+    it('parses free-text challenge times into minutes', () => {
+        expect(parseChallengeTime('2:30')).toBe(2.5)
+        expect(parseChallengeTime('90s')).toBe(1.5)
+        expect(parseChallengeTime('90 sec')).toBe(1.5)
+        expect(parseChallengeTime('5m')).toBe(5)
+        expect(parseChallengeTime('12 min')).toBe(12)
+        expect(parseChallengeTime('45')).toBe(0.75)
+        expect(parseChallengeTime('abc')).toBe(null)
+        expect(parseChallengeTime('')).toBe(null)
+        expect(formatChallengeTime(5)).toBe('5m')
+        expect(formatChallengeTime(2.5)).toBe('2:30')
+        expect(formatChallengeTime(0)).toBe('')
+    })
+
+    it('scales the cardio ladder from a custom challenge time', () => {
+        const custom = [{ name: 'Battle Ropes', mode: 'timer', challengeTime: 5 }]
+        const at = (level) => challengesForLevel({ cardio: 'Battle Ropes' }, custom, level).find((c) => c.key === 'cardio')
+        expect(at(1).value).toBe(5)
+        expect(at(8).value).toBe(45)
+        expect(at(12).value).toBe(87.5)
+        // exercises without a custom time keep the default ladder
+        expect(challengesForLevel({}, [], 1).find((c) => c.key === 'cardio').value).toBe(2)
+    })
+
+    it('clears a custom-time cardio challenge at its own pace', () => {
+        const custom = [{ name: 'Battle Ropes', mode: 'timer', challengeTime: 5 }]
+        const done = challengeStatusForLevel([session([timer('Battle Ropes', '5:00')])], 1, { cardio: 'Battle Ropes' }, custom)
+        expect(done.find((c) => c.key === 'cardio').done).toBe(true)
+        const short = challengeStatusForLevel([session([timer('Battle Ropes', '4:00')])], 1, { cardio: 'Battle Ropes' }, custom)
+        expect(short.find((c) => c.key === 'cardio').done).toBe(false)
     })
 
     it('missing picks fall back to defaults and picks persist', async () => {
