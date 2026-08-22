@@ -655,7 +655,7 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                     media: exerciseMedia?.[idx] || []
                 }))
             })
-            if (onSessionSaved) onSessionSaved(workoutName.trim() || 'Workout', session)
+            if (onSessionSaved) await onSessionSaved(workoutName.trim() || 'Workout', session)
         } catch (err) {
             alert(getErrorMessage(err))
             setShowNameModal(true)

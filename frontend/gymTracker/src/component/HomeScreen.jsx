@@ -460,67 +460,69 @@ const HomeScreen = () => {
         setCurrentIndex(0)
         setShowNotes({})
         setSavedWorkoutName(name)
+        setShowSuccess(true)
         refreshStats()
         refreshSessionsAndPrs()
         setStatKey(k => k + 1)
 
         let promotions = []
-        if (session) {
-            await recordSessionLadders(session, bodyweight)
-                .then(res => {
+        try {
+            if (session) {
+                const res = await recordSessionLadders(session, bodyweight).catch(() => null)
+                if (res) {
                     setLadders(res.ladders)
                     promotions = res.promotions || []
-                })
-                .catch(() => {})
-        }
-
-        const result = await refreshProgress().catch(() => null)
-        if (!result) {
-            setShowSuccess(true)
-            setTimeout(() => {
-                setShowSuccess(false)
-                setShowSession(false)
-                setSavedWorkoutName('')
-            }, 1800)
-            return
-        }
-        setProgress(result.progress)
-        if (result.ladders) setLadders(result.ladders)
-
-        let breakdown = null
-        if (session) {
-            const sessions = await getSessions().catch(() => [])
-            const prior = sessions.filter(s => s.id !== session.id && (s.createdAt || '') <= (session.createdAt || ''))
-            breakdown = analyzeSession(session, prior)
-            if (!result.isLevelUp) {
-                const level = result.progress.rank.level
-                const before = challengeStatusForLevel(prior, level, challengePicks, customExercises)
-                const after = result.progress.challenges?.[level - 1]?.groups || []
-                const newDone = after.filter(g => g.done && !before.some(b => b.key === g.key && b.done))
-                if (newDone.length) {
-                    if (challengeToastTimer.current) clearTimeout(challengeToastTimer.current)
-                    setChallengeToasts(newDone.map(g => g.label))
-                    challengeToastTimer.current = setTimeout(() => setChallengeToasts([]), 4000)
                 }
             }
-        }
 
-        if (promotions.length) {
-            if (badgeToastTimer.current) clearTimeout(badgeToastTimer.current)
-            setBadgeToasts(promotions)
-            badgeToastTimer.current = setTimeout(() => setBadgeToasts([]), 4000)
-        }
+            const result = await refreshProgress().catch(() => null)
+            if (result) {
+                setProgress(result.progress)
+                if (result.ladders) setLadders(result.ladders)
+            }
 
-        if (result.isLevelUp || (breakdown && breakdown.bonuses.length)) {
-            setShowSession(false)
-            setCelebration({
-                rank: result.progress.rank,
-                breakdown,
-                isLevelUp: result.isLevelUp,
-                progress: result.progress
-            })
-        } else {
-            setShowSuccess(true)
+            let breakdown = null
+            if (session) {
+                const sessions = await getSessions().catch(() => [])
+                const prior = sessions.filter(s => s.id !== session.id && (s.createdAt || '') <= (session.createdAt || ''))
+                breakdown = analyzeSession(session, prior)
+                if (result && !result.isLevelUp) {
+                    const level = result.progress.rank.level
+                    const before = challengeStatusForLevel(prior, level, challengePicks, customExercises)
+                    const after = result.progress.challenges?.[level - 1]?.groups || []
+                    const newDone = after.filter(g => g.done && !before.some(b => b.key === g.key && b.done))
+                    if (newDone.length) {
+                        if (challengeToastTimer.current) clearTimeout(challengeToastTimer.current)
+                        setChallengeToasts(newDone.map(g => g.label))
+                        challengeToastTimer.current = setTimeout(() => setChallengeToasts([]), 4000)
+                    }
+                }
+            }
+
+            if (promotions.length) {
+                if (badgeToastTimer.current) clearTimeout(badgeToastTimer.current)
+                setBadgeToasts(promotions)
+                badgeToastTimer.current = setTimeout(() => setBadgeToasts([]), 4000)
+            }
+
+            if (result && (result.isLevelUp || (breakdown && breakdown.bonuses.length))) {
+                setShowSession(false)
+                setShowSuccess(false)
+                setCelebration({
+                    rank: result.progress.rank,
+                    breakdown,
+                    isLevelUp: result.isLevelUp,
+                    progress: result.progress
+                })
+            } else {
+                setTimeout(() => {
+                    setShowSuccess(false)
+                    setShowSession(false)
+                    setSavedWorkoutName('')
+                }, 1800)
+            }
+        } catch (err) {
+            console.error('Session saved callback error:', err)
             setTimeout(() => {
                 setShowSuccess(false)
                 setShowSession(false)
