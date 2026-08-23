@@ -460,6 +460,7 @@ const HomeScreen = () => {
         setCurrentIndex(0)
         setShowNotes({})
         setSavedWorkoutName(name)
+        setShowSession(false)
         setShowSuccess(true)
         refreshStats()
         refreshSessionsAndPrs()
@@ -506,7 +507,6 @@ const HomeScreen = () => {
             }
 
             if (result && (result.isLevelUp || (breakdown && breakdown.bonuses.length))) {
-                setShowSession(false)
                 setShowSuccess(false)
                 setCelebration({
                     rank: result.progress.rank,
@@ -517,7 +517,6 @@ const HomeScreen = () => {
             } else {
                 setTimeout(() => {
                     setShowSuccess(false)
-                    setShowSession(false)
                     setSavedWorkoutName('')
                 }, 1800)
             }
@@ -525,7 +524,6 @@ const HomeScreen = () => {
             console.error('Session saved callback error:', err)
             setTimeout(() => {
                 setShowSuccess(false)
-                setShowSession(false)
                 setSavedWorkoutName('')
             }, 1800)
         }
