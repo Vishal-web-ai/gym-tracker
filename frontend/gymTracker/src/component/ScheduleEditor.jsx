@@ -142,8 +142,8 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
     )
 
     return (
-        <div className='w-full flex flex-col gap-4'>
-            <div className='flex flex-wrap gap-2 justify-center'>
+        <div className='w-full flex flex-col gap-2'>
+            <div className='flex flex-wrap gap-1 justify-center'>
                 {DAYS.map(day => {
                     const count = (normalized[day.key] || []).length
                     const active = day.key === activeDay
@@ -151,7 +151,7 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
                         <button
                             key={day.key}
                             onClick={() => setActiveDay(day.key)}
-                            className={`rounded-lg w-[4.5rem] py-1.5 font-mono text-sm transition-all cursor-pointer ${
+                            className={`rounded-lg w-[4.5rem] py-1 font-mono text-sm transition-all cursor-pointer ${
                                 active ? 'bg-orange-500 text-black font-bold' : 'bg-orange-500/10 text-orange-500/80'
                             }`}
                         >
@@ -162,18 +162,18 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
                 })}
             </div>
 
-            <div className='h-5 mb-2'>
+            <div className='h-4 mb-1'>
                 {totalDays === 0 && (
                     <p className='font-mono text-white/40 text-xs text-center'>No workouts scheduled yet — leave rest days empty.</p>
                 )}
             </div>
 
-            <div className='bg-black/40 border border-orange-500/30 rounded-xl p-3'>
-                <div className='flex items-center justify-between gap-2 mb-2'>
+            <div className='bg-black/40 border border-orange-500/30 rounded-xl p-2'>
+                <div className='flex items-center justify-between gap-2 mb-1'>
                     <p className='font-bebas tracking-[2px] text-orange-500'>{activeLabel}</p>
                 </div>
 
-                <div className='flex flex-col gap-1 h-32 overflow-y-auto scroll mb-2'>
+                <div className={`flex flex-col gap-0.5 overflow-y-auto scroll mb-1 ${assigned.length === 0 ? 'h-6' : 'h-28'}`}>
                     {assigned.length === 0 ? (
                         <p className='font-mono text-white/30 text-xs'>Rest day — no exercises.</p>
                     ) : (
@@ -192,12 +192,12 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
                     !pickerOpen ? (
                         <button
                             onClick={() => setPickerOpen(true)}
-                            className='w-full flex items-center justify-center gap-1 rounded-lg border border-orange-500/40 py-2 font-mono text-xs font-bold text-orange-500 hover:bg-orange-500/10 transition-all cursor-pointer'
+                            className='w-full flex items-center justify-center gap-1 rounded-lg border border-orange-500/40 py-1.5 font-mono text-xs font-bold text-orange-500 hover:bg-orange-500/10 transition-all cursor-pointer'
                         >
                             <Plus size={12} /> Add Exercises
                         </button>
                     ) : (
-                        <div className='flex flex-col gap-2'>
+                        <div className='flex flex-col gap-1'>
                             <div className='flex items-center gap-1 border border-orange-500/30 rounded-lg px-2 py-1'>
                                 <Search size={12} className='text-orange-500/60 shrink-0' />
                                 <input
@@ -209,7 +209,7 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
                                 />
                             </div>
                             {addableCount === 0 && !q ? (
-                                <p className='font-mono text-white/30 text-xs text-center py-2'>All exercises added.</p>
+                                <p className='font-mono text-white/30 text-xs text-center py-1'>All exercises added.</p>
                             ) : (
                                 renderGroups(name => {
                                     const added = assignedNames.has(name.toLowerCase())
@@ -217,7 +217,7 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
                                         <button
                                             key={name}
                                             onClick={() => toggle(name)}
-                                            className={`flex items-center justify-between rounded-lg px-2 py-1.5 font-mono text-xs transition-all cursor-pointer ${
+                                            className={`flex items-center justify-between rounded-lg px-2 py-1 font-mono text-xs transition-all cursor-pointer ${
                                                 added ? 'bg-orange-500/20 text-orange-500' : 'bg-black/30 text-white/80 hover:bg-orange-500/10'
                                             }`}
                                         >
@@ -238,7 +238,7 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
                         </div>
                     )
                 ) : (
-                    <div className='flex flex-col gap-2'>
+                    <div className='flex flex-col gap-1'>
                         <div className='flex items-center gap-1 border border-orange-500/30 rounded-lg px-2 py-1'>
                             <Search size={12} className='text-orange-500/60 shrink-0' />
                             <input

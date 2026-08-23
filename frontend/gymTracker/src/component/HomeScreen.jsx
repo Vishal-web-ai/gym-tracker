@@ -28,7 +28,8 @@ import {
     getSchedule,
     getCustomExercises,
     getTodaysExercises,
-    computeMonthlyCount
+    computeMonthlyCount,
+    hasWorkoutToday
 } from '../services/storage'
 import { deleteMedia } from '../services/media'
 import { imageFileToDataUrl } from '../services/photo'
@@ -50,6 +51,16 @@ const REST_MESSAGES = [
     'Recovery is training too. Enjoy!',
     'Rest day! You earned it. The gym will survive.',
     'Rest day! Binge, snooze, and let the pump rest.'
+]
+
+const WORKOUT_DONE_MESSAGES = [
+    'Good work today. See you at the next one.',
+    'Session complete. See you next time.',
+    'Well earned. Rest up — we go again.',
+    'Nice work. Recovery starts now. See you next.',
+    'Workout complete. The gains are coming.',
+    'Done and dusted. Until the next session.',
+    'Another one in the books. See you tomorrow.'
 ]
 
 const SESSION_KEY = 'gym-tracker-session-v1'
@@ -155,6 +166,8 @@ const HomeScreen = () => {
     const [todayCardScale, setTodayCardScale] = useState(1)
     const photoInputRef = useRef(null)
     const todayCardRef = useRef(null)
+    const [workoutCompletedToday, setWorkoutCompletedToday] = useState(false)
+    const [motivationalPhrases, setMotivationalPhrases] = useState([])
 
     const restMessage = REST_MESSAGES[new Date().getDay() % REST_MESSAGES.length]
 
@@ -206,6 +219,13 @@ const HomeScreen = () => {
                 if (result.ladders) setLadders(result.ladders)
             })
             .catch(() => {})
+        hasWorkoutToday()
+            .then(completed => {
+                setWorkoutCompletedToday(completed)
+                if (!completed) setMotivationalPhrases([])
+            })
+            .catch(() => {})
+        setStatKey(k => k + 1)
     }, [refreshSessionsAndPrs])
 
     useEffect(() => {
@@ -251,6 +271,33 @@ const HomeScreen = () => {
             .catch(() => {})
         return () => { cancelled = true }
     }, [])
+
+    useEffect(() => {
+        hasWorkoutToday()
+            .then(completed => {
+                setWorkoutCompletedToday(completed)
+                if (completed) {
+                    const msg = WORKOUT_DONE_MESSAGES[Math.floor(Math.random() * WORKOUT_DONE_MESSAGES.length)]
+                    setMotivationalPhrases([msg])
+                }
+            })
+            .catch(() => {})
+    }, [])
+
+    useEffect(() => {
+        if (!workoutCompletedToday) return
+        const now = new Date()
+        const midnight = new Date(now)
+        midnight.setHours(24, 0, 0, 0)
+        const timer = setTimeout(() => {
+            setWorkoutCompletedToday(false)
+            setMotivationalPhrases([])
+            hasWorkoutToday()
+                .then(completed => setWorkoutCompletedToday(completed))
+                .catch(() => {})
+        }, midnight - now)
+        return () => clearTimeout(timer)
+    }, [workoutCompletedToday])
 
     useEffect(() => {
         if (!showSession) return
@@ -449,6 +496,46 @@ const HomeScreen = () => {
         } catch {
             // ignore
         }
+
+        let promotions = []
+        let result = null
+        let breakdown = null
+
+        try {
+            if (session) {
+                const res = await recordSessionLadders(session, bodyweight).catch(() => null)
+                if (res) {
+                    setLadders(res.ladders)
+                    promotions = res.promotions || []
+                }
+            }
+
+            result = await refreshProgress().catch(() => null)
+            if (result) {
+                setProgress(result.progress)
+                if (result.ladders) setLadders(result.ladders)
+            }
+
+            if (session) {
+                const sessions = await getSessions().catch(() => [])
+                const prior = sessions.filter(s => s.id !== session.id && (s.createdAt || '') <= (session.createdAt || ''))
+                breakdown = analyzeSession(session, prior)
+                if (result && !result.isLevelUp) {
+                    const level = result.progress.rank.level
+                    const before = challengeStatusForLevel(prior, level, challengePicks, customExercises)
+                    const after = result.progress.challenges?.[level - 1]?.groups || []
+                    const newDone = after.filter(g => g.done && !before.some(b => b.key === g.key && b.done))
+                    if (newDone.length) {
+                        if (challengeToastTimer.current) clearTimeout(challengeToastTimer.current)
+                        setChallengeToasts(newDone.map(g => g.label))
+                        challengeToastTimer.current = setTimeout(() => setChallengeToasts([]), 4000)
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Session saved callback error:', err)
+        }
+
         setSelectedExercises([])
         setPlannedExercises([])
         setExerciseWeights({})
@@ -466,62 +553,25 @@ const HomeScreen = () => {
         refreshSessionsAndPrs()
         setStatKey(k => k + 1)
 
-        let promotions = []
-        try {
-            if (session) {
-                const res = await recordSessionLadders(session, bodyweight).catch(() => null)
-                if (res) {
-                    setLadders(res.ladders)
-                    promotions = res.promotions || []
-                }
-            }
+        setWorkoutCompletedToday(true)
+        const msg = WORKOUT_DONE_MESSAGES[Math.floor(Math.random() * WORKOUT_DONE_MESSAGES.length)]
+        setMotivationalPhrases([msg])
 
-            const result = await refreshProgress().catch(() => null)
-            if (result) {
-                setProgress(result.progress)
-                if (result.ladders) setLadders(result.ladders)
-            }
+        if (promotions.length) {
+            if (badgeToastTimer.current) clearTimeout(badgeToastTimer.current)
+            setBadgeToasts(promotions)
+            badgeToastTimer.current = setTimeout(() => setBadgeToasts([]), 4000)
+        }
 
-            let breakdown = null
-            if (session) {
-                const sessions = await getSessions().catch(() => [])
-                const prior = sessions.filter(s => s.id !== session.id && (s.createdAt || '') <= (session.createdAt || ''))
-                breakdown = analyzeSession(session, prior)
-                if (result && !result.isLevelUp) {
-                    const level = result.progress.rank.level
-                    const before = challengeStatusForLevel(prior, level, challengePicks, customExercises)
-                    const after = result.progress.challenges?.[level - 1]?.groups || []
-                    const newDone = after.filter(g => g.done && !before.some(b => b.key === g.key && b.done))
-                    if (newDone.length) {
-                        if (challengeToastTimer.current) clearTimeout(challengeToastTimer.current)
-                        setChallengeToasts(newDone.map(g => g.label))
-                        challengeToastTimer.current = setTimeout(() => setChallengeToasts([]), 4000)
-                    }
-                }
-            }
-
-            if (promotions.length) {
-                if (badgeToastTimer.current) clearTimeout(badgeToastTimer.current)
-                setBadgeToasts(promotions)
-                badgeToastTimer.current = setTimeout(() => setBadgeToasts([]), 4000)
-            }
-
-            if (result && (result.isLevelUp || (breakdown && breakdown.bonuses.length))) {
-                setShowSuccess(false)
-                setCelebration({
-                    rank: result.progress.rank,
-                    breakdown,
-                    isLevelUp: result.isLevelUp,
-                    progress: result.progress
-                })
-            } else {
-                setTimeout(() => {
-                    setShowSuccess(false)
-                    setSavedWorkoutName('')
-                }, 1800)
-            }
-        } catch (err) {
-            console.error('Session saved callback error:', err)
+        if (result && (result.isLevelUp || (breakdown && breakdown.bonuses.length))) {
+            setShowSuccess(false)
+            setCelebration({
+                rank: result.progress.rank,
+                breakdown,
+                isLevelUp: result.isLevelUp,
+                progress: result.progress
+            })
+        } else {
             setTimeout(() => {
                 setShowSuccess(false)
                 setSavedWorkoutName('')
@@ -706,16 +756,41 @@ const HomeScreen = () => {
                                     </div>
                                     {todayExercises.length > 0 ? (
                                         <div className='flex flex-col overflow-y-auto scroll flex-1 min-h-0'>
-                                            {todayExercises.map((e, i) => (
-                                                <p
-                                                    key={i}
-                                                    className='flex items-center gap-2 font-mono text-white/80 my-auto shrink-0'
-                                                    style={{ fontSize: `${14 * todayCardScale}px` }}
-                                                >
-                                                    <span className='text-orange-500 leading-none'>•</span>
-                                                    {e.name}
-                                                </p>
-                                            ))}
+                                            {workoutCompletedToday && motivationalPhrases.length > 0 ? (
+                                                motivationalPhrases.map((phrase, i) => {
+                                                    const words = phrase.split(' ')
+                                                    const mid = Math.ceil(words.length / 2)
+                                                    const firstHalf = words.slice(0, mid).join(' ')
+                                                    const secondHalf = words.slice(mid).join(' ')
+                                                    return (
+                                                        <div key={i} className='flex flex-col items-center my-auto shrink-0'>
+                                                            <p
+                                                                className='font-bold text-white leading-tight text-center'
+                                                                style={{ fontSize: `${20 * todayCardScale}px` }}
+                                                            >
+                                                                {firstHalf}
+                                                            </p>
+                                                            <p
+                                                                className='font-bold text-orange-400 leading-tight text-center'
+                                                                style={{ fontSize: `${20 * todayCardScale}px` }}
+                                                            >
+                                                                {secondHalf}
+                                                            </p>
+                                                        </div>
+                                                    )
+                                                })
+                                            ) : (
+                                                todayExercises.map((e, i) => (
+                                                    <p
+                                                        key={i}
+                                                        className='flex items-center gap-2 font-mono text-white/80 my-auto shrink-0'
+                                                        style={{ fontSize: `${14 * todayCardScale}px` }}
+                                                    >
+                                                        <span className='text-orange-500 leading-none'>•</span>
+                                                        {e.name}
+                                                    </p>
+                                                ))
+                                            )}
                                         </div>
                                     ) : (
                                         <div className='flex-1 min-h-0 flex flex-col items-center justify-center overflow-y-auto scroll'>

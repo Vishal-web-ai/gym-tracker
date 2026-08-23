@@ -206,3 +206,10 @@ export function computeStreak(sessions, now = new Date()) {
     }
     return streak
 }
+
+// Check whether at least one session was saved today.
+export async function hasWorkoutToday() {
+    const sessions = await getSessions()
+    const todayKey = toDayKey(new Date())
+    return sessions.some(s => toDayKey(s.createdAt) === todayKey)
+}

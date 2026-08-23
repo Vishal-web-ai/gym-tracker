@@ -1,15 +1,7 @@
-import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus, Zap, Flame, Timer, CheckCircle2, Circle } from 'lucide-react'
+import { X, Plus, Zap, Flame, Timer, CheckCircle2, Circle, ChevronRight } from 'lucide-react'
 import RankIcon from './RankIcon'
-
-const CONFETTI = Array.from({ length: 16 }, (_, i) => ({
-    id: i,
-    x: `${(i * 137) % 100}%`,
-    delay: (i % 6) * 0.08,
-    color: ['#f97316', '#fbbf24', '#fb923c', '#c2410c'][i % 4],
-    size: 6 + (i % 4) * 3
-}))
+import { RANKS } from '../services/progression'
 
 const BONUS_LABEL = {
     'weight-pr': { label: 'NEW PR', icon: Flame },
@@ -17,189 +9,248 @@ const BONUS_LABEL = {
     'timer-record': { label: 'DURATION RECORD', icon: Timer }
 }
 
-function BonusChip({ bonus }) {
-    const spec = BONUS_LABEL[bonus.type] || { label: 'BONUS', icon: Zap }
-    const Icon = spec.icon
+const challengeTarget = (ch) => {
+    if (ch.kind === 'weight') return `${ch.value}kg`
+    if (ch.kind === 'reps') return `${ch.value} reps`
+    return `${ch.value}min`
+}
+
+function groupBonusesByExercise(bonuses) {
+    if (!bonuses?.length) return []
+    const map = new Map()
+    for (const b of bonuses) {
+        const key = b.name || 'Unknown'
+        if (!map.has(key)) map.set(key, [])
+        map.get(key).push(b)
+    }
+    return [...map.entries()]
+}
+
+function ExerciseGroup({ name, bonuses }) {
+    const totalXp = bonuses.reduce((sum, b) => sum + b.points, 0)
     return (
-        <div className='flex items-center gap-1.5 rounded-full border border-orange-500/40 bg-orange-500/10 px-2.5 py-1'>
-            <Icon size={12} className='text-orange-500' />
-            <p className='font-mono text-[9px] text-orange-300'>
-                +{bonus.points} XP · {spec.label} · {bonus.name}
-            </p>
+        <div className='rounded-xl border border-orange-500/30 bg-orange-500/5 px-3 py-2.5'>
+            <div className='flex items-center justify-between mb-1.5'>
+                <p className='font-mono text-[10px] text-white/70 truncate'>{name}</p>
+                <p className='font-mono text-[10px] text-orange-400 tracking-wider'>+{totalXp} XP</p>
+            </div>
+            <div className='flex flex-col gap-1'>
+                {bonuses.map((b, i) => {
+                    const spec = BONUS_LABEL[b.type] || { label: 'BONUS', icon: Zap }
+                    const Icon = spec.icon
+                    return (
+                        <div key={i} className='flex items-center gap-2'>
+                            <Icon size={10} className='text-orange-400/70 shrink-0' />
+                            <p className='font-mono text-[9px] text-white/50'>{spec.label}</p>
+                        </div>
+                    )
+                })}
+            </div>
         </div>
     )
 }
 
-const challengeTarget = (t) => {
-    if (t.kind === 'weight') return `${t.hint} ${t.value}kg`
-    if (t.kind === 'reps') return `${t.hint} x${t.value}`
-    return `${t.hint} ${t.value}min`
-}
-
 export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = false, progress = null, onClose }) {
-    const [phase, setPhase] = useState(isLevelUp ? 'celebrate' : 'summary')
-
-    useEffect(() => {
-        if (isLevelUp && phase === 'celebrate') {
-            const t = setTimeout(() => setPhase('summary'), 2800)
-            return () => clearTimeout(t)
-        }
-    }, [isLevelUp, phase])
-
     const xpTotal = breakdown?.xp ?? null
-    const bonusCount = breakdown?.bonuses?.length || 0
     const groups = progress?.challenges?.[rank.level - 1]?.groups || []
     const doneCount = groups.filter((g) => g.done).length
     const nextThreshold = progress?.rank?.nextThreshold
-    const totalFraction = nextThreshold != null ? Math.min((progress?.xp ?? 0) / nextThreshold, 1) : 1
-    const gainFrac = xpTotal ? Math.max(0, Math.min(xpTotal / (nextThreshold ?? 1), totalFraction)) : 0
+    const currentXp = progress?.xp ?? 0
+    const prevXp = xpTotal != null ? Math.max(0, currentXp - xpTotal) : currentXp
+    const totalFraction = nextThreshold != null ? Math.min(currentXp / nextThreshold, 1) : 1
+    const prevFraction = nextThreshold != null ? Math.min(prevXp / nextThreshold, 1) : 0
+    const xpRemaining = nextThreshold != null ? Math.max(0, nextThreshold - currentXp) : 0
+    const isMaxRank = nextThreshold == null
+
+    const prevRank = rank.level > 1 ? RANKS[rank.level - 2] : null
+    const nextRank = rank.level < RANKS.length ? RANKS[rank.level] : null
 
     return (
         <AnimatePresence>
             <motion.div
-                className='fixed inset-0 z-[80] flex items-center justify-center px-6 bg-black/70'
+                className='fixed inset-0 z-[80] flex items-center justify-center px-5 bg-black/75'
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.25 }}
             >
-                <AnimatePresence mode='wait'>
-                    {phase === 'celebrate' ? (
+                <motion.div
+                    key='card'
+                    className='relative w-full max-w-[360px] max-h-[88vh] border rounded-3xl flex flex-col overflow-hidden'
+                    style={{ borderColor: rank.color + '30', background: 'rgba(10,10,10,0.98)', boxShadow: `0 0 50px ${rank.color}15` }}
+                    initial={{ scale: 0.92, opacity: 0, y: 20 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', damping: 24, stiffness: 260 }}
+                >
+                    <button
+                        onClick={onClose}
+                        className='absolute top-3.5 right-3.5 z-10 text-white/30 hover:text-white/60 cursor-pointer transition-colors'
+                        aria-label='Close'
+                    >
+                        <X size={18} />
+                    </button>
+
+                    <div className='flex-1 overflow-y-auto overscroll-contain px-5 pt-6 pb-4 scroll'>
+                        {/* Hero: Rank Icon */}
                         <motion.div
-                            key='celebrate'
-                            className='relative w-full max-w-[340px] border rounded-3xl p-6 flex flex-col items-center gap-4'
-                            style={{ borderColor: rank.color, background: 'rgba(10,10,10,0.97)', boxShadow: `0 0 40px ${rank.color}66` }}
-                            initial={{ scale: 0.4, opacity: 0, rotate: -6 }}
-                            animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                            exit={{ scale: 0.4, opacity: 0 }}
-                            transition={{ type: 'spring', damping: 12, stiffness: 200 }}
+                            className='flex flex-col items-center'
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.05, duration: 0.45, ease: [0.34, 1.56, 0.64, 1] }}
                         >
-                            {CONFETTI.map((c) => (
-                                <motion.span
-                                    key={c.id}
-                                    className='absolute rounded-sm'
-                                    style={{ left: c.x, top: '-5%', width: c.size, height: c.size, background: c.color }}
-                                    initial={{ y: 0, rotate: 0, opacity: 1 }}
-                                    animate={{ y: '115vh', rotate: 360, opacity: [1, 1, 0] }}
-                                    transition={{ duration: 1.6, delay: c.delay, ease: 'easeIn' }}
+                            <div className='relative mb-3'>
+                                <RankIcon rank={rank} size={72} />
+                                <div
+                                    className='absolute inset-0 rounded-full blur-xl opacity-20'
+                                    style={{ background: rank.color }}
                                 />
-                            ))}
+                            </div>
 
-                            <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: [0, 1.25, 1] }}
-                                transition={{ delay: 0.15, duration: 0.5 }}
-                            >
-                                <RankIcon rank={rank} size={100} />
-                            </motion.div>
-
-                            <p className='font-bebas tracking-[4px] text-3xl' style={{ color: rank.color }}>
-                                RANK UP!
+                            <p className='font-bebas text-[28px] leading-none tracking-[3px]' style={{ color: rank.color }}>
+                                {rank.name.toUpperCase()}
                             </p>
-                            <p className='font-bebas tracking-[2px] text-2xl text-white'>{rank.name.toUpperCase()}</p>
-                            {xpTotal != null && (
-                                <p className='font-mono text-orange-400 text-sm'>+{xpTotal} XP</p>
-                            )}
-
-                            <button
-                                onClick={() => setPhase('summary')}
-                                className='w-full border rounded-2xl py-2.5 font-bebas tracking-[2px] text-lg cursor-pointer hover:opacity-80 transition-opacity'
-                                style={{ borderColor: rank.color, color: rank.color }}
-                            >
-                                VIEW SUMMARY
-                            </button>
+                            <p className='font-mono text-[11px] text-white/40 tracking-[2px] mt-1.5'>
+                                {isLevelUp ? 'RANK UP!' : 'WORKOUT COMPLETE'}
+                            </p>
                         </motion.div>
-                    ) : (
-                        <motion.div
-                            key='summary'
-                            className='relative w-full max-w-[340px] border rounded-3xl p-6 flex flex-col gap-4'
-                            style={{ borderColor: rank.color, background: 'rgba(10,10,10,0.97)', boxShadow: `0 0 40px ${rank.color}55` }}
-                            initial={{ scale: 0.4, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.4, opacity: 0 }}
-                            transition={{ type: 'spring', damping: 14, stiffness: 200 }}
-                        >
-                            <button
-                                onClick={onClose}
-                                className='absolute top-3 right-3 text-white/40 hover:text-white cursor-pointer'
-                                aria-label='Close'
+
+                        {/* XP Earned */}
+                        {xpTotal != null && (
+                            <motion.div
+                                className='flex justify-center mt-5'
+                                initial={{ opacity: 0, scale: 0.7 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: 0.2, duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
                             >
-                                <X size={20} />
-                            </button>
+                                <span className='font-bebas text-[44px] leading-none text-orange-400 tracking-[2px]'>
+                                    +{xpTotal} XP
+                                </span>
+                            </motion.div>
+                        )}
 
-                            <div className='flex items-center gap-3'>
-                                <RankIcon rank={rank} size={44} />
-                                <div>
-                                    <p className='font-bebas tracking-[2px] text-2xl text-white leading-none'>{rank.name.toUpperCase()}</p>
-                                    <p className='font-mono text-white/40 text-xs mt-1'>{isLevelUp ? 'RANK UP!' : 'WORKOUT COMPLETE'}</p>
-                                </div>
+                        {/* XP Progress Bar */}
+                        <div className='mt-5 animate-slideUp' style={{ animationDelay: '0.15s', animationFillMode: 'both' }}>
+                            <div className='flex justify-between items-baseline mb-1.5'>
+                                <span className='font-mono text-[10px] text-white/35 tracking-[1.5px]'>XP PROGRESS</span>
+                                <span className='font-mono text-[11px] text-white/50'>
+                                    {currentXp.toLocaleString()} / {nextThreshold != null ? nextThreshold.toLocaleString() : 'MAX'}
+                                </span>
                             </div>
+                            <div className='h-3 rounded-full bg-white/[0.07] overflow-hidden'>
+                                <motion.div
+                                    className='h-full rounded-full'
+                                    style={{ background: rank.color, boxShadow: `0 0 14px ${rank.color}55` }}
+                                    initial={{ width: `${Math.round(prevFraction * 100)}%` }}
+                                    animate={{ width: `${Math.round(totalFraction * 100)}%` }}
+                                    transition={{ delay: 0.35, duration: 0.8, ease: 'easeOut' }}
+                                />
+                            </div>
+                            {!isMaxRank && (
+                                <p className='font-mono text-[11px] text-white/40 mt-2 text-center'>
+                                    <span className='text-orange-400 font-medium'>{xpRemaining.toLocaleString()} XP</span> to {nextRank?.name?.toUpperCase()}
+                                </p>
+                            )}
+                            {isMaxRank && (
+                                <p className='font-mono text-[11px] text-white/30 mt-2 text-center'>
+                                    Maximum rank reached
+                                </p>
+                            )}
+                        </div>
 
-                            {/* XP progress bar with this session's gain highlighted */}
-                            <div>
-                                <div className='flex justify-between mb-1'>
-                                    <span className='font-mono text-[10px] text-white/40 tracking-[1px]'>XP PROGRESS</span>
-                                    <span className='font-mono text-[10px] text-white/50'>{progress?.xp ?? 0}xp / {nextThreshold != null ? `${nextThreshold}xp` : 'MAX'}</span>
-                                </div>
-                                <div className='h-3 rounded-full bg-white/10 overflow-hidden'>
-                                    <div className='h-full relative transition-all duration-700' style={{ width: `${Math.round(totalFraction * 100)}%`, background: rank.color, boxShadow: `0 0 12px ${rank.color}88` }}>
-                                        {gainFrac > 0 && (
-                                            <motion.div
-                                                className='absolute h-full right-0 top-0 bg-white/50'
-                                                style={{ boxShadow: '0 0 14px #fff' }}
-                                                initial={{ width: 0 }}
-                                                animate={{ width: `${Math.round(gainFrac * 100)}%` }}
-                                                transition={{ delay: 0.6, duration: 0.7, ease: 'easeOut' }}
-                                            />
-                                        )}
-                                    </div>
-                                </div>
-                                {xpTotal != null && (
-                                    <p className='font-bebas text-orange-400 tracking-[1px] mt-1'>+{xpTotal} XP THIS SESSION</p>
+                        {/* Rank Journey */}
+                        <div className='mt-5 animate-slideUp' style={{ animationDelay: '0.22s', animationFillMode: 'both' }}>
+                            <div className='flex items-center justify-center gap-2'>
+                                {prevRank && (
+                                    <>
+                                        <span className='font-mono text-[10px] text-white/25 tracking-wider'>{prevRank.name.toUpperCase()}</span>
+                                        <ChevronRight size={12} className='text-white/15' />
+                                    </>
                                 )}
+                                <span className='font-bebas text-[15px] tracking-[2px]' style={{ color: rank.color }}>
+                                    {rank.name.toUpperCase()}
+                                </span>
+                                {nextRank && (
+                                    <>
+                                        <ChevronRight size={12} className='text-white/15' />
+                                        <span className='font-mono text-[10px] text-white/25 tracking-wider'>{nextRank.name.toUpperCase()}</span>
+                                    </>
+                                )}
+                                {!nextRank && <span className='font-mono text-[10px] text-white/15 tracking-wider ml-1'>MAX</span>}
                             </div>
+                        </div>
 
-                            {/* Challenges for the current rank */}
-                            <div className='flex flex-col gap-1.5 w-full'>
-                                <div className='flex items-center justify-between'>
-                                    <p className='font-mono text-[9px] tracking-[2px] text-white/40'>CHALLENGES TO COMPLETE THIS RANK</p>
-                                    <p className='font-mono text-[10px] text-orange-400'>{doneCount}/{groups.length} COMPLETED</p>
+                        {/* Challenges */}
+                        {groups.length > 0 && (
+                            <div className='mt-6 animate-slideUp' style={{ animationDelay: '0.29s', animationFillMode: 'both' }}>
+                                <div className='flex items-center justify-between mb-2.5'>
+                                    <p className='font-mono text-[10px] tracking-[2px] text-white/35'>RANK CHALLENGES</p>
+                                    <p className='font-mono text-[10px] text-orange-400/80'>{doneCount}/{groups.length}</p>
                                 </div>
-                                {groups.map((ch) => (
-                                    <div key={ch.key} className='flex items-center gap-2'>
-                                        {ch.done ? <CheckCircle2 size={16} className='text-emerald-400 shrink-0' /> : <Circle size={16} className='text-white/25 shrink-0' />}
-                                        <span className={`font-mono text-[10px] leading-tight ${ch.done ? 'text-white/35 line-through' : 'text-white/70'}`}>
-                                            {ch.label}
-                                        </span>
-                                        <span className='ml-auto font-mono text-[9px] text-white/30'>{ch.targets.map(challengeTarget).join(' · ')}</span>
+                                <div className='flex flex-col gap-1.5'>
+                                    {groups.map((ch) => (
+                                        <div key={ch.key} className='flex items-center gap-2.5 py-1'>
+                                            {ch.done ? (
+                                                <CheckCircle2 size={15} className='text-emerald-400 shrink-0' />
+                                            ) : (
+                                                <Circle size={15} className='text-white/20 shrink-0' />
+                                            )}
+                                            <span className={`font-mono text-[11px] leading-tight flex-1 ${ch.done ? 'text-white/30 line-through' : 'text-white/60'}`}>
+                                                {ch.label}
+                                            </span>
+                                            <span className='font-mono text-[9px] text-white/25 shrink-0'>{challengeTarget(ch)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Session Rewards */}
+                        <div className='mt-6 animate-slideUp' style={{ animationDelay: '0.36s', animationFillMode: 'both' }}>
+                            <p className='font-mono text-[10px] tracking-[2px] text-white/35 mb-2.5'>SESSION REWARDS</p>
+                            <div className='flex flex-col gap-1.5'>
+                                <div className='flex items-center gap-3 rounded-xl border border-orange-500/20 bg-orange-500/5 px-3 py-2'>
+                                    <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-500/10'>
+                                        <Plus size={14} className='text-orange-400' />
                                     </div>
+                                    <div className='min-w-0 flex-1'>
+                                        <p className='font-mono text-[10px] text-orange-400 tracking-wider'>+{breakdown?.base ?? 20} XP</p>
+                                        <p className='font-mono text-[10px] text-white/50'>WORKOUT BASE</p>
+                                    </div>
+                                </div>
+                                {groupBonusesByExercise(breakdown?.bonuses).map(([name, bonuses], i) => (
+                                    <ExerciseGroup key={i} name={name} bonuses={bonuses} />
                                 ))}
                             </div>
+                        </div>
 
-                            {bonusCount > 0 && (
-                                <div className='flex flex-col gap-1.5 w-full'>
-                                    <p className='font-mono text-white/40 text-[10px] tracking-[2px]'>BONUSES EARNED</p>
-                                    <div className='flex flex-wrap gap-1.5'>
-                                        {breakdown.bonuses.map((b, i) => <BonusChip key={i} bonus={b} />)}
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className='flex items-center gap-1.5 text-white/50'>
-                                <Plus size={12} className='text-orange-500' />
-                                <p className='font-mono text-[9px]'>Every session = {breakdown?.base ?? 20} XP</p>
-                            </div>
-
-                            <button
-                                onClick={onClose}
-                                className='mt-1 w-full border rounded-2xl py-2.5 font-bebas tracking-[2px] text-lg cursor-pointer hover:opacity-80 transition-opacity'
-                                style={{ borderColor: rank.color, color: rank.color }}
+                        {/* Next Target */}
+                        {!isMaxRank && (
+                            <div
+                                className='mt-5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5 text-center animate-slideUp'
+                                style={{ animationDelay: '0.50s', animationFillMode: 'both' }}
                             >
-                                KEEP GRINDING
-                            </button>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                                <p className='font-mono text-[9px] tracking-[2px] text-white/25 mb-1.5'>NEXT TARGET</p>
+                                <p className='font-bebas text-[17px] tracking-[2px]' style={{ color: nextRank?.color || rank.color }}>
+                                    {nextRank?.name?.toUpperCase()}
+                                </p>
+                                <p className='font-mono text-[10px] text-white/35 mt-0.5'>
+                                    {xpRemaining.toLocaleString()} XP remaining
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* CTA */}
+                    <div className='px-5 pb-5 pt-3'>
+                        <button
+                            onClick={onClose}
+                            className='w-full border rounded-2xl py-3 font-bebas tracking-[3px] text-[17px] cursor-pointer hover:opacity-80 transition-opacity'
+                            style={{ borderColor: rank.color + '50', color: rank.color }}
+                        >
+                            {isLevelUp ? 'CONTINUE JOURNEY' : 'CONTINUE'}
+                        </button>
+                    </div>
+                </motion.div>
             </motion.div>
         </AnimatePresence>
     )

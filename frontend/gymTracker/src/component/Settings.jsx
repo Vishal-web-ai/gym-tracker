@@ -269,7 +269,7 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSa
             {/* Schedule editor modal */}
             {showScheduleEditor && (
                 <div
-                    className='fixed inset-0 bg-neutral-900 z-[60] flex items-center justify-center p-4'
+                    className='fixed inset-0 bg-neutral-900 z-[60] flex flex-col items-center justify-center p-4'
                     onClick={() => setShowScheduleEditor(false)}
                 >
                     <div
@@ -280,20 +280,20 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSa
                             WORKOUT SCHEDULE
                         </h2>
                         <ScheduleEditor schedule={schedule} onChange={setSchedule} selectedFirst />
-                        <div className='flex gap-3 mt-4'>
-                            <button
-                                onClick={() => setShowScheduleEditor(false)}
-                                className='flex-1 border border-neutral-600 text-white font-semibold py-3 rounded-xl hover:bg-neutral-700 transition-all cursor-pointer font-mono'
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSaveSchedule}
-                                className='flex-1 bg-orange-500 text-black font-bold py-3 rounded-xl hover:bg-orange-400 transition-all cursor-pointer font-mono'
-                            >
-                                Save
-                            </button>
-                        </div>
+                    </div>
+                    <div className='flex gap-3 mt-4 w-full' onClick={(e) => e.stopPropagation()}>
+                        <button
+                            onClick={() => setShowScheduleEditor(false)}
+                            className='flex-1 border border-neutral-600 text-white font-semibold py-4 px-6 rounded-xl hover:bg-neutral-700 transition-all cursor-pointer font-mono text-base'
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSaveSchedule}
+                            className='flex-1 bg-orange-500 text-black font-bold py-4 px-6 rounded-xl hover:bg-orange-400 transition-all cursor-pointer font-mono text-base'
+                        >
+                            Save
+                        </button>
                     </div>
                 </div>
             )}

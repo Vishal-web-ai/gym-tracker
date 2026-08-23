@@ -4,7 +4,7 @@ import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check, Images,
 import NumberOfSets from './NumberOfSets'
 import ExerciseMedia from './ExerciseMedia'
 import RestTimer from './RestTimer'
-import { createSession, getRestSound } from '../services/storage'
+import { createSession, getRestSound, getSessions } from '../services/storage'
 import { addMedia } from '../services/media'
 import { getErrorMessage } from '../services/errors'
 import { buildHistoryIndex, parseDurationSeconds, formatDuration, ladderView } from '../services/progression'
@@ -263,24 +263,31 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                     })
                 }
             }
-            const index = buildHistoryIndex([...(sessions || []), { exercises: [{ name: exercise.name, mode: exercise.mode, sets: doneSets }] }])
             const reps = isTimer
                 ? parseDurationSeconds(exerciseSets[idx]?.[setIdx])
                 : parseFloat(exerciseSets[idx]?.[setIdx]) || 0
             const weight = parseFloat(String(exerciseWeights[idx]?.[setIdx]).replace('kg', '')) || 0
-            const entry = index[exercise.name]
-            let bonus = null
-            if (isTimer) {
-                if (entry && reps > entry.bestDuration) bonus = { type: 'timer-record', points: 10 }
-            } else if (entry && weight > entry.bestWeight) {
-                bonus = { type: 'weight-pr', points: 10 }
-            } else if (entry && weight > 0 && reps > (entry.bestRepsAtWeight?.[weight] || 0)) {
-                bonus = { type: 'extra-rep', points: 5 }
-            }
-            if (bonus && !rewardedRef.current.has(`${idx}:${setIdx}`)) {
-                rewardedRef.current.add(`${idx}:${setIdx}`)
-                onXpFlash({ id: Date.now(), type: bonus.type, points: bonus.points })
-            }
+            const isTimerMode = isTimer
+            const exerciseName = exercise.name
+            const exerciseMode = exercise.mode
+
+            getSessions().then(allSessions => {
+                const synthetic = doneSets.length > 0 ? [{ exercises: [{ name: exerciseName, mode: exerciseMode, sets: doneSets }] }] : []
+                const index = buildHistoryIndex([...(allSessions || []), ...synthetic])
+                const entry = index[exerciseName]
+                let bonus = null
+                if (isTimerMode) {
+                    if (entry && reps > entry.bestDuration) bonus = { type: 'timer-record', points: 10 }
+                } else if (entry && weight > entry.bestWeight) {
+                    bonus = { type: 'weight-pr', points: 10 }
+                } else if (entry && weight > 0 && reps > (entry.bestRepsAtWeight?.[weight] || 0)) {
+                    bonus = { type: 'extra-rep', points: 5 }
+                }
+                if (bonus && !rewardedRef.current.has(`${idx}:${setIdx}`)) {
+                    rewardedRef.current.add(`${idx}:${setIdx}`)
+                    onXpFlash({ id: Date.now(), type: bonus.type, points: bonus.points })
+                }
+            }).catch(() => {})
         }
         setDone(idx, setIdx, !currentlyDone)
     }

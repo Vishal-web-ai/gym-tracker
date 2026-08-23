@@ -66,8 +66,14 @@ describe('session XP', () => {
         expect(sessionXp({ id: 'c', exercises: [{ name: 'A', sets: [] }] })).toBe(20)
     })
 
+    it('gives no bonus on the first session for an exercise (no history to beat)', () => {
+        expect(sessionXp(weightSession('Bench', 60, 10), [])).toBe(20)
+        expect(sessionXp(timerSession('Plank', 60), [])).toBe(20)
+    })
+
     it('gives +10 for a first-time weight (new PR)', () => {
-        expect(sessionXp(weightSession('Bench', 60, 10), [])).toBe(30)
+        const prev = weightSession('Bench', 50, 10)
+        expect(sessionXp(weightSession('Bench', 60, 10), [prev])).toBe(30)
     })
 
     it('gives no bonus for repeating an existing weight', () => {
@@ -116,7 +122,8 @@ describe('session XP', () => {
     })
 
     it('gives +10 for beating a timer duration record', () => {
-        expect(sessionXp(timerSession('Plank', 60), [])).toBe(30)
+        const prev = timerSession('Plank', 45)
+        expect(sessionXp(timerSession('Plank', 60), [prev])).toBe(30)
         expect(sessionXp(timerSession('Plank', 60), [timerSession('Plank', 60)])).toBe(20)
         expect(sessionXp(timerSession('Plank', 90), [timerSession('Plank', 60)])).toBe(30)
     })
@@ -126,7 +133,8 @@ describe('session XP', () => {
         expect(parseDurationSeconds('0:45')).toBe(45)
         expect(parseDurationSeconds('120')).toBe(120)
         const stored = { id: 't1', name: 'W', exercises: [{ name: 'Plank', mode: 'timer', sets: [{ reps: '1:30', weight: '—' }] }] }
-        expect(sessionXp(stored, [])).toBe(30)
+        const baseline = { id: 't0', name: 'W', exercises: [{ name: 'Plank', mode: 'timer', sets: [{ reps: '60' }] }] }
+        expect(sessionXp(stored, [baseline])).toBe(30)
         const index = buildHistoryIndex([stored])
         expect(index.Plank.bestDuration).toBe(90)
     })
@@ -138,6 +146,13 @@ describe('session XP', () => {
     })
 
     it('gives a per-exercise bonus for each exercise that sets a record', () => {
+        const prev = {
+            id: 'multi-prev',
+            exercises: [
+                { name: 'Bench', mode: 'weight', sets: [{ reps: '10', weight: '50kg' }] },
+                { name: 'Squat', mode: 'weight', sets: [{ reps: '8', weight: '70kg' }] }
+            ]
+        }
         const session = {
             id: 'multi',
             exercises: [
@@ -145,7 +160,7 @@ describe('session XP', () => {
                 { name: 'Squat', mode: 'weight', sets: [{ reps: '8', weight: '80kg' }] }
             ]
         }
-        expect(sessionXp(session, [])).toBe(20 + 10 + 10)
+        expect(sessionXp(session, [prev])).toBe(20 + 10 + 10)
     })
 })
 
@@ -248,23 +263,23 @@ describe('player ranks', () => {
             { name: 'A', mode: 'weight', sets: [{ reps: '10', weight: '60kg' }] },
             { name: 'B', mode: 'weight', sets: [{ reps: '8', weight: '80kg' }] }
         ] }
-        // The first session set both records (+10 each); the repeat earns base only.
-        expect(totalXp([s1, s2])).toBe(40 + 20)
+        // First session: no bonus (no history). Repeat: same values, no bonus.
+        expect(totalXp([s1, s2])).toBe(20 + 20)
     })
 
     it('credits every PR permanently, even after a heavier one lands', () => {
         const s1 = weightSession('Bench', 60, 10)
         const s2 = weightSession('Bench', 80, 5)
-        // s1 beat nothing (+10 PR), s2 beat s1 (+10 PR). Both keep their credit.
-        expect(totalXp([s1, s2])).toBe(30 + 30)
+        // s1: no bonus (no history), s2: +10 PR (beat s1).
+        expect(totalXp([s1, s2])).toBe(20 + 30)
     })
 
     it('rewards a progressive weight chain: each new weight is its own PR', () => {
         const s1 = weightSession('Bench', 60, 10)
         const s2 = weightSession('Bench', 65, 8)
         const s3 = weightSession('Bench', 70, 6)
-        // Each session beats everything before it, so all three earn the +10 PR.
-        expect(totalXp([s1, s2, s3])).toBe(30 + 30 + 30)
+        // s1: no bonus (no history), s2: +10 PR (beat s1), s3: +10 PR (beat s2).
+        expect(totalXp([s1, s2, s3])).toBe(20 + 30 + 30)
     })
 })
 
@@ -439,14 +454,14 @@ describe('exercise badge ladders', () => {
         expect(ladders.Plank.successes).toBe(1)
     })
 
-    it('orders the badge list by tier then relative strength', () => {
+    it('orders the badge list alphabetically', () => {
         const seeded = seedLaddersFromHistory([
             bench([{ reps: '10', weight: '80' }]),
             { exercises: [{ name: 'Barbell Curl', mode: 'weight', category: 'Biceps', sets: [{ reps: '12', weight: '15' }] }] }
         ], 60, {})
         const ranks = computeExerciseLadders(seeded, 60)
-        expect(ranks[0].name).toBe('Flat Bench Press')
-        expect(ranks[0].tier).toBeGreaterThanOrEqual(ranks[1].tier)
+        expect(ranks[0].name).toBe('Barbell Curl')
+        expect(ranks[1].name).toBe('Flat Bench Press')
         expect(LADDER_LEVELS.length).toBe(7)
     })
 })

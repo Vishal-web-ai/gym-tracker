@@ -268,7 +268,7 @@ export default function Streak({ refreshKey = 0, frozenDays = [] }) {
                                                     {completed && <Flame size={16} color="white" fill="white" strokeWidth={2} />}
                                                     {(isSunday && isPastOrToday) && <RelaxIcon />}
                                                     {frozen && <Snowflake size={16} color="white" strokeWidth={2} />}
-                                                    {missed && <span className="bg-white rounded-[2px]" style={{ width: 8, height: 8 }} />}
+                                                    {missed && <Snowflake size={16} color="white" strokeWidth={2} />}
                                                     {!completed && !(isSunday && isPastOrToday) && !frozen && !missed && (
                                                         <p className={`font-mono text-[11px] ${isTodayDate ? 'text-orange-500' : 'text-white/30'}`}>
                                                             {date.getDate()}

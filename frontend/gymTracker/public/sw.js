@@ -1,4 +1,4 @@
-const CACHE = 'gym-tracker-v6'
+const CACHE = 'gym-tracker-v7'
 const IS_DEV = ['localhost', '127.0.0.1'].includes(self.location.hostname)
 const PRECACHE = [
     '/',

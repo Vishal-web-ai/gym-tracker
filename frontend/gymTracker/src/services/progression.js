@@ -111,48 +111,72 @@ export function buildHistoryIndex(sessions) {
     return index
 }
 
-// Per-exercise bonus against a history index. Returns null, or a bonus object.
-// A weight PR (+10) beats an extra-rep bonus (+5); they never stack.
+// Per-exercise bonuses against a history index. Returns an array of bonus
+// objects (one per set that improves on the record). A weight PR (+10) takes
+// priority over an extra-rep bonus (+5) for the same set; they never stack.
+// Running bests are tracked across sets within the session so each
+// improvement is counted individually. When there is no history entry for an
+// exercise, the first set establishes the baseline (no bonus) and subsequent
+// sets can trigger bonuses by beating it.
 function exerciseBonus(ex, index) {
     const sets = (ex?.sets || []).filter((s) => {
         const v = s?.reps
         return v != null && String(v).trim() !== '' && String(v).trim() !== '—'
     })
-    if (!sets.length) return null
+    if (!sets.length) return []
     const entry = index[ex.name]
 
     if (ex.mode === 'timer') {
-        const best = Math.max(...sets.map((s) => parseDurationSeconds(s.reps)))
-        if (!entry || best > entry.bestDuration) {
-            return { type: 'timer-record', points: PR_XP, name: ex.name, value: best }
+        const bonuses = []
+        let runningBest = entry ? entry.bestDuration : 0
+        let firstSet = !entry
+        for (const s of sets) {
+            const duration = parseDurationSeconds(s.reps)
+            if (firstSet) {
+                runningBest = duration
+                firstSet = false
+                continue
+            }
+            if (duration > runningBest) {
+                bonuses.push({ type: 'timer-record', points: PR_XP, name: ex.name, value: duration })
+                runningBest = duration
+            }
         }
-        return null
+        return bonuses
     }
 
-    const weighted = sets.filter((s) => parseWeight(s?.weight) != null)
-    if (!weighted.length) return null
-    const thisBestWeight = Math.max(...weighted.map((s) => parseWeight(s.weight)))
-    const prevBestWeight = entry?.bestWeight ?? -Infinity
+    const bonuses = []
+    let runningBestWeight = entry ? (entry.bestWeight != null ? entry.bestWeight : -Infinity) : null
+    const runningBestReps = entry ? { ...(entry.bestRepsAtWeight || {}) } : {}
+    let firstSet = !entry
 
-    if (thisBestWeight > prevBestWeight) {
-        const prSets = weighted.filter((s) => parseWeight(s.weight) === thisBestWeight)
-        const reps = Math.max(...prSets.map((s) => parseReps(s.reps)))
-        return { type: 'weight-pr', points: PR_XP, name: ex.name, value: thisBestWeight, reps }
-    }
-
-    for (const s of weighted) {
+    for (const s of sets) {
         const w = parseWeight(s.weight)
         const r = parseReps(s.reps)
-        if (r > (entry?.bestRepsAtWeight?.[w] || 0)) {
-            return { type: 'extra-rep', points: EXTRA_REP_XP, name: ex.name, value: r, weight: w }
+        if (w == null) continue
+
+        if (firstSet) {
+            runningBestWeight = w
+            runningBestReps[w] = r
+            firstSet = false
+            continue
+        }
+
+        if (w > runningBestWeight) {
+            bonuses.push({ type: 'weight-pr', points: PR_XP, name: ex.name, value: w, reps: r })
+            runningBestWeight = w
+            runningBestReps[w] = r
+        } else if (r > (runningBestReps[w] || 0)) {
+            bonuses.push({ type: 'extra-rep', points: EXTRA_REP_XP, name: ex.name, value: r, weight: w })
+            runningBestReps[w] = r
         }
     }
-    return null
+    return bonuses
 }
 
 // XP for one saved session: a flat base plus per-exercise bonuses. `history`
-// is every OTHER session (used to detect records). An empty history means
-// everything counts as a first-time record.
+// is every OTHER session (used to detect records). No bonuses are awarded the
+// first time an exercise appears (no prior record to beat).
 export function sessionXp(session, history = []) {
     return analyzeSession(session, history).xp
 }
@@ -163,8 +187,8 @@ export function analyzeSession(session, history = []) {
     const index = buildHistoryIndex(history)
     const bonuses = []
     for (const ex of (session?.exercises || [])) {
-        const b = exerciseBonus(ex, index)
-        if (b) bonuses.push(b)
+        const bs = exerciseBonus(ex, index)
+        if (bs.length) bonuses.push(...bs)
     }
     return {
         base: BASE_SESSION_XP,
@@ -177,8 +201,8 @@ export function analyzeSession(session, history = []) {
 }
 
 // Total XP across all sessions. Bonuses are awarded against only the sessions
-// that came BEFORE each one, so a record is credited the moment it is set and
-// keeps its credit even after a later session beats it. "Always reward PRs".
+// that came BEFORE each one. No bonus is given the first time an exercise
+// appears (no prior record to beat).
 export function totalXp(sessions) {
     const sorted = [...sessions].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
     let xp = 0
@@ -202,6 +226,7 @@ export function mergePrs(prs, newPrs) {
             next[idx] = np
         }
     }
+    next.sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }))
     return next
 }
 
@@ -513,7 +538,7 @@ export function ladderView(entry, bodyweight = 0) {
 export function computeExerciseLadders(ladders = {}, bodyweight = 0) {
     return Object.entries(ladders)
         .map(([name, entry]) => ({ name, ...ladderView(entry, bodyweight) }))
-        .sort((a, b) => b.tier - a.tier || (b.strengthRatio || 0) - (a.strengthRatio || 0) || a.name.localeCompare(b.name))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }))
 }
 
 // ---------------------------------------------------------------------------
