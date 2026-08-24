@@ -272,22 +272,16 @@ export function rankForXp(xp) {
 }
 
 // ---------------------------------------------------------------------------
-// Exercise badge ladders (hybrid: bodyweight seeds the START, actual 8-rep
+// Exercise badge ladders (hybrid: bodyweight seeds the START, actual 5-rep
 // performance drives every step after that). Each exercise climbs its own
 // chain — one successful challenge = one level — so nothing here can cap a
 // strong user. Levels are chain positions, not bodyweight multiples.
 // ---------------------------------------------------------------------------
 
-export const LADDER_LEVELS = [
-    { name: 'Bronze', color: '#cd7f32' },
-    { name: 'Silver', color: '#cbd5e1' },
-    { name: 'Gold', color: '#facc15' },
-    { name: 'Platinum', color: '#22d3ee' },
-    { name: 'Diamond', color: '#818cf8' },
-    { name: 'Elite', color: '#f43f5e' },
-    { name: 'Master', color: '#a855f7' }
-]
-export const LADDER_MAX = LADDER_LEVELS.length
+const LEVEL_COLORS = ['#34d399', '#38bdf8', '#a855f7', '#f97316', '#f43f5e', '#facc15']
+export function colorForLevel(level) {
+    return LEVEL_COLORS[(Math.max(1, level) - 1) % LEVEL_COLORS.length]
+}
 
 // Strength factor = the typical bodyweight multiple an intermediate lifter hits
 // for that category. Used ONLY for initial placement (beginner targets and
@@ -335,10 +329,6 @@ const EQUIPMENT_FACTORS = { barbell: 1.0, machine: 0.75, cable: 0.55, dumbbell: 
 // achievable so the first badge comes fast and motivation sticks.
 const BEGINNER_SEED = 0.3
 
-// Verified strength relative to bodyweight → starting level for users who
-// already train. Passing index i places them at level i+1 on first launch.
-const SEED_SCORES = [0.55, 0.8, 1.0, 1.25, 1.5, 2.0, 2.5]
-
 function roundTo(value, step) {
     return Math.round(value / step) * step
 }
@@ -368,12 +358,11 @@ export function beginnerTarget({ bodyweight, category, mode, name }) {
 
 function badgeFor(successes) {
     if (!(successes > 0)) return null
-    const tier = Math.min(successes, LADDER_MAX)
-    return { tier, ...LADDER_LEVELS[tier - 1], isMax: successes >= LADDER_MAX }
+    return { tier: successes, name: `Level ${successes}`, color: colorForLevel(successes) }
 }
 
 // Best recorded effort per exercise across sessions: heaviest weight hit for
-// 8+ reps, or the longest held time for timer exercises.
+// 5+ reps, or the longest held time for timer exercises.
 export function bestExerciseEffort(sessions) {
     const best = {}
     for (const s of sessions) {
@@ -390,7 +379,7 @@ export function bestExerciseEffort(sessions) {
                 for (const set of (ex?.sets || [])) {
                     const r = parseReps(set?.reps)
                     const w = parseWeight(set?.weight)
-                    if (w != null && r >= 8 && w > entry.weight) entry.weight = w
+                    if (w != null && r >= MIN_CHALLENGE_REPS && w > entry.weight) entry.weight = w
                 }
             }
         }
@@ -399,40 +388,27 @@ export function bestExerciseEffort(sessions) {
 }
 
 // Builds ladders for every exercise found in history without touching entries
-// that already exist — earned progress is never recalculated. A verified 8+
-// rep best places experienced users at their true starting level via
-// SEED_SCORES; their actual weight becomes the basis for the next target.
+// that already exist — earned progress is never recalculated. Every exercise
+// starts at Level 1 with the best recorded effort as the baseline.
 export function seedLaddersFromHistory(sessions, bodyweight = 0, existing = {}) {
     const best = bestExerciseEffort(sessions)
     const next = { ...existing }
     let changed = false
     for (const [name, e] of Object.entries(best)) {
-        // Re-seed only entries stranded at Unranked by the pre-fix placement
-        // bug; earned progress is never recalculated.
         if (next[name] && !(next[name].successes === 0 && next[name].lastSuccess > 0)) continue
         const perf = e.mode === 'timer' ? e.duration : e.weight
         if (!(perf > 0)) continue
         const category = e.category || 'Chest'
-        const bw = parseFloat(bodyweight) || 60
-        const factor = e.mode === 'timer'
-            ? perf / timeFactorForCategory(category)
-            : perf / (bw * strengthFactorForCategory(category))
-        let successes = 0
-        while (successes < SEED_SCORES.length && factor >= SEED_SCORES[successes]) successes++
-        const start = beginnerTarget({ bodyweight: bw, category, mode: e.mode, name })
-        // Anyone with verified history that already clears the starter challenge
-        // holds at least Bronze — no trained user should sit at Unranked.
-        if (!successes && perf >= start) successes = 1
         const stepFn = e.mode === 'timer' ? nextTimeTarget : nextWeightTarget
         next[name] = {
             mode: e.mode,
             category,
-            startTarget: start,
+            startTarget: perf,
             lastSuccess: perf,
             personalBest: perf,
-            nextTarget: successes > 0 ? stepFn(perf) : Math.max(start, stepFn(perf)),
-            successes,
-            highestLevel: Math.min(successes, LADDER_MAX),
+            nextTarget: stepFn(perf),
+            successes: 1,
+            highestLevel: 1,
             bodyweightAtTime: parseFloat(bodyweight) || null,
             updatedAt: new Date().toISOString()
         }
@@ -454,6 +430,46 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
         let entry = next[ex.name] ? { ...next[ex.name] } : null
         if (!entry) {
             const category = ex.category || exerciseMetaByName(ex.name)?.category || inferCategoryByName(ex.name) || 'Chest'
+
+            let perf = 0
+            if (isTimer) {
+                for (const s of (ex?.sets || [])) perf = Math.max(perf, parseDurationSeconds(s?.reps))
+            } else {
+                for (const s of (ex?.sets || [])) {
+                    const r = parseReps(s?.reps)
+                    const w = parseWeight(s?.weight)
+                    if (r >= MIN_CHALLENGE_REPS && w != null && w > perf) perf = w
+                }
+            }
+
+            if (perf > 0) {
+                const stepFn = isTimer ? nextTimeTarget : nextWeightTarget
+                let successes = 1
+                let target = perf
+                while (successes < 1000) {
+                    const nextTarget = stepFn(target)
+                    if (perf < nextTarget) break
+                    target = nextTarget
+                    successes++
+                }
+                entry = {
+                    mode: isTimer ? 'timer' : 'weight',
+                    category,
+                    startTarget: perf,
+                    lastSuccess: perf,
+                    personalBest: perf,
+                    nextTarget: stepFn(target),
+                    successes,
+                    highestLevel: successes,
+                    bodyweightAtTime: parseFloat(bodyweight) || null,
+                    updatedAt: now.toISOString()
+                }
+                const badge = badgeFor(successes)
+                promotions.push({ exerciseName: ex.name, ...badge })
+                next[ex.name] = entry
+                continue
+            }
+
             const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : 'weight', name: ex.name })
             entry = {
                 mode: isTimer ? 'timer' : 'weight',
@@ -479,17 +495,24 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
             }
         }
         if (perf > (entry.personalBest || 0)) entry.personalBest = perf
-        const prevTier = Math.min(entry.successes || 0, LADDER_MAX)
+        const prevTier = entry.successes || 0
         if (perf > 0 && perf >= entry.nextTarget) {
-            entry.successes = (entry.successes || 0) + 1
+            const stepFn = isTimer ? nextTimeTarget : nextWeightTarget
+            let levelUps = 0
+            let target = entry.nextTarget
+            while (perf >= target) {
+                levelUps++
+                target = stepFn(target)
+            }
+            entry.successes = (entry.successes || 0) + levelUps
             entry.lastSuccess = perf
-            entry.nextTarget = isTimer ? nextTimeTarget(perf) : nextWeightTarget(perf)
+            entry.nextTarget = stepFn(target)
             if (bodyweight) entry.bodyweightAtTime = parseFloat(bodyweight)
             entry.updatedAt = now.toISOString()
             const badge = badgeFor(entry.successes)
-            if (badge.tier > prevTier) promotions.push({ name: ex.name, ...badge })
+            if (badge.tier > prevTier) promotions.push({ exerciseName: ex.name, ...badge })
         }
-        entry.highestLevel = Math.max(entry.highestLevel || 0, Math.min(entry.successes || 0, LADDER_MAX))
+        entry.highestLevel = Math.max(entry.highestLevel || 0, entry.successes || 0)
         next[ex.name] = entry
     }
     return { ladders: next, promotions }
@@ -525,7 +548,6 @@ export function ladderView(entry, bodyweight = 0) {
         tier: badge?.tier || 0,
         levelName: badge?.name || 'Unranked',
         color: badge?.color || '#737373',
-        isMax: !!badge?.isMax,
         startTarget: entry.startTarget,
         lastSuccess: entry.lastSuccess ?? null,
         personalBest: entry.personalBest || 0,
@@ -638,9 +660,9 @@ export function formatChallengeTime(min) {
 }
 
 // Best weight / reps / duration ever recorded per normalized exercise name.
-// Weight and reps only count when the set had at least 8 reps — a 1RM-style
+// Weight and reps only count when the set had at least 5 reps — a 1RM-style
 // single won't clear a challenge.
-const MIN_CHALLENGE_REPS = 8
+const MIN_CHALLENGE_REPS = 5
 
 export function buildBestLifts(sessions) {
     const bests = {}

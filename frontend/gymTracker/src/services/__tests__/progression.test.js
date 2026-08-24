@@ -8,7 +8,7 @@ import {
     rankForXp,
     xpThresholdForLevel,
     MAX_LEVEL,
-    LADDER_LEVELS,
+    colorForLevel,
     beginnerTarget,
     nextWeightTarget,
     nextTimeTarget,
@@ -309,32 +309,32 @@ describe('exercise badge ladders', () => {
         expect(nextTimeTarget(90)).toBe(100)
     })
 
-    it('case 1+6: 60kg beginner completes exactly 8 reps and earns Bronze', () => {
+    it('case 1+6: 60kg beginner completes exactly 8 reps and earns Level 1', () => {
         const { ladders, promotions } = applySessionToLadders({}, bench([{ reps: '8', weight: '18' }]), 60)
         const entry = ladders['Flat Bench Press']
         expect(promotions).toHaveLength(1)
-        expect(promotions[0].name).toBe('Bronze')
+        expect(promotions[0].name).toBe('Level 1')
         expect(entry.successes).toBe(1)
         expect(entry.lastSuccess).toBe(18)
         expect(entry.nextTarget).toBe(nextWeightTarget(18))
         const view = ladderView(entry, 60)
-        expect(view.levelName).toBe('Bronze')
+        expect(view.levelName).toBe('Level 1')
         expect(view.strengthRatio).toBeCloseTo(0.3)
     })
 
     it('case 2: an 80kg beginner gets a higher starting target and climbs the same way', () => {
         const { ladders, promotions } = applySessionToLadders({}, bench([{ reps: '10', weight: '25' }]), 80)
         expect(ladders['Flat Bench Press'].startTarget).toBe(25)
-        expect(promotions[0].name).toBe('Bronze')
+        expect(promotions[0].name).toBe('Level 1')
         expect(ladders['Flat Bench Press'].nextTarget).toBe(27.5)
     })
 
-    it('grants Bronze to verified history that clears the starter target', () => {
+    it('grants Level 1 to verified history that clears the starter target', () => {
         // 20kg @ 60kg sits below the relative-strength seed line, but it still
         // proves the starter challenge (17.5kg × 8) — no trained user stays Unranked.
         const seeded = seedLaddersFromHistory([bench([{ reps: '10', weight: '20' }])], 60, {})
         expect(seeded['Flat Bench Press'].successes).toBe(1)
-        expect(ladderView(seeded['Flat Bench Press'], 60).levelName).toBe('Bronze')
+        expect(ladderView(seeded['Flat Bench Press'], 60).levelName).toBe('Level 1')
         expect(seeded['Flat Bench Press'].nextTarget).toBe(22.5)
     })
 
@@ -371,30 +371,30 @@ describe('exercise badge ladders', () => {
         })
         const result = await refreshProgress()
         const bench = result.progress.exerciseRanks.find(r => r.name === 'Flat Bench Press')
-        expect(bench.levelName).toBe('Bronze')
+        expect(bench.levelName).toBe('Level 1')
     })
 
-    it('case 3: a 60kg user already benching 80kg starts at Platinum from history', () => {
+    it('case 3: a 60kg user already benching 80kg starts at Level 1 from history', () => {
         const seeded = seedLaddersFromHistory([bench([{ reps: '10', weight: '80' }])], 60, {})
         const entry = seeded['Flat Bench Press']
-        expect(entry.successes).toBe(4)
+        expect(entry.successes).toBe(1)
         expect(entry.lastSuccess).toBe(80)
-        expect(entry.nextTarget).toBe(87.5)
-        expect(ladderView(entry, 60).levelName).toBe('Platinum')
+        expect(entry.nextTarget).toBe(nextWeightTarget(80))
+        expect(ladderView(entry, 60).levelName).toBe('Level 1')
     })
 
-    it('case 4: a 60kg user benching 120kg is recognized as Elite, not a beginner', () => {
+    it('case 4: a 60kg user benching 120kg starts at Level 1 from history', () => {
         const seeded = seedLaddersFromHistory([bench([{ reps: '8', weight: '120' }])], 60, {})
         const entry = seeded['Flat Bench Press']
-        expect(entry.successes).toBe(6)
-        expect(ladderView(entry, 60).levelName).toBe('Elite')
-        expect(entry.nextTarget).toBe(130)
+        expect(entry.successes).toBe(1)
+        expect(ladderView(entry, 60).levelName).toBe('Level 1')
+        expect(entry.nextTarget).toBe(nextWeightTarget(120))
     })
 
-    it('case 5: failing the 8-rep requirement keeps level and target untouched', () => {
-        const first = applySessionToLadders({}, bench([{ reps: '8', weight: '18' }]), 60)
+    it('case 5: failing the 5-rep requirement keeps level and target untouched', () => {
+        const first = applySessionToLadders({}, bench([{ reps: '5', weight: '18' }]), 60)
         const before = first.ladders['Flat Bench Press']
-        const second = applySessionToLadders(first.ladders, bench([{ reps: '6', weight: '40' }]), 60)
+        const second = applySessionToLadders(first.ladders, bench([{ reps: '3', weight: '40' }]), 60)
         const after = second.ladders['Flat Bench Press']
         expect(second.promotions).toHaveLength(0)
         expect(after.successes).toBe(before.successes)
@@ -402,20 +402,19 @@ describe('exercise badge ladders', () => {
         expect(after.lastSuccess).toBe(before.lastSuccess)
     })
 
-    it('case 7: Master users keep progressing past level 7 without a new badge', () => {
+    it('case 7: users keep progressing past level 1', () => {
         const seeded = seedLaddersFromHistory([bench([{ reps: '8', weight: '150' }])], 60, {})
-        expect(seeded['Flat Bench Press'].successes).toBe(7)
-        // Seeded next target is step(150) = 162.5, so 155 alone doesn't complete it
-        const mid = applySessionToLadders(seeded, bench([{ reps: '8', weight: '155' }]), 60)
-        expect(mid.ladders['Flat Bench Press'].successes).toBe(7)
-        const { ladders, promotions } = applySessionToLadders(seeded, bench([{ reps: '8', weight: '165' }]), 60)
+        expect(seeded['Flat Bench Press'].successes).toBe(1)
+        const nextT = nextWeightTarget(150)
+        // Below next target — no advance
+        const mid = applySessionToLadders(seeded, bench([{ reps: '5', weight: String(nextT - 1) }]), 60)
+        expect(mid.ladders['Flat Bench Press'].successes).toBe(1)
+        // Above next target — advance
+        const { ladders, promotions } = applySessionToLadders(seeded, bench([{ reps: '5', weight: String(nextT) }]), 60)
         const entry = ladders['Flat Bench Press']
-        expect(promotions).toHaveLength(0)
-        expect(entry.successes).toBe(8)
-        const view = ladderView(entry, 60)
-        expect(view.levelName).toBe('Master')
-        expect(view.isMax).toBe(true)
-        expect(entry.nextTarget).toBe(177.5)
+        expect(promotions).toHaveLength(1)
+        expect(entry.successes).toBe(2)
+        expect(entry.lastSuccess).toBe(nextT)
     })
 
     it('case 8: changing bodyweight updates the ratio but never resets earned progress', () => {
@@ -452,6 +451,7 @@ describe('exercise badge ladders', () => {
         }, 60)
         expect(ladders.Plank.personalBest).toBe(90)
         expect(ladders.Plank.successes).toBe(1)
+        expect(ladders.Plank.nextTarget).toBe(nextTimeTarget(90))
     })
 
     it('orders the badge list alphabetically', () => {
@@ -462,7 +462,9 @@ describe('exercise badge ladders', () => {
         const ranks = computeExerciseLadders(seeded, 60)
         expect(ranks[0].name).toBe('Barbell Curl')
         expect(ranks[1].name).toBe('Flat Bench Press')
-        expect(LADDER_LEVELS.length).toBe(7)
+        expect(colorForLevel(1)).toBe('#34d399')
+        expect(colorForLevel(6)).toBe('#facc15')
+        expect(colorForLevel(11)).toBe('#f43f5e')
     })
 })
 
@@ -633,10 +635,10 @@ describe('rank challenges', () => {
         expect(status.find((c) => c.key === 'cardio').done).toBe(false)
     })
 
-    it('requires at least 8 reps on every lift to count', () => {
-        const tooFew = challengeStatusForLevel([session([lift('Flat Bench Press', 20, 7)])], 2, DEFAULTS, [])
+    it('requires at least 5 reps on every lift to count', () => {
+        const tooFew = challengeStatusForLevel([session([lift('Flat Bench Press', 20, 4)])], 2, DEFAULTS, [])
         expect(tooFew[0].done).toBe(false)
-        const enough = challengeStatusForLevel([session([lift('Flat Bench Press', 20, 8)])], 2, DEFAULTS, [])
+        const enough = challengeStatusForLevel([session([lift('Flat Bench Press', 20, 5)])], 2, DEFAULTS, [])
         expect(enough[0].done).toBe(true)
     })
 

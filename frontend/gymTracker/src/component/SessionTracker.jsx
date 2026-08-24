@@ -580,7 +580,7 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                                     : !ladder
                                         ? 'COMPLETE A SET TO RANK'
                                         : ladder.tier === 0
-                                            ? `${isTimer ? 'HOLD' : '8 REPS @'} ${fmtLoad(ladder.nextTarget)} FOR BRONZE`
+                                            ? `${isTimer ? 'HOLD' : '5 REPS @'} ${fmtLoad(ladder.nextTarget)} FOR LEVEL 1`
                                             : `${fmtLoad(ladder.lastSuccess)} → ${fmtLoad(ladder.nextTarget)}`}
                         </span>
                     </div>

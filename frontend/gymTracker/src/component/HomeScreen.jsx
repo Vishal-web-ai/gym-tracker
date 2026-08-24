@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RiMenuLine, RiCloseLine } from '@remixicon/react'
-import { Check, Zap, Edit3, Plus, BicepsFlexed, User, CalendarDays, RotateCcw, Trophy } from 'lucide-react'
+import { Check, Zap, Edit3, Plus, BicepsFlexed, User, CalendarDays, RotateCcw } from 'lucide-react'
 import ExercisesList from './ExercisesList'
 import SessionTracker from './SessionTracker'
 import ExerciseDetail from './ExerciseDetail'
@@ -16,6 +16,7 @@ import PrsBadge from './PrsBadge'
 import RankBadge from './RankBadge'
 import RankScreen from './RankScreen'
 import LevelUpOverlay from './LevelUpOverlay'
+import ExerciseBadgeOverlay from './ExerciseBadgeOverlay'
 import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, computePrsFromSessions, challengeStatusForLevel, getChallengePicks, ensureLadders, recordSessionLadders } from '../services/progression'
 import { exerciseMetaByName } from '../services/exercises'
 import {
@@ -137,8 +138,7 @@ const HomeScreen = () => {
     const [savedWorkoutName, setSavedWorkoutName] = useState('')
     const [challengeToasts, setChallengeToasts] = useState([])
     const challengeToastTimer = useRef(null)
-    const [badgeToasts, setBadgeToasts] = useState([])
-    const badgeToastTimer = useRef(null)
+    const [exerciseBadgePromo, setExerciseBadgePromo] = useState(null)
     const [ladders, setLadders] = useState(null)
     const [monthlyCount, setMonthlyCount] = useState(0)
     const [statKey, setStatKey] = useState(0)
@@ -558,12 +558,12 @@ const HomeScreen = () => {
         setMotivationalPhrases([msg])
 
         if (promotions.length) {
-            if (badgeToastTimer.current) clearTimeout(badgeToastTimer.current)
-            setBadgeToasts(promotions)
-            badgeToastTimer.current = setTimeout(() => setBadgeToasts([]), 4000)
+            const first = promotions[0]
+            setShowSuccess(false)
+            setExerciseBadgePromo({ exerciseName: first.exerciseName || first.name, level: first.tier, color: first.color })
         }
 
-        if (result && (result.isLevelUp || (breakdown && breakdown.bonuses.length))) {
+        if (result && result.isLevelUp) {
             setShowSuccess(false)
             setCelebration({
                 rank: result.progress.rank,
@@ -571,7 +571,7 @@ const HomeScreen = () => {
                 isLevelUp: result.isLevelUp,
                 progress: result.progress
             })
-        } else {
+        } else if (!promotions.length) {
             setTimeout(() => {
                 setShowSuccess(false)
                 setSavedWorkoutName('')
@@ -967,26 +967,15 @@ const HomeScreen = () => {
                 )}
             </AnimatePresence>
 
-            {/* Badge promotion toasts */}
-            <AnimatePresence>
-                {badgeToasts.length > 0 && (
-                    <motion.div
-                        key='badge-toasts'
-                        className='fixed bottom-40 left-1/2 -translate-x-1/2 z-[70] flex flex-col items-center gap-2 px-4 pointer-events-none'
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 16 }}
-                        transition={{ duration: 0.25 }}
-                    >
-                        {badgeToasts.map(b => (
-                            <div key={b.name} className='flex items-center gap-2 rounded-full px-4 py-2 font-mono text-sm font-bold text-black shadow-[0_0_24px_rgba(249,115,22,0.6)]' style={{ background: b.color }}>
-                                <Trophy size={14} className='text-black/80' />
-                                {b.name} → {b.levelName}!
-                            </div>
-                        ))}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* Exercise badge promotion overlay */}
+            {exerciseBadgePromo && (
+                <ExerciseBadgeOverlay
+                    exerciseName={exerciseBadgePromo.exerciseName}
+                    level={exerciseBadgePromo.level}
+                    color={exerciseBadgePromo.color}
+                    onClose={() => setExerciseBadgePromo(null)}
+                />
+            )}
 
             {/* Add PR bottom sheet */}
             <AnimatePresence>

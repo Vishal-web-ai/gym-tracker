@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import RankIcon from './RankIcon'
-import { RANKS, LADDER_LEVELS, refreshProgress, xpThresholdForLevel, formatDuration } from '../services/progression'
+import { RANKS, refreshProgress, xpThresholdForLevel, formatDuration } from '../services/progression'
 
 const slideVariants = {
     enter: (dir) => ({ y: dir > 0 ? '100%' : '-100%', opacity: 0 }),
@@ -126,7 +126,7 @@ export default function RankScreen({ onClose }) {
                                                 </p>
                                                 <div className='flex flex-col gap-1 w-full mt-1'>
                                                     <p className='font-mono text-[9px] tracking-[2px] text-white/40 text-center'>YOUR CHALLENGES</p>
-                                                    <p className='font-mono text-[8px] leading-snug text-white/30 text-center'>(RULES: 8 REPS PER SET · CLEAR ALL 5 CHALLENGE EXERCISES)</p>
+                                                    <p className='font-mono text-[8px] leading-snug text-white/30 text-center'>(RULES: 5 REPS PER SET · CLEAR ALL 5 CHALLENGE EXERCISES)</p>
                                                     {(progress?.challenges?.[i]?.groups || []).length === 0 ? (
                                                         <p className='font-mono text-[9px] text-white/30 text-center'>Pick your challenge exercises in Settings.</p>
                                                     ) : (
@@ -173,7 +173,7 @@ export default function RankScreen({ onClose }) {
                                     {progress.exerciseRanks.map((e) => {
                                         const isTimer = e.mode === 'timer'
                                         const fmt = (v) => (v == null || !(v > 0) ? '—' : isTimer ? formatDuration(v) : `${v}kg`)
-                                        const nextLevelName = e.tier > 0 && e.tier < LADDER_LEVELS.length ? LADDER_LEVELS[e.tier].name : null
+                                        const nextLevel = e.tier + 1
                                         return (
                                             <div key={e.name} className='flex flex-col gap-1'>
                                                 <div className='flex items-center gap-2'>
@@ -182,18 +182,16 @@ export default function RankScreen({ onClose }) {
                                                         {e.levelName.toUpperCase()}
                                                     </p>
                                                     <p className='font-mono text-white/30 text-[10px]'>
-                                                        {fmt(e.lastSuccess)}{e.isMax ? '' : ` → ${fmt(e.nextTarget)}`}
+                                                        {fmt(e.lastSuccess)} → {fmt(e.nextTarget)}
                                                     </p>
                                                 </div>
                                                 <div className='h-1.5 rounded-full bg-white/10 overflow-hidden'>
                                                     <div className='h-full rounded-full' style={{ width: `${Math.round(e.progress * 100)}%`, background: e.color }} />
                                                 </div>
                                                 <p className='font-mono text-white/30 text-[9px]'>
-                                                    {e.isMax
-                                                        ? `PR MODE — next challenge ${fmt(e.nextTarget)}`
-                                                        : e.tier === 0
-                                                            ? `${fmt(e.nextTarget)} × 8 reps earns BRONZE`
-                                                            : `${fmt(Math.max(0, (e.nextTarget || 0) - (e.lastSuccess || 0)))} to go for ${nextLevelName.toUpperCase()}`}
+                                                    {e.tier === 0
+                                                        ? `${fmt(e.nextTarget)} × 5 reps earns LEVEL 1`
+                                                        : `${fmt(Math.max(0, (e.nextTarget || 0) - (e.lastSuccess || 0)))} to go for LEVEL ${nextLevel}`}
                                                 </p>
                                                 {e.strengthRatio != null && (
                                                     <p className='font-mono text-white/20 text-[9px]'>
