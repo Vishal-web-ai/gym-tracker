@@ -288,20 +288,32 @@ describe('exercise badge ladders', () => {
         exercises: [{ name: 'Flat Bench Press', mode: 'weight', category, sets }]
     })
 
-    it('seeds beginner targets from bodyweight, category and equipment', () => {
-        expect(beginnerTarget({ bodyweight: 60, category: 'Chest', mode: 'weight', name: 'Flat Bench Press' })).toBe(17.5)
-        expect(beginnerTarget({ bodyweight: 80, category: 'Chest', mode: 'weight', name: 'Flat Bench Press' })).toBe(25)
-        expect(beginnerTarget({ bodyweight: 60, category: 'Biceps', mode: 'weight', name: 'Barbell Curl' })).toBe(7.5)
-        expect(beginnerTarget({ bodyweight: 60, category: 'Biceps', mode: 'weight', name: 'Dumbbell Curl' })).toBe(2.5)
-        expect(beginnerTarget({ bodyweight: 60, category: 'Chest', mode: 'weight', name: 'Machine Chest Press' })).toBe(12.5)
-        expect(beginnerTarget({ bodyweight: 60, category: 'Core', mode: 'timer', name: 'Plank' })).toBe(25)
+    it('seeds beginner targets from exercise presets (total weight)', () => {
+        expect(beginnerTarget({ category: 'Chest', mode: 'weight', name: 'Flat Bench Press' })).toBe(10)
+        expect(beginnerTarget({ category: 'Biceps', mode: 'weight', name: 'Barbell Curl' })).toBe(5)
+        expect(beginnerTarget({ category: 'Biceps', mode: 'weight', name: 'Dumbbell Curl' })).toBe(10)
+        expect(beginnerTarget({ category: 'Chest', mode: 'weight', name: 'Machine Chest Press' })).toBe(15)
+        expect(beginnerTarget({ category: 'Shoulders', mode: 'weight', name: 'Lateral Raises' })).toBe(5)
+        expect(beginnerTarget({ category: 'Core', mode: 'timer', name: 'Plank' })).toBe(25)
     })
 
-    it('steps ~8% rounded to plates, never under +2.5kg (30 → 32.5 → 35)', () => {
+    it('bodyweight exercises start at 12 reps (bodyweight-only)', () => {
+        expect(beginnerTarget({ category: 'Chest', mode: 'bodyweight', name: 'Push-Up' })).toBe(12)
+        expect(beginnerTarget({ category: 'Back', mode: 'bodyweight', name: 'Pull-Up' })).toBe(12)
+        expect(beginnerTarget({ category: 'Chest', mode: 'bodyweight', name: 'Chest Dip' })).toBe(12)
+        expect(beginnerTarget({ category: 'Core', mode: 'bodyweight', name: 'Bench Crunch' })).toBe(12)
+        expect(beginnerTarget({ category: 'Core', mode: 'bodyweight', name: 'Hanging Leg Raise' })).toBe(12)
+    })
+
+    it('steps by exercise preset or ~8% rounded to plates, never under +step', () => {
         expect(nextWeightTarget(30)).toBe(32.5)
         expect(nextWeightTarget(32.5)).toBe(35)
         expect(nextWeightTarget(35)).toBe(37.5)
         expect(nextWeightTarget(120)).toBe(130)
+        // Exercise-specific step sizes
+        expect(nextWeightTarget(10, 'Lateral Raises')).toBe(12.5)
+        expect(nextWeightTarget(50, 'Leg Press')).toBe(60)
+        expect(nextWeightTarget(20, 'Flat Bench Press')).toBe(22.5)
     })
 
     it('mirrors the ladder in time for timer exercises (~10%, 5s steps)', () => {
@@ -342,6 +354,27 @@ describe('exercise badge ladders', () => {
         const seeded = seedLaddersFromHistory([bench([{ reps: '10', weight: '30' }])], 0, {})
         expect(seeded['Flat Bench Press'].successes).toBeGreaterThanOrEqual(1)
         expect(ladderView(seeded['Flat Bench Press'], 0).levelName).not.toBe('Unranked')
+    })
+
+    it('preserves bodyweight mode in ladder entries', () => {
+        const session = {
+            id: 's-bw1', name: 'Workout',
+            exercises: [{ name: 'Pull-Up', mode: 'bodyweight', sets: [{ reps: '10', weight: '0kg' }] }]
+        }
+        const { ladders } = applySessionToLadders({}, session, 70)
+        expect(ladders['Pull-Up']).toBeDefined()
+        expect(ladders['Pull-Up'].mode).toBe('bodyweight')
+    })
+
+    it('scores bodyweight exercises on extra weight (weighted pull-ups)', () => {
+        const session = {
+            id: 's-bw2', name: 'Workout',
+            exercises: [{ name: 'Pull-Up', mode: 'bodyweight', sets: [{ reps: '10', weight: '10kg' }] }]
+        }
+        const { ladders, promotions } = applySessionToLadders({}, session, 70)
+        expect(ladders['Pull-Up'].mode).toBe('bodyweight')
+        expect(ladders['Pull-Up'].personalBest).toBe(10)
+        expect(promotions.length).toBeGreaterThanOrEqual(1)
     })
 
     it('repairs entries stranded at Unranked by the pre-fix placement', () => {

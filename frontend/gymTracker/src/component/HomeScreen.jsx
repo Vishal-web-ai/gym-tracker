@@ -17,7 +17,7 @@ import RankBadge from './RankBadge'
 import RankScreen from './RankScreen'
 import LevelUpOverlay from './LevelUpOverlay'
 import ExerciseBadgeOverlay from './ExerciseBadgeOverlay'
-import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, computePrsFromSessions, challengeStatusForLevel, getChallengePicks, ensureLadders, recordSessionLadders } from '../services/progression'
+import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, computePrsFromSessions, challengeStatusForLevel, getChallengePicks, ensureLadders, recordSessionLadders, computeProgress, getStartRank } from '../services/progression'
 import { exerciseMetaByName } from '../services/exercises'
 import {
     getName,
@@ -138,7 +138,7 @@ const HomeScreen = () => {
     const [savedWorkoutName, setSavedWorkoutName] = useState('')
     const [challengeToasts, setChallengeToasts] = useState([])
     const challengeToastTimer = useRef(null)
-    const [exerciseBadgePromo, setExerciseBadgePromo] = useState(null)
+    const [liveLevelUp, setLiveLevelUp] = useState(null)
     const [ladders, setLadders] = useState(null)
     const [monthlyCount, setMonthlyCount] = useState(0)
     const [statKey, setStatKey] = useState(0)
@@ -268,7 +268,35 @@ const HomeScreen = () => {
                 setProgress(result.progress)
                 if (result.ladders) setLadders(result.ladders)
             })
-            .catch(() => {})
+            .catch((err) => {
+                console.error('Initial progress load failed:', err)
+                // Fallback: compute progress from sessions directly
+                if (cancelled) return
+                Promise.all([getSessions(), getUserProfile().catch(() => ({})), getCustomExercises(), getChallengePicks(), getFreezeState()])
+                    .then(([sessions, profile, customEx, picks, freezeState]) => {
+                        if (cancelled) return
+                        const bw = parseFloat(profile?.weight) || 0
+                        ensureLadders(sessions, bw).then((laddersData) => {
+                            if (cancelled) return
+                            getStartRank().then((startRank) => {
+                                if (cancelled) return
+                                const progress = computeProgress({
+                                    sessions,
+                                    frozenDays: freezeState.frozenDays,
+                                    now: new Date(),
+                                    startRank,
+                                    bodyweight: bw,
+                                    picks,
+                                    customExercises: customEx,
+                                    ladders: laddersData
+                                })
+                                setProgress(progress)
+                                setLadders(laddersData)
+                            }).catch(() => {})
+                        }).catch(() => {})
+                    })
+                    .catch(() => {})
+            })
         return () => { cancelled = true }
     }, [])
 
@@ -400,7 +428,17 @@ const HomeScreen = () => {
             mode: exercise.mode,
             category: exercise.category || exerciseMetaByName(exercise.name)?.category
         }
-        setSelectedExercises(prev => [...prev, newExercise])
+        setSelectedExercises(prev => {
+            const next = [...prev, newExercise]
+            if (exercise.mode === 'bodyweight' && bodyweight > 0) {
+                const idx = next.length - 1
+                setExerciseWeights(prev => ({
+                    ...prev,
+                    [idx]: { 0: String(bodyweight), 1: String(bodyweight), 2: String(bodyweight) }
+                }))
+            }
+            return next
+        })
         setPlannedExercises(prev => [...prev, newExercise])
         setPreviewExercise(null)
         setShowExercisesList(false)
@@ -456,7 +494,15 @@ const HomeScreen = () => {
             }))
             setPlannedExercises(list)
             setSelectedExercises(list)
-            setExerciseWeights({})
+            const weights = {}
+            if (bodyweight > 0) {
+                list.forEach((ex, idx) => {
+                    if (ex.mode === 'bodyweight') {
+                        weights[idx] = { 0: String(bodyweight), 1: String(bodyweight), 2: String(bodyweight) }
+                    }
+                })
+            }
+            setExerciseWeights(weights)
             setExerciseSets({})
             setExerciseNotes({})
             setExerciseMedia({})
@@ -497,23 +543,53 @@ const HomeScreen = () => {
             // ignore
         }
 
-        let promotions = []
         let result = null
         let breakdown = null
 
         try {
             if (session) {
-                const res = await recordSessionLadders(session, bodyweight).catch(() => null)
+                const res = await recordSessionLadders(session, bodyweight).catch((err) => {
+                    console.error('recordSessionLadders failed:', err)
+                    return null
+                })
                 if (res) {
                     setLadders(res.ladders)
-                    promotions = res.promotions || []
                 }
             }
 
-            result = await refreshProgress().catch(() => null)
+            result = await refreshProgress().catch((err) => {
+                console.error('refreshProgress failed:', err)
+                return null
+            })
             if (result) {
                 setProgress(result.progress)
                 if (result.ladders) setLadders(result.ladders)
+            } else {
+                // Fallback: recompute progress inline if refreshProgress failed
+                try {
+                    const sessions = await getSessions()
+                    const profile = await getUserProfile().catch(() => ({}))
+                    const bw = parseFloat(profile?.weight) || 0
+                    const laddersData = await ensureLadders(sessions, bw)
+                    const customExercises = await getCustomExercises()
+                    const picks = await getChallengePicks()
+                    const freezeState = await getFreezeState()
+                    const startRank = await getStartRank()
+                    const fallbackProgress = computeProgress({
+                        sessions,
+                        frozenDays: freezeState.frozenDays,
+                        now: new Date(),
+                        startRank,
+                        bodyweight: bw,
+                        picks,
+                        customExercises,
+                        ladders: laddersData
+                    })
+                    setProgress(fallbackProgress)
+                    setLadders(laddersData)
+                } catch (fallbackErr) {
+                    console.error('Fallback progress computation failed:', fallbackErr)
+                }
             }
 
             if (session) {
@@ -557,12 +633,6 @@ const HomeScreen = () => {
         const msg = WORKOUT_DONE_MESSAGES[Math.floor(Math.random() * WORKOUT_DONE_MESSAGES.length)]
         setMotivationalPhrases([msg])
 
-        if (promotions.length) {
-            const first = promotions[0]
-            setShowSuccess(false)
-            setExerciseBadgePromo({ exerciseName: first.exerciseName || first.name, level: first.tier, color: first.color })
-        }
-
         if (result && result.isLevelUp) {
             setShowSuccess(false)
             setCelebration({
@@ -571,7 +641,7 @@ const HomeScreen = () => {
                 isLevelUp: result.isLevelUp,
                 progress: result.progress
             })
-        } else if (!promotions.length) {
+        } else {
             setTimeout(() => {
                 setShowSuccess(false)
                 setSavedWorkoutName('')
@@ -905,6 +975,7 @@ const HomeScreen = () => {
                                     bodyweight={bodyweight}
                                     ladders={ladders}
                                     sessions={sessions}
+                                    onLiveLevelUp={setLiveLevelUp}
                                 />
                             </div>
                         )}
@@ -967,13 +1038,13 @@ const HomeScreen = () => {
                 )}
             </AnimatePresence>
 
-            {/* Exercise badge promotion overlay */}
-            {exerciseBadgePromo && (
+            {/* Live exercise level-up overlay (during session) */}
+            {liveLevelUp && (
                 <ExerciseBadgeOverlay
-                    exerciseName={exerciseBadgePromo.exerciseName}
-                    level={exerciseBadgePromo.level}
-                    color={exerciseBadgePromo.color}
-                    onClose={() => setExerciseBadgePromo(null)}
+                    exerciseName={liveLevelUp.exerciseName}
+                    level={liveLevelUp.level}
+                    color={liveLevelUp.color}
+                    onClose={() => setLiveLevelUp(null)}
                 />
             )}
 

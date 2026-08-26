@@ -1,4 +1,4 @@
-import { useState, useLayoutEffect, useEffect, useRef, useMemo } from 'react'
+import { useState, useLayoutEffect, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check, Images, Film, Trophy, Flame, Zap, Timer } from 'lucide-react'
 import NumberOfSets from './NumberOfSets'
@@ -7,7 +7,7 @@ import RestTimer from './RestTimer'
 import { createSession, getRestSound, getSessions } from '../services/storage'
 import { addMedia } from '../services/media'
 import { getErrorMessage } from '../services/errors'
-import { buildHistoryIndex, parseDurationSeconds, formatDuration, ladderView } from '../services/progression'
+import { buildHistoryIndex, parseDurationSeconds, formatDuration, ladderView, projectExerciseLadder } from '../services/progression'
 
 const XP_BURST = Array.from({ length: 12 }, (_, i) => {
     const angle = (i / 12) * Math.PI * 2
@@ -21,22 +21,39 @@ const XP_BURST = Array.from({ length: 12 }, (_, i) => {
     }
 })
 
-const WeightCell = ({ value, onChange, disabled = false }) => (
-    <input
-        type='text'
-        inputMode='decimal'
-        value={value}
-        disabled={disabled}
-        onChange={(e) => {
-            const v = e.target.value
-            if (v === '' || /^\d*\.?\d*$/.test(v)) onChange(v)
-        }}
-        placeholder='0'
-        className='w-full h-9 bg-black/30 border border-white/15 rounded-xl text-center font-bebas text-orange-400 text-lg outline-none placeholder-orange-400/40 disabled:cursor-not-allowed disabled:opacity-40'
-    />
-)
+const WeightCell = ({ value, onChange, disabled = false, suffix = '', bodyweight = 0 }) => {
+    const inputRef = useRef(null)
+    const showSuffix = suffix && bodyweight > 0 && (value === '' || String(bodyweight) === String(value))
 
-const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, showNotes, setShowNotes, sound, bodyweight, sessions = [], ladders = null, onXpFlash, canPrev, canNext, onGoPrev, onGoNext }) => {
+    const handleChange = (e) => {
+        const v = e.target.value
+        if (v === '' || /^\d*\.?\d*$/.test(v)) {
+            onChange(v)
+        }
+    }
+
+    return (
+        <div className='relative'>
+            <input
+                ref={inputRef}
+                type='text'
+                inputMode='decimal'
+                value={value}
+                disabled={disabled}
+                onChange={handleChange}
+                placeholder={showSuffix ? '' : '0'}
+                className={`w-full h-9 bg-black/30 border border-white/15 rounded-xl text-center font-bebas text-orange-400 text-lg outline-none placeholder-orange-400/40 disabled:cursor-not-allowed disabled:opacity-40 ${showSuffix ? 'pr-16' : ''}`}
+            />
+            {showSuffix && (
+                <span className='absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-mono font-bold text-white/60 pointer-events-none'>
+                    {suffix}
+                </span>
+            )}
+        </div>
+    )
+}
+
+const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, showNotes, setShowNotes, sound, bodyweight, sessions = [], ladders = null, onXpFlash, canPrev, canNext, onGoPrev, onGoNext, onLevelUp }) => {
     const photoCaptureRef = useRef(null)
     const photoGalleryRef = useRef(null)
     const videoCaptureRef = useRef(null)
@@ -53,6 +70,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const snapTimerRef = useRef(null)
     const settleTimerRef = useRef(null)
     const isTimer = exercise.mode === 'timer'
+    const isBodyweight = exercise.mode === 'bodyweight'
     const setCount = Math.max(3, Math.min(10, exerciseSetCount?.[idx] || 3))
     const prevSetCount = useRef(setCount)
     const width = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 375))[0]
@@ -229,7 +247,55 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     }
     const challengeHit = !!ladder && livePerf > 0 && livePerf >= ladder.nextTarget
     const laddersReady = ladders != null
-    const unranked = laddersReady && (!ladder || ladder.tier === 0)
+
+    // Live level projection from completed sets
+    const completedSets = useMemo(() => {
+        const sets = []
+        for (let si = 0; si < setCount; si++) {
+            if (!exerciseDone[idx]?.[si]) continue
+            sets.push({
+                reps: exerciseSets[idx]?.[si] || '—',
+                weight: isTimer ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
+            })
+        }
+        return sets
+    }, [exerciseDone, exerciseSets, exerciseWeights, idx, setCount, isTimer])
+
+    const projected = useMemo(() => {
+        if (completedSets.length === 0) return null
+        return projectExerciseLadder(
+            ladders?.[exercise.name] || null,
+            completedSets,
+            exercise.mode,
+            exercise.category || 'Chest',
+            bodyweight,
+            exercise.name
+        )
+    }, [completedSets, ladders, exercise.name, exercise.mode, exercise.category, bodyweight])
+
+    const prevLevelRef = useRef(projected?.projectedLevel ?? 0)
+    const levelUpTimerRef = useRef(null)
+    useEffect(() => {
+        if (!projected || !projected.didLevelUp) return
+        if (projected.projectedLevel > prevLevelRef.current) {
+            clearTimeout(levelUpTimerRef.current)
+            levelUpTimerRef.current = setTimeout(() => {
+                onLevelUp?.({
+                    exerciseName: exercise.name,
+                    level: projected.projectedLevel,
+                    color: projected.badge?.color || '#f97316'
+                })
+            }, 1000)
+        }
+        prevLevelRef.current = projected.projectedLevel
+        return () => clearTimeout(levelUpTimerRef.current)
+    }, [projected, exercise.name, onLevelUp])
+
+    // Use projected level for display if available, otherwise fall back to persisted
+    const displayLevel = projected?.projectedLevel ?? ladder?.tier ?? 0
+    const displayLevelName = projected?.badge?.name || ladder?.levelName || 'Unranked'
+    const displayColor = projected?.badge?.color || ladder?.color || '#737373'
+
     const fmtLoad = (v) => (v == null || !(v > 0) ? '—' : isTimer ? formatDuration(v) : `${v}kg`)
     const pr = savedEntry && savedEntry.bestWeight > 0
         ? { name: exercise.name, weight: savedEntry.bestWeight, reps: savedEntry.bestRepsAtWeight?.[savedEntry.bestWeight] || '—' }
@@ -251,45 +317,63 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         }
     }
 
+    const checkBonus = (setIdx) => {
+        const doneSets = []
+        for (let si = 0; si < setCount; si++) {
+            if (si !== setIdx && exerciseDone[idx]?.[si]) {
+                doneSets.push({
+                    reps: exerciseSets[idx]?.[si] || '—',
+                    weight: isTimer ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
+                })
+            }
+        }
+        const reps = isTimer
+            ? parseDurationSeconds(exerciseSets[idx]?.[setIdx])
+            : parseFloat(exerciseSets[idx]?.[setIdx]) || 0
+        const weight = parseFloat(String(exerciseWeights[idx]?.[setIdx]).replace('kg', '')) || 0
+        const isTimerMode = isTimer
+        const exerciseName = exercise.name
+        const exerciseMode = exercise.mode
+
+        getSessions().then(allSessions => {
+            const synthetic = doneSets.length > 0 ? [{ exercises: [{ name: exerciseName, mode: exerciseMode, sets: doneSets }] }] : []
+            const index = buildHistoryIndex([...(allSessions || []), ...synthetic])
+            const entry = index[exerciseName]
+            let bonus = null
+            if (isTimerMode) {
+                if (entry && reps > entry.bestDuration) bonus = { type: 'timer-record', points: 10 }
+            } else if (entry && entry.bestWeight > -Infinity && weight > entry.bestWeight) {
+                bonus = { type: 'weight-pr', points: 10 }
+            } else if (entry && weight > 0 && weight in (entry.bestRepsAtWeight || {}) && reps > entry.bestRepsAtWeight[weight]) {
+                bonus = { type: 'extra-rep', points: 5 }
+            }
+            if (bonus && !rewardedRef.current.has(`${idx}:${setIdx}`)) {
+                rewardedRef.current.add(`${idx}:${setIdx}`)
+                onXpFlash({ id: Date.now(), type: bonus.type, points: bonus.points })
+            }
+        }).catch(() => {})
+    }
+
     const handleToggleDone = (setIdx) => {
         const currentlyDone = !!exerciseDone[idx]?.[setIdx]
         if (!currentlyDone) {
-            const doneSets = []
-            for (let si = 0; si < setCount; si++) {
-                if (si !== setIdx && exerciseDone[idx]?.[si]) {
-                    doneSets.push({
-                        reps: exerciseSets[idx]?.[si] || '—',
-                        weight: isTimer ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
-                    })
-                }
-            }
-            const reps = isTimer
-                ? parseDurationSeconds(exerciseSets[idx]?.[setIdx])
-                : parseFloat(exerciseSets[idx]?.[setIdx]) || 0
-            const weight = parseFloat(String(exerciseWeights[idx]?.[setIdx]).replace('kg', '')) || 0
-            const isTimerMode = isTimer
-            const exerciseName = exercise.name
-            const exerciseMode = exercise.mode
-
-            getSessions().then(allSessions => {
-                const synthetic = doneSets.length > 0 ? [{ exercises: [{ name: exerciseName, mode: exerciseMode, sets: doneSets }] }] : []
-                const index = buildHistoryIndex([...(allSessions || []), ...synthetic])
-                const entry = index[exerciseName]
-                let bonus = null
-                if (isTimerMode) {
-                    if (entry && reps > entry.bestDuration) bonus = { type: 'timer-record', points: 10 }
-                } else if (entry && weight > entry.bestWeight) {
-                    bonus = { type: 'weight-pr', points: 10 }
-                } else if (entry && weight > 0 && reps > (entry.bestRepsAtWeight?.[weight] || 0)) {
-                    bonus = { type: 'extra-rep', points: 5 }
-                }
-                if (bonus && !rewardedRef.current.has(`${idx}:${setIdx}`)) {
-                    rewardedRef.current.add(`${idx}:${setIdx}`)
-                    onXpFlash({ id: Date.now(), type: bonus.type, points: bonus.points })
-                }
-            }).catch(() => {})
+            checkBonus(setIdx)
         }
         setDone(idx, setIdx, !currentlyDone)
+    }
+
+    const handleRepsChange = (setIdx, val) => {
+        setReps(idx, setIdx, val)
+        if (exerciseDone[idx]?.[setIdx]) {
+            checkBonus(setIdx)
+        }
+    }
+
+    const handleWeightChange = (setIdx, val) => {
+        setWeight(idx, setIdx, val)
+        if (exerciseDone[idx]?.[setIdx]) {
+            checkBonus(setIdx)
+        }
     }
 
     return (
@@ -330,6 +414,11 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                     >
                         {exercise.name}
                     </h1>
+                    {isBodyweight && (
+                        <span className='absolute left-0 top-0 text-[10px] font-mono font-bold tracking-[1px] text-emerald-400/70 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-1 leading-tight text-center'>
+                            Bodyweight<br/>Exercise
+                        </span>
+                    )}
                     <button
                         onClick={() => onRemove(idx)}
                         className='relative z-10 ml-auto flex w-9 h-9 rounded-lg border border-white/20 bg-white/5 items-center justify-center cursor-pointer hover:bg-white/15 transition-all shrink-0'
@@ -483,12 +572,14 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                                     {!isTimer && (
                                         <div className='flex-1 min-w-0 relative'>
                                             <label className='absolute -top-3.5 left-0 text-[9px] font-bold text-neutral-500 tracking-[2px]'>
-                                                WEIGHT (KG)
+                                                {isBodyweight ? 'EXTRA WT (KG)' : 'WEIGHT (KG)'}
                                             </label>
                                             <WeightCell
                                                 value={exerciseWeights[idx]?.[setIdx] || ''}
-                                                onChange={(val) => setWeight(idx, setIdx, val)}
+                                                onChange={(val) => handleWeightChange(setIdx, val)}
                                                 disabled={locked}
+                                                suffix={isBodyweight ? 'BODYWEIGHT' : ''}
+                                                bodyweight={bodyweight}
                                             />
                                         </div>
                                     )}
@@ -505,7 +596,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                                                 <NumberOfSets
                                                     mode='timer'
                                                     reps={exerciseSets[idx]?.[setIdx] || ''}
-                                                    setReps={(_, val) => setReps(idx, setIdx, val)}
+                                                    setReps={(_, val) => handleRepsChange(setIdx, val)}
                                                     idx={setIdx}
                                                     className='h-9'
                                                 />
@@ -518,7 +609,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                                                 disabled={locked}
                                                 onChange={(e) => {
                                                     const v = e.target.value
-                                                    if (v === '' || /^\d+$/.test(v)) setReps(idx, setIdx, v)
+                                                    if (v === '' || /^\d+$/.test(v)) handleRepsChange(setIdx, v)
                                                 }}
                                                 placeholder='0'
 className='w-full h-9 bg-black/30 border border-white/15 rounded-xl text-center font-bebas text-orange-400 text-lg outline-none placeholder-orange-400/40 disabled:cursor-not-allowed disabled:opacity-40'
@@ -568,20 +659,32 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                 {/* Badge ladder + PR — centered between set controls and rest timer */}
                 <div className='flex items-center justify-center gap-5 pt-1.5 mt-auto'>
                     <div className='flex items-center gap-2 min-w-0'>
-                        <span className='h-3 w-3 rounded-full shrink-0' style={{ background: ladder?.color || '#737373' }} />
-                        <span className='font-bebas text-sm tracking-[1px] whitespace-nowrap' style={{ color: ladder?.color || '#9ca3af' }}>
-                            {!laddersReady ? '…' : unranked ? 'UNRANKED' : ladder.levelName.toUpperCase()}
+                        <span className='h-3 w-3 rounded-full shrink-0' style={{ background: displayColor }} />
+                        <span className='font-bebas text-sm tracking-[1px] whitespace-nowrap' style={{ color: displayColor }}>
+                            {!laddersReady ? '…' : displayLevel === 0 ? 'UNRANKED' : displayLevelName.toUpperCase()}
                         </span>
                         <span className={`font-mono text-[11px] whitespace-nowrap ${challengeHit ? 'text-emerald-400' : 'text-neutral-500'}`}>
                             {challengeHit
                                 ? 'CHALLENGE DONE ✓'
                                 : !laddersReady
                                     ? ''
-                                    : !ladder
+                                    : !ladder && !projected
                                         ? 'COMPLETE A SET TO RANK'
-                                        : ladder.tier === 0
-                                            ? `${isTimer ? 'HOLD' : '5 REPS @'} ${fmtLoad(ladder.nextTarget)} FOR LEVEL 1`
-                                            : `${fmtLoad(ladder.lastSuccess)} → ${fmtLoad(ladder.nextTarget)}`}
+                                        : (displayLevel === 0 && projected)
+                                            ? isBodyweight
+                                                ? `${projected.entry.nextTarget} REPS FOR LEVEL 1`
+                                                : `${isTimer ? 'HOLD' : '5 REPS @'} ${fmtLoad(projected.entry.nextTarget)} FOR LEVEL 1`
+                                            : projected
+                                                ? isBodyweight
+                                                    ? `BODYWEIGHT + ${fmtLoad(projected.entry.nextTarget)} × 5 → LEVEL ${displayLevel + 1}`
+                                                    : `${fmtLoad(projected.entry.lastSuccess)} → ${fmtLoad(projected.entry.nextTarget)}`
+                                                : ladder?.tier === 0
+                                                    ? isBodyweight
+                                                        ? `${ladder.nextTarget} REPS FOR LEVEL 1`
+                                                        : `${isTimer ? 'HOLD' : '5 REPS @'} ${fmtLoad(ladder.nextTarget)} FOR LEVEL 1`
+                                                    : isBodyweight
+                                                        ? `BODYWEIGHT + ${fmtLoad(ladder.nextTarget)} × 5 → LEVEL ${ladder.tier + 1}`
+                                                        : `${fmtLoad(ladder.lastSuccess)} → ${fmtLoad(ladder.nextTarget)} FOR LEVEL ${ladder.tier + 1}`}
                         </span>
                     </div>
                     {pr && (
@@ -606,7 +709,7 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
     )
 }
 
-const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAddExercises, onSessionSaved, onJumpToExercise, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, currentIndex, setCurrentIndex, showNotes, setShowNotes, bodyweight = 0, sessions = [], ladders = null }) => {
+const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAddExercises, onSessionSaved, onJumpToExercise, exerciseWeights, exerciseSets, exerciseNotes, exerciseMedia, exerciseDone, exerciseSetCount, setWeight, setReps, setNotes, setMedia, setDone, setSetCount, currentIndex, setCurrentIndex, showNotes, setShowNotes, bodyweight = 0, sessions = [], ladders = null, onLiveLevelUp }) => {
     const [showNameModal, setShowNameModal] = useState(false)
     const [showWarnModal, setShowWarnModal] = useState(false)
     const [showPreview, setShowPreview] = useState(false)
@@ -614,6 +717,20 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
     const [restSound, setRestSound] = useState(null)
     const [enterDir, setEnterDir] = useState('next')
     const [xpFlash, setXpFlash] = useState(null)
+
+    useEffect(() => {
+        getRestSound().then(s => { if (s) setRestSound(s) }).catch(() => {})
+    }, [])
+
+    useEffect(() => {
+        if (!xpFlash) return
+        const t = setTimeout(() => setXpFlash(null), 1700)
+        return () => clearTimeout(t)
+    }, [xpFlash])
+
+    const handleLiveLevelUp = useCallback((info) => {
+        onLiveLevelUp?.(info)
+    }, [onLiveLevelUp])
 
     useEffect(() => {
         getRestSound().then(s => { if (s) setRestSound(s) }).catch(() => {})
@@ -644,6 +761,7 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
         setShowNameModal(false)
         const now = new Date()
         const isTimer = (idx) => exercises[idx].mode === 'timer'
+        const isBodyweight = (idx) => exercises[idx].mode === 'bodyweight'
         try {
             const session = await createSession({
                 date: now.toLocaleDateString('en-US', {
@@ -652,11 +770,11 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                 name: workoutName.trim() || 'Workout',
                 exercises: exercises.map((exercise, idx) => ({
                     name: exercise.name,
-                    mode: exercise.mode === 'timer' ? 'timer' : 'weight',
+                    mode: exercise.mode === 'timer' ? 'timer' : exercise.mode === 'bodyweight' ? 'bodyweight' : 'weight',
                     category: exercise.category,
                     sets: Array.from({ length: Math.max(3, Math.min(10, exerciseSetCount?.[idx] || 3)) }, (_, setIdx) => ({
                         reps: exerciseSets[idx]?.[setIdx] || '—',
-                        weight: isTimer(idx) ? '—' : (exerciseWeights[idx]?.[setIdx] ? `${exerciseWeights[idx][setIdx]}kg` : '—')
+                        weight: isTimer(idx) ? '—' : (exerciseWeights[idx]?.[setIdx] ? `${exerciseWeights[idx][setIdx]}kg` : (isBodyweight(idx) ? '0kg' : '—'))
                     })),
                     notes: exerciseNotes?.[idx] || '',
                     media: exerciseMedia?.[idx] || []
@@ -734,6 +852,7 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                                 canNext={!isLast}
                                 onGoPrev={() => { setEnterDir('prev'); setCurrentIndex(current - 1) }}
                                 onGoNext={() => { setEnterDir('next'); setCurrentIndex(current + 1) }}
+                                onLevelUp={handleLiveLevelUp}
                             />
                     ) : (
                         <div className='h-full flex flex-col items-center justify-center'>
@@ -920,14 +1039,14 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                                     transition={{ duration: 0.7, delay: p.delay, ease: 'easeOut' }}
                                 />
                             ))}
-                            <div className='flex items-center gap-1.5'>
+                            <div className='flex items-center gap-2'>
                                 {xpFlash.type === 'weight-pr' && <Flame size={18} className='text-orange-400' />}
                                 {xpFlash.type === 'extra-rep' && <Zap size={18} className='text-orange-400' />}
                                 {xpFlash.type === 'timer-record' && <Timer size={18} className='text-orange-400' />}
-                                <span className='font-bold text-orange-400 text-2xl tracking-wide leading-none drop-shadow-[0_0_12px_rgba(249,115,22,0.6)]'>+{xpFlash.points} XP</span>
-                                <span className='font-bold text-orange-300/80 text-[10px] leading-none'>
+                                <span className='font-bold text-orange-300/80 text-2xl leading-none'>
                                     {xpFlash.type === 'weight-pr' ? 'NEW PR' : xpFlash.type === 'extra-rep' ? 'EXTRA REPS' : 'DURATION RECORD'}
                                 </span>
+                                <span className='font-bold text-orange-400 text-2xl tracking-wide leading-none drop-shadow-[0_0_12px_rgba(249,115,22,0.6)]'>+{xpFlash.points} XP</span>
                             </div>
                         </div>
                     </div>

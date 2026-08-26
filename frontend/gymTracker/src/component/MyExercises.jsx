@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, X, Check, Dumbbell, Timer } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Check, Dumbbell, Timer, User } from 'lucide-react'
 import { getCustomExercises, createExercise, updateExercise, deleteExercise } from '../services/storage'
 import { parseChallengeTime, formatChallengeTime } from '../services/progression'
 import ThemedSelect from './ThemedSelect'
@@ -8,6 +8,7 @@ const CATEGORIES = ['Chest', 'Back', 'Biceps', 'Triceps', 'Arms', 'Shoulders', '
 
 const MODES = [
     { key: 'weight', label: 'Weight (Strength)', Icon: Dumbbell },
+    { key: 'bodyweight', label: 'Bodyweight (Reps + Extra)', Icon: User },
     { key: 'timer', label: 'Timer (Cardio)', Icon: Timer }
 ]
 
@@ -88,7 +89,7 @@ const MyExercises = ({ onClose }) => {
 
     const handleEdit = (ex) => {
         setEditingId(ex.id)
-        setFormData({ name: ex.name, category: ex.category, mode: ex.mode === 'timer' ? 'timer' : 'weight', muscle: ex.muscle || '', challengeTime: formatChallengeTime(ex.challengeTime) })
+        setFormData({ name: ex.name, category: ex.category, mode: ex.mode === 'timer' ? 'timer' : ex.mode === 'bodyweight' ? 'bodyweight' : 'weight', muscle: ex.muscle || '', challengeTime: formatChallengeTime(ex.challengeTime) })
         setShowForm(true)
     }
 
@@ -102,12 +103,12 @@ const MyExercises = ({ onClose }) => {
     }
 
     const ModeBadge = ({ mode }) => {
-        const m = MODES.find(x => x.key === (mode === 'timer' ? 'timer' : 'weight'))
+        const m = MODES.find(x => x.key === (mode === 'timer' ? 'timer' : mode === 'bodyweight' ? 'bodyweight' : 'weight'))
         const { Icon } = m
         return (
-            <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-mono font-bold tracking-wide ${mode === 'timer' ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30' : 'bg-orange-500/15 text-orange-300 border border-orange-500/30'}`}>
+            <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-mono font-bold tracking-wide ${mode === 'timer' ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30' : mode === 'bodyweight' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-orange-500/15 text-orange-300 border border-orange-500/30'}`}>
                 <Icon size={10} />
-                {mode === 'timer' ? 'TIMER' : 'WEIGHT'}
+                {mode === 'timer' ? 'TIMER' : mode === 'bodyweight' ? 'BODYWT' : 'WEIGHT'}
             </span>
         )
     }

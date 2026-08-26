@@ -8,8 +8,8 @@ export const defaultExercises = [
             { name: 'Machine Chest Press', muscle: 'Chest', image: '/exercises/machine-chest-press.png' },
             { name: 'Pec Fly', muscle: 'Chest', image: '/exercises/pec-fly.png' },
             { name: 'Cable Crossover', muscle: 'Chest', image: '/exercises/cable-crossover.png' },
-            { name: 'Push-Up', muscle: 'Chest', image: '/exercises/push-up.png' },
-            { name: 'Chest Dip', muscle: 'Chest (Lower)', image: '/exercises/chest-dips.png' },
+            { name: 'Push-Up', muscle: 'Chest', image: '/exercises/push-up.png', mode: 'bodyweight' },
+            { name: 'Chest Dip', muscle: 'Chest (Lower)', image: '/exercises/chest-dips.png', mode: 'bodyweight' },
             { name: 'Low Cable Fly', muscle: 'Chest (Upper)', image: '/exercises/low-cabel-fly.png' },
             { name: 'High Cable Fly', muscle: 'Chest (Lower)', image: '/exercises/high-cable-fly.png' }
         ]
@@ -23,7 +23,7 @@ export const defaultExercises = [
             { name: 'Deadlift', muscle: 'Full Back / Posterior Chain', image: '/exercises/deadlift.png' },
             { name: 'Barbell Row', muscle: 'Middle Back', image: '/exercises/barbell-row.png' },
             { name: 'T-Bar Row', muscle: 'Middle Back', image: '/exercises/t-bar-row.png' },
-            { name: 'Pull-Up', muscle: 'Lats', image: '/exercises/pull-up.png' },
+            { name: 'Pull-Up', muscle: 'Lats', image: '/exercises/pull-up.png', mode: 'bodyweight' },
             { name: 'Single Arm Dumbbell Row', muscle: 'Middle Back', image: '/exercises/single-arm-dumbell-row.png' },
             { name: 'Lats Pullover', muscle: 'Lats', image: '/exercises/latpull-over.png' }
         ]
@@ -93,8 +93,8 @@ export const defaultExercises = [
         category: 'Core',
         items: [
             { name: 'Plank', muscle: 'Core (Overall)', image: '/exercises/plank.png' },
-            { name: 'Bench Crunch', muscle: 'Upper Abs', image: '/exercises/decline-situp.png' },
-            { name: 'Hanging Leg Raise', muscle: 'Lower Abs', image: '/exercises/leg-raises.png' },
+            { name: 'Bench Crunch', muscle: 'Upper Abs', image: '/exercises/decline-situp.png', mode: 'bodyweight' },
+            { name: 'Hanging Leg Raise', muscle: 'Lower Abs', image: '/exercises/leg-raises.png', mode: 'bodyweight' },
             { name: 'Cable Crunch', muscle: 'Upper Abs', image: '/exercises/cable-crunch.png' },
             { name: 'Wood Chop', muscle: 'Obliques / Core', image: '/exercises/wood-chopper.png' }
         ]

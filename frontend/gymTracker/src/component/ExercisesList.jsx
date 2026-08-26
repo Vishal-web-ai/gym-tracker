@@ -9,6 +9,7 @@ const CATEGORIES = ['Chest', 'Back', 'Biceps', 'Triceps', 'Arms', 'Shoulders', '
 
 const MODES = [
     { key: 'weight', label: 'Weight (Strength)' },
+    { key: 'bodyweight', label: 'Bodyweight (Reps + Extra)' },
     { key: 'timer', label: 'Timer (Cardio)' }
 ]
 
@@ -16,9 +17,11 @@ const ModeTag = ({ mode }) => (
     <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-mono font-bold tracking-widest border ${
         mode === 'timer'
             ? 'bg-teal-500/10 text-teal-300 border-teal-500/30'
-            : 'bg-orange-500/10 text-orange-300 border-orange-500/30'
+            : mode === 'bodyweight'
+                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                : 'bg-orange-500/10 text-orange-300 border-orange-500/30'
     }`}>
-        {mode === 'timer' ? 'TIMER' : 'WEIGHT'}
+        {mode === 'timer' ? 'TIMER' : mode === 'bodyweight' ? 'BODYWT' : 'WEIGHT'}
     </span>
 )
 
@@ -87,7 +90,7 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
         setFormData({
             name: ex.name,
             category: ex.category,
-            mode: ex.mode === 'timer' ? 'timer' : 'weight',
+            mode: ex.mode === 'timer' ? 'timer' : ex.mode === 'bodyweight' ? 'bodyweight' : 'weight',
             muscle: ex.muscle || '',
             challengeTime: formatChallengeTime(ex.challengeTime)
         })

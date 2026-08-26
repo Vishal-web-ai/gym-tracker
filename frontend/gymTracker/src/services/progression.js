@@ -1,6 +1,6 @@
 import { dbGet, dbPut } from './idb'
 import { getSessions, toDayKey, getUserProfile, getCustomExercises, getLadders, saveLadders } from './storage'
-import { exerciseMetaByName, inferCategoryByName, inferEquipmentByName } from './exercises'
+import { exerciseMetaByName, inferCategoryByName } from './exercises'
 
 // ---------------------------------------------------------------------------
 // Ranks (player level ladder, driven by total XP)
@@ -283,60 +283,131 @@ export function colorForLevel(level) {
     return LEVEL_COLORS[(Math.max(1, level) - 1) % LEVEL_COLORS.length]
 }
 
-// Strength factor = the typical bodyweight multiple an intermediate lifter hits
-// for that category. Used ONLY for initial placement (beginner targets and
-// history seeding) — never as a progression ceiling.
-const CATEGORY_FACTORS = {
-    Chest: 1.0,
-    Back: 1.1,
-    Biceps: 0.4,
-    Triceps: 0.5,
-    Arms: 0.45,
-    Shoulders: 0.7,
-    Legs: 1.5,
-    Core: 0.5,
-    Cardio: 1.0
+// Bodyweight exercises score like weight (extra weight + reps), not timer.
+function scoringMode(mode) { return mode === 'timer' ? 'timer' : 'weight' }
+
+// Exercise-specific presets: beginner starting weight (kg) and increment per
+// level. Weights are TOTAL weight (both hands combined for dumbbells, full bar
+// for barbells, machine weight for machines). Based on research from Men's
+// Health, Strength Level, KalibrFitness, and Starting Strength — calibrated
+// for a ~70-80 kg male beginner.
+const EXERCISE_PRESETS = {
+    // ── Chest ──────────────────────────────────────────────────────────
+    'Flat Bench Press':       { start: 10,   step: 2.5 },
+    'Incline Bench Press':    { start: 10,   step: 2.5 },
+    'Decline Bench Press':    { start: 10,   step: 2.5 },
+    'Machine Chest Press':    { start: 15,   step: 2.5 },
+    // Cable fly: chest isolation — 10kg total
+    'Pec Fly':                { start: 10,   step: 2.5 },
+    'Cable Crossover':        { start: 10,   step: 2.5 },
+    'Push-Up':                { start: 0,    step: 0   },
+    'Chest Dip':              { start: 0,    step: 0   },
+    'Low Cable Fly':          { start: 10,   step: 2.5 },
+    'High Cable Fly':         { start: 10,   step: 2.5 },
+
+    // ── Back ───────────────────────────────────────────────────────────
+    'Lat Pulldown':           { start: 10,   step: 5   },
+    'Seated Cable Row':       { start: 10,   step: 5   },
+    'Wide Row':               { start: 10,   step: 5   },
+    'Deadlift':               { start: 20,   step: 10  },
+    'Barbell Row':            { start: 10,   step: 5   },
+    'T-Bar Row':              { start: 10,   step: 5   },
+    'Pull-Up':                { start: 0,    step: 0   },
+    'Single Arm Dumbbell Row':{ start: 10,   step: 5   },
+    'Lats Pullover':          { start: 10,   step: 2.5 },
+
+    // ── Biceps ─────────────────────────────────────────────────────────
+    // Barbell curl: research value is already total weight
+    'Barbell Curl':           { start: 5,    step: 2.5 },
+    'Dumbbell Curl':          { start: 10,   step: 2.5 },
+    'Hammer Curl':            { start: 10,   step: 2.5 },
+    'Preacher Curl':          { start: 5,    step: 2.5 },
+    'Cable Curl':             { start: 10,   step: 2.5 },
+    'Incline Dumbbell Curl':  { start: 10,   step: 2.5 },
+    'Spider Curl':            { start: 10,   step: 2.5 },
+
+    // ── Triceps ────────────────────────────────────────────────────────
+    'Tricep Extension':       { start: 10,   step: 2.5 },
+    'Skull Crusher':          { start: 12.5, step: 2.5 },
+    'Overhead Tricep Extension': { start: 10, step: 2.5 },
+    'Single tricep Pushdown': { start: 5,    step: 2.5 },
+
+    // ── Arms (forearms) ────────────────────────────────────────────────
+    'Wrist Curl':             { start: 10,   step: 2.5 },
+    'Reverse Wrist Curl':     { start: 5,    step: 2.5 },
+    'Reverse Curl':           { start: 10,   step: 2.5 },
+
+    // ── Shoulders ──────────────────────────────────────────────────────
+    'Front Raise':            { start: 5,    step: 2.5 },
+    'Overhead Press':         { start: 10,   step: 2.5 },
+    'Machine Shoulder Press': { start: 15,   step: 2.5 },
+    'Lateral Raises':         { start: 5,    step: 2.5 },
+    'Cable Lateral Raises':   { start: 5,    step: 2.5 },
+    'Upright Row':            { start: 12.5, step: 2.5 },
+    'Rear Delt Fly':          { start: 5,    step: 2.5 },
+    'Reverse Pec Deck':       { start: 10,   step: 2.5 },
+    'Face Pull':              { start: 10,   step: 2.5 },
+    'Shrugs':                 { start: 15,   step: 2.5 },
+
+    // ── Legs ───────────────────────────────────────────────────────────
+    'Leg Press':              { start: 30,   step: 10  },
+    'Squat':                  { start: 15,   step: 5   },
+    'Romanian Deadlift':      { start: 10,   step: 5   },
+    'Hamstring Curl':         { start: 15,   step: 2.5 },
+    'Pendulum Squat':         { start: 20,   step: 5   },
+    'Bulgarian Split Squat':  { start: 10,   step: 5   },
+    'Leg Extension':          { start: 20,   step: 2.5 },
+    'Calf Raise':             { start: 10,   step: 5   },
+    'Hip Thrust':             { start: 20,   step: 5   },
+    'Hack Squat':             { start: 20,   step: 5   },
+    'Walking Lunges':         { start: 20,   step: 5   },
+    'Glute Kickback':         { start: 10,   step: 2.5 },
+
+    // ── Core ───────────────────────────────────────────────────────────
+    'Plank':                  { start: 0,    step: 0   },
+    'Bench Crunch':           { start: 0,    step: 0   },
+    'Hanging Leg Raise':      { start: 0,    step: 0   },
+    'Cable Crunch':           { start: 15,   step: 2.5 },
+    'Wood Chop':              { start: 10,   step: 2.5 },
+}
+
+// Fallback presets by category when an exercise isn't in the map above.
+const CATEGORY_PRESETS = {
+    Chest:     { start: 15,   step: 2.5 },
+    Back:      { start: 20,   step: 5   },
+    Biceps:    { start: 7.5,  step: 2.5 },
+    Triceps:   { start: 10,   step: 2.5 },
+    Arms:      { start: 7.5,  step: 2.5 },
+    Shoulders: { start: 7.5,  step: 2.5 },
+    Legs:      { start: 25,   step: 5   },
+    Core:      { start: 0,    step: 0   },
+    Cardio:    { start: 0,    step: 0   },
+}
+
+function presetForExercise(name) {
+    return EXERCISE_PRESETS[name] || CATEGORY_PRESETS[inferCategoryByName(name)] || { start: 15, step: 2.5 }
 }
 
 // Seconds that count as an "intermediate" effort for that category, so timer
 // exercises mirror the weight ladder in time.
 const CATEGORY_TIME_FACTORS = {
-    Chest: 60,
-    Back: 60,
-    Biceps: 60,
-    Triceps: 60,
-    Arms: 60,
-    Shoulders: 60,
-    Legs: 60,
-    Core: 90,
-    Cardio: 600
+    Chest: 60, Back: 60, Biceps: 60, Triceps: 60, Arms: 60,
+    Shoulders: 60, Legs: 60, Core: 90, Cardio: 600
 }
-
-function strengthFactorForCategory(category) {
-    return CATEGORY_FACTORS[category] ?? 1.0
-}
-
-function timeFactorForCategory(category) {
-    return CATEGORY_TIME_FACTORS[category] ?? 60
-}
-
-// Equipment loading class → multiplier on the starting target only. Machines
-// and cables let you move more iron than free weights for the same muscles;
-// dumbbell names assume the logged weight is per-hand.
-const EQUIPMENT_FACTORS = { barbell: 1.0, machine: 0.75, cable: 0.55, dumbbell: 0.4, bodyweight: 1.0 }
-
-// Fraction of an intermediate effort a brand-new user starts at — deliberately
-// achievable so the first badge comes fast and motivation sticks.
-const BEGINNER_SEED = 0.3
 
 function roundTo(value, step) {
     return Math.round(value / step) * step
 }
 
-// Practical gym increments: ~8% up, rounded to available plates, never under
-// +2.5kg. Example chain: 30 → 32.5 → 35 → 37.5.
-export function nextWeightTarget(lastSuccess) {
-    return Math.max(roundTo(lastSuccess * 1.08, 2.5), lastSuccess + 2.5)
+// Exercise-specific weight increment. Uses the preset step size when available,
+// falls back to ~8% rounded to 2.5 kg. Example chains:
+//   Lateral Raises: 5 → 6.25 → 7.5 → 8.75 (step 1.25)
+//   Bench Press:    20 → 22.5 → 25 → 27.5  (step 2.5)
+//   Leg Press:      50 → 60 → 70 → 80      (step 10)
+export function nextWeightTarget(lastSuccess, exerciseName) {
+    const preset = exerciseName ? EXERCISE_PRESETS[exerciseName] : null
+    const step = preset?.step || 2.5
+    return Math.max(lastSuccess + step, roundTo(lastSuccess * 1.08, step))
 }
 
 // Timer mirror: ~10% longer holds, rounded to 5s, never under +5s.
@@ -344,16 +415,22 @@ export function nextTimeTarget(lastSuccess) {
     return Math.max(roundTo(lastSuccess * 1.1, 5), lastSuccess + 5)
 }
 
-// Initial placement ONLY. The first challenge is a fraction of an
-// intermediate effort so beginners earn Bronze quickly; strong users skip
-// ahead via seedLaddersFromHistory instead of grinding from here.
-export function beginnerTarget({ bodyweight, category, mode, name }) {
+// Bodyweight rep target: +2 reps, rounded up to nearest 2, never under +2.
+export function nextRepTarget(lastSuccess) {
+    return Math.max(roundTo(lastSuccess * 1.1, 2), lastSuccess + 2)
+}
+
+// Initial placement for a new exercise. Uses exercise-specific presets from
+// research data — e.g. lateral raises start at 5 kg (tiny muscle), leg press
+// starts at 50 kg (large muscle group). Falls back to category defaults.
+export function beginnerTarget({ category, mode, name }) {
     if (mode === 'timer') {
-        return Math.max(15, roundTo(timeFactorForCategory(category) * BEGINNER_SEED, 5))
+        const cat = CATEGORY_TIME_FACTORS[category] ?? 60
+        return Math.max(15, roundTo(cat * 0.3, 5))
     }
-    const bw = parseFloat(bodyweight) || 60
-    const equip = EQUIPMENT_FACTORS[inferEquipmentByName(name)] ?? 1.0
-    return Math.max(2.5, roundTo(bw * strengthFactorForCategory(category) * equip * BEGINNER_SEED, 2.5))
+    if (mode === 'bodyweight') return 12
+    const preset = presetForExercise(name)
+    return preset.start ?? 2.5
 }
 
 function badgeFor(successes) {
@@ -367,13 +444,19 @@ export function bestExerciseEffort(sessions) {
     const best = {}
     for (const s of sessions) {
         for (const ex of (s?.exercises || [])) {
-            const mode = ex.mode === 'timer' ? 'timer' : 'weight'
-            const entry = best[ex.name] || (best[ex.name] = { weight: 0, duration: 0, category: ex.category || null, mode })
+            const mode = ex.mode === 'timer' ? 'timer' : ex.mode === 'bodyweight' ? 'bodyweight' : 'weight'
+            const entry = best[ex.name] || (best[ex.name] = { weight: 0, duration: 0, category: ex.category || null, mode: scoringMode(ex.mode) })
             entry.category = entry.category || ex.category || exerciseMetaByName(ex.name)?.category || inferCategoryByName(ex.name) || null
             if (mode === 'timer') {
                 for (const set of (ex?.sets || [])) {
                     const d = parseDurationSeconds(set?.reps)
                     if (d > entry.duration) entry.duration = d
+                }
+            } else if (mode === 'bodyweight') {
+                for (const set of (ex?.sets || [])) {
+                    const r = parseReps(set?.reps)
+                    const w = parseWeight(set?.weight)
+                    if (r >= 12 && w != null && w > entry.weight) entry.weight = w
                 }
             } else {
                 for (const set of (ex?.sets || [])) {
@@ -399,7 +482,7 @@ export function seedLaddersFromHistory(sessions, bodyweight = 0, existing = {}) 
         const perf = e.mode === 'timer' ? e.duration : e.weight
         if (!(perf > 0)) continue
         const category = e.category || 'Chest'
-        const stepFn = e.mode === 'timer' ? nextTimeTarget : nextWeightTarget
+        const stepFn = e.mode === 'timer' ? nextTimeTarget : (p) => nextWeightTarget(p, name)
         next[name] = {
             mode: e.mode,
             category,
@@ -427,6 +510,7 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
     const promotions = []
     for (const ex of (session?.exercises || [])) {
         const isTimer = ex.mode === 'timer'
+        const isBodyweight = ex.mode === 'bodyweight'
         let entry = next[ex.name] ? { ...next[ex.name] } : null
         if (!entry) {
             const category = ex.category || exerciseMetaByName(ex.name)?.category || inferCategoryByName(ex.name) || 'Chest'
@@ -443,22 +527,28 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
             }
 
             if (perf > 0) {
-                const stepFn = isTimer ? nextTimeTarget : nextWeightTarget
+                const stepFn = isTimer ? nextTimeTarget : (p) => nextWeightTarget(p, ex.name)
                 let successes = 1
                 let target = perf
-                while (successes < 1000) {
-                    const nextTarget = stepFn(target)
-                    if (perf < nextTarget) break
-                    target = nextTarget
-                    successes++
+                if (isBodyweight) {
+                    // Bodyweight: Level 1 = 12 reps, Level 2+ = weight progression
+                    successes = 1
+                    target = 2.5
+                } else {
+                    while (successes < 1000) {
+                        const nextTarget = stepFn(target)
+                        if (perf < nextTarget) break
+                        target = nextTarget
+                        successes++
+                    }
                 }
                 entry = {
-                    mode: isTimer ? 'timer' : 'weight',
+                    mode: ex.mode || (isTimer ? 'timer' : isBodyweight ? 'bodyweight' : 'weight'),
                     category,
                     startTarget: perf,
                     lastSuccess: perf,
                     personalBest: perf,
-                    nextTarget: stepFn(target),
+                    nextTarget: isBodyweight ? 2.5 : stepFn(target),
                     successes,
                     highestLevel: successes,
                     bodyweightAtTime: parseFloat(bodyweight) || null,
@@ -470,9 +560,9 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
                 continue
             }
 
-            const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : 'weight', name: ex.name })
+            const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isBodyweight ? 'bodyweight' : 'weight', name: ex.name })
             entry = {
-                mode: isTimer ? 'timer' : 'weight',
+                mode: ex.mode || (isTimer ? 'timer' : isBodyweight ? 'bodyweight' : 'weight'),
                 category,
                 startTarget: start,
                 lastSuccess: null,
@@ -487,6 +577,20 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
         let perf = 0
         if (isTimer) {
             for (const s of (ex?.sets || [])) perf = Math.max(perf, parseDurationSeconds(s?.reps))
+        } else if (isBodyweight) {
+            const curLevel = entry.successes || 0
+            if (curLevel === 0) {
+                for (const s of (ex?.sets || [])) {
+                    const r = parseReps(s?.reps)
+                    if (r > perf) perf = r
+                }
+            } else {
+                for (const s of (ex?.sets || [])) {
+                    const r = parseReps(s?.reps)
+                    const w = parseWeight(s?.weight)
+                    if (r >= 12 && w != null && w > perf) perf = w
+                }
+            }
         } else {
             for (const s of (ex?.sets || [])) {
                 const r = parseReps(s?.reps)
@@ -497,7 +601,7 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
         if (perf > (entry.personalBest || 0)) entry.personalBest = perf
         const prevTier = entry.successes || 0
         if (perf > 0 && perf >= entry.nextTarget) {
-            const stepFn = isTimer ? nextTimeTarget : nextWeightTarget
+            const stepFn = isTimer ? nextTimeTarget : (p) => nextWeightTarget(p, ex.name)
             let levelUps = 0
             let target = entry.nextTarget
             while (perf >= target) {
@@ -506,7 +610,7 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
             }
             entry.successes = (entry.successes || 0) + levelUps
             entry.lastSuccess = perf
-            entry.nextTarget = stepFn(target)
+            entry.nextTarget = target
             if (bodyweight) entry.bodyweightAtTime = parseFloat(bodyweight)
             entry.updatedAt = now.toISOString()
             const badge = badgeFor(entry.successes)
@@ -533,6 +637,96 @@ export async function recordSessionLadders(session, bodyweight = 0) {
     const { ladders, promotions } = applySessionToLadders(current, session, bodyweight)
     await saveLadders(ladders)
     return { ladders, promotions }
+}
+
+// Projects the ladder state for a single exercise based on in-progress sets.
+// Used for live level display during active sessions. Returns the projected
+// ladder entry (or null if no data) and whether a level-up occurred.
+export function projectExerciseLadder(persistedEntry, sets, mode, category, bodyweight = 0, exerciseName = '') {
+    const isTimer = mode === 'timer'
+    const isBodyweight = mode === 'bodyweight'
+    let entry = persistedEntry ? { ...persistedEntry } : null
+
+    // If no persisted entry, create a beginner entry
+    if (!entry) {
+        const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isBodyweight ? 'bodyweight' : 'weight', name: exerciseName })
+        entry = {
+            mode: mode || (isTimer ? 'timer' : isBodyweight ? 'bodyweight' : 'weight'),
+            category,
+            startTarget: start,
+            lastSuccess: null,
+            personalBest: 0,
+            nextTarget: start,
+            successes: 0,
+            highestLevel: 0,
+            bodyweightAtTime: parseFloat(bodyweight) || null,
+            updatedAt: new Date().toISOString()
+        }
+    }
+
+    // Compute best performance from completed sets
+    let perf = 0
+    if (isTimer) {
+        for (const s of (sets || [])) perf = Math.max(perf, parseDurationSeconds(s?.reps))
+    } else if (isBodyweight) {
+        const curLevel = entry.successes || 0
+        if (curLevel === 0) {
+            for (const s of (sets || [])) {
+                const r = parseReps(s?.reps)
+                if (r > perf) perf = r
+            }
+        } else {
+            for (const s of (sets || [])) {
+                const r = parseReps(s?.reps)
+                const w = parseWeight(s?.weight)
+                if (r >= 12 && w != null && w > perf) perf = w
+            }
+        }
+    } else {
+        for (const s of (sets || [])) {
+            const r = parseReps(s?.reps)
+            const w = parseWeight(s?.weight)
+            if (r >= MIN_CHALLENGE_REPS && w != null && w > perf) perf = w
+        }
+    }
+
+    if (perf > (entry.personalBest || 0)) entry.personalBest = perf
+
+    const prevTier = entry.successes || 0
+    let levelUps = 0
+    if (perf > 0 && perf >= entry.nextTarget) {
+        if (isBodyweight && prevTier === 0) {
+            // Level 0 → Level 1: complete 12 reps
+            levelUps = 1
+            entry.successes = 1
+            entry.lastSuccess = perf
+            entry.nextTarget = 2.5
+        } else {
+            const stepFn = isTimer ? nextTimeTarget : (p) => nextWeightTarget(p, exerciseName)
+            let target = entry.nextTarget
+            while (perf >= target) {
+                levelUps++
+                target = stepFn(target)
+            }
+            entry.successes = (entry.successes || 0) + levelUps
+            entry.lastSuccess = perf
+            entry.nextTarget = target
+        }
+        if (bodyweight) entry.bodyweightAtTime = parseFloat(bodyweight)
+        entry.updatedAt = new Date().toISOString()
+    }
+    entry.highestLevel = Math.max(entry.highestLevel || 0, entry.successes || 0)
+
+    const newTier = entry.successes || 0
+    const badge = badgeFor(newTier)
+    return {
+        entry,
+        projectedLevel: newTier,
+        prevLevel: prevTier,
+        didLevelUp: newTier > prevTier,
+        levelUps,
+        badge: badge ? { ...badge, color: colorForLevel(newTier) } : null
+    }
 }
 
 // Display-ready view. Relative strength uses CURRENT bodyweight, so gaining
