@@ -657,7 +657,7 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                 </div>
 
                 {/* Badge ladder + PR — centered between set controls and rest timer */}
-                <div className='flex items-center justify-center gap-5 pt-1.5 mt-auto'>
+                <div className='flex flex-col items-center gap-1 pt-1.5 mt-auto'>
                     <div className='flex items-center gap-2 min-w-0'>
                         <span className='h-3 w-3 rounded-full shrink-0' style={{ background: displayColor }} />
                         <span className='font-bebas text-sm tracking-[1px] whitespace-nowrap' style={{ color: displayColor }}>
@@ -688,15 +688,12 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                         </span>
                     </div>
                     {pr && (
-                        <>
-                            <span className='h-4 w-px bg-white/15 shrink-0' />
-                            <div className='flex items-center gap-1.5 min-w-0'>
-                                <Trophy size={16} className='text-orange-400 shrink-0' />
-                                <span className='font-mono text-xs text-orange-300 whitespace-nowrap'>
-                                    PR {pr.weight}kg × {pr.reps}
-                                </span>
-                            </div>
-                        </>
+                        <div className='flex items-center gap-1.5'>
+                            <Trophy size={14} className='text-orange-400 shrink-0' />
+                            <span className='font-mono text-[11px] text-orange-300 whitespace-nowrap'>
+                                PR {pr.weight}kg × {pr.reps}
+                            </span>
+                        </div>
                     )}
                 </div>
 
