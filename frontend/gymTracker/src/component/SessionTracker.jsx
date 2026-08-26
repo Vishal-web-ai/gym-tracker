@@ -681,7 +681,7 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                                                         const lastSet = completedSets[completedSets.length - 1]
                                                         const w = lastSet?.weight?.replace('kg', '') || ''
                                                         const r = lastSet?.reps || ''
-                                                        const setStr = w && r ? `${w}kg*${r}r` : fmtLoad(projected.entry.lastSuccess)
+                                                        const setStr = w && r ? `${w}kg x ${r}r` : fmtLoad(projected.entry.lastSuccess)
                                                         return `${setStr} → LEVEL ${displayLevel}`
                                                     })()
                                                 : ladder?.tier === 0
