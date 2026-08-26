@@ -641,6 +641,14 @@ const HomeScreen = () => {
                 isLevelUp: result.isLevelUp,
                 progress: result.progress
             })
+        } else if (result) {
+            setShowSuccess(false)
+            setCelebration({
+                rank: result.progress.rank,
+                breakdown,
+                isLevelUp: false,
+                progress: result.progress
+            })
         } else {
             setTimeout(() => {
                 setShowSuccess(false)
