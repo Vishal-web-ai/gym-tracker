@@ -677,13 +677,7 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                                             : projected
                                                 ? isBodyweight
                                                     ? `BODYWEIGHT + ${fmtLoad(projected.entry.nextTarget)} × 5 → LEVEL ${displayLevel + 1}`
-                                                    : (() => {
-                                                        const lastSet = completedSets[completedSets.length - 1]
-                                                        const w = lastSet?.weight?.replace('kg', '') || ''
-                                                        const r = lastSet?.reps || ''
-                                                        const setStr = w && r ? `${w}kg x ${r}reps` : fmtLoad(projected.entry.lastSuccess)
-                                                        return `${setStr} → LEVEL ${displayLevel}`
-                                                    })()
+                                                    : `${fmtLoad(projected.entry.nextTarget)} x 5reps → LEVEL ${displayLevel + 1}`
                                                 : ladder?.tier === 0
                                                     ? isBodyweight
                                                         ? `${ladder.nextTarget} REPS FOR LEVEL 1`
