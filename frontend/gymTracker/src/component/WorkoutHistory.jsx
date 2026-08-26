@@ -4,24 +4,21 @@ import SavedSession from './SavedSession'
 import { getSessions, deleteSession, removeExerciseMedia } from '../services/storage'
 import { deleteMedia } from '../services/media'
 import { getErrorMessage } from '../services/errors'
+import { getLadders } from '../services/storage'
+import { ladderView } from '../services/progression'
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-const setsText = (ex) => {
-    const sets = Array.isArray(ex.sets) ? ex.sets : []
-    if (!sets.length) return '—'
-    if (typeof sets[0] === 'object') {
-        return sets
-            .map(s => {
-                const parts = []
-                if (s.reps && s.reps !== '—') parts.push(s.reps)
-                if (s.weight && s.weight !== '—') parts.push(s.weight)
-                return parts.join(' × ')
-            })
-            .filter(Boolean)
-            .join(' · ')
+const formatSet = (s, mode) => {
+    if (mode === 'timer') {
+        return s.reps && s.reps !== '—' ? s.reps : '—'
     }
-    return sets.filter(s => s !== '—').join(' × ')
+    const w = s.weight && s.weight !== '—' ? s.weight : ''
+    const r = s.reps && s.reps !== '—' ? s.reps : ''
+    if (w && r) return `${w}*${r}r`
+    if (w) return w
+    if (r) return `${r}r`
+    return '—'
 }
 
 const WorkoutHistory = ({ onClose, onDeleted }) => {
@@ -30,6 +27,13 @@ const WorkoutHistory = ({ onClose, onDeleted }) => {
     const [loadError, setLoadError] = useState('')
     const [searchQuery, setSearchQuery] = useState('')
     const [showSuggestions, setShowSuggestions] = useState(false)
+    const [ladders, setLadders] = useState({})
+
+    useEffect(() => {
+        let cancelled = false
+        getLadders().then(l => { if (!cancelled) setLadders(l) })
+        return () => { cancelled = true }
+    }, [])
 
     useEffect(() => {
         let cancelled = false
@@ -200,24 +204,35 @@ const WorkoutHistory = ({ onClose, onDeleted }) => {
                                     )
                                 }
                                 const { exercise } = item
+                                const entry = ladders[exercise.name]
+                                const view = entry ? ladderView(entry) : null
+                                const level = view ? view.successes : 0
+                                const sets = Array.isArray(exercise.sets) ? exercise.sets : []
                                 return (
                                     <div
                                         key={item.key}
                                         className='bg-orange-500/10 border border-orange-500/20 hover:border-orange-500/50 p-3 rounded-xl transition-all duration-300'
                                     >
-                                        <div className='flex items-center justify-between'>
+                                        <div className='flex items-center justify-between mb-1.5'>
                                             <p className='text-orange-400 font-semibold font-mono'>
                                                 {exercise.name}
                                             </p>
-                                            {exercise.mode === 'timer' && (
-                                                <span className='text-orange-500/40 font-mono text-xs border border-orange-500/20 px-1.5 py-0.5 rounded'>
-                                                    timer
+                                            {level > 0 && (
+                                                <span
+                                                    className='font-mono text-xs font-bold px-1.5 py-0.5 rounded'
+                                                    style={{ color: view.color, backgroundColor: view.color + '20', borderColor: view.color + '40', borderWidth: 1 }}
+                                                >
+                                                    Lv.{level}
                                                 </span>
                                             )}
                                         </div>
-                                        <p className='text-orange-500/60 font-mono text-sm mt-1'>
-                                            {exercise.mode === 'timer' ? 'Time' : 'Sets'}: {setsText(exercise)}
-                                        </p>
+                                        <div className='flex flex-wrap gap-x-3 gap-y-0.5'>
+                                            {sets.map((s, i) => (
+                                                <span key={i} className='text-orange-500/60 font-mono text-xs'>
+                                                    {formatSet(s, exercise.mode)}
+                                                </span>
+                                            ))}
+                                        </div>
                                     </div>
                                 )
                             })}
