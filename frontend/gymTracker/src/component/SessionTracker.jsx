@@ -673,17 +673,17 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                                         : (displayLevel === 0 && projected)
                                             ? isBodyweight
                                                 ? `${projected.entry.nextTarget} REPS FOR LEVEL 1`
-                                                : `${isTimer ? 'HOLD' : '5 REPS @'} ${fmtLoad(projected.entry.nextTarget)} FOR LEVEL 1`
+                                                : `${isTimer ? 'HOLD' : '6 REPS @'} ${fmtLoad(projected.entry.nextTarget)} FOR LEVEL 1`
                                             : projected
                                                 ? isBodyweight
-                                                    ? `BODYWEIGHT + ${fmtLoad(projected.entry.nextTarget)} × 5 → LEVEL ${displayLevel + 1}`
-                                                    : `${fmtLoad(projected.entry.nextTarget)} x 5reps → LEVEL ${displayLevel + 1}`
+                                                    ? `BODYWEIGHT + ${fmtLoad(projected.entry.nextTarget)} × 6 → LEVEL ${displayLevel + 1}`
+                                                    : `${fmtLoad(projected.entry.nextTarget)} x 6reps → LEVEL ${displayLevel + 1}`
                                                 : ladder?.tier === 0
                                                     ? isBodyweight
                                                         ? `${ladder.nextTarget} REPS FOR LEVEL 1`
-                                                        : `${isTimer ? 'HOLD' : '5 REPS @'} ${fmtLoad(ladder.nextTarget)} FOR LEVEL 1`
+                                                        : `${isTimer ? 'HOLD' : '6 REPS @'} ${fmtLoad(ladder.nextTarget)} FOR LEVEL 1`
                                                     : isBodyweight
-                                                        ? `BODYWEIGHT + ${fmtLoad(ladder.nextTarget)} × 5 → LEVEL ${ladder.tier + 1}`
+                                                        ? `BODYWEIGHT + ${fmtLoad(ladder.nextTarget)} × 6 → LEVEL ${ladder.tier + 1}`
                                                         : `${fmtLoad(ladder.lastSuccess)} → ${fmtLoad(ladder.nextTarget)} FOR LEVEL ${ladder.tier + 1}`}
                         </span>
                     </div>

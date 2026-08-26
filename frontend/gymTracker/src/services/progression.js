@@ -856,7 +856,7 @@ export function formatChallengeTime(min) {
 // Best weight / reps / duration ever recorded per normalized exercise name.
 // Weight and reps only count when the set had at least 5 reps — a 1RM-style
 // single won't clear a challenge.
-const MIN_CHALLENGE_REPS = 5
+const MIN_CHALLENGE_REPS = 6
 
 export function buildBestLifts(sessions) {
     const bests = {}
