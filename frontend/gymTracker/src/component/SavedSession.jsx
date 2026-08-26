@@ -5,6 +5,17 @@ import { renameSession } from '../services/storage'
 import { readMediaFile } from '../services/media'
 import { getErrorMessage } from '../services/errors'
 
+const CARD_COLORS = [
+    { bg: 'rgba(249,115,22,0.10)', border: 'rgba(249,115,22,0.30)', hoverBorder: 'rgba(249,115,22,0.70)', hoverBg: 'rgba(249,115,22,0.15)', text: '#fb923c' },
+    { bg: 'rgba(56,189,248,0.10)', border: 'rgba(56,189,248,0.30)', hoverBorder: 'rgba(56,189,248,0.70)', hoverBg: 'rgba(56,189,248,0.15)', text: '#38bdf8' },
+    { bg: 'rgba(52,211,153,0.10)', border: 'rgba(52,211,153,0.30)', hoverBorder: 'rgba(52,211,153,0.70)', hoverBg: 'rgba(52,211,153,0.15)', text: '#34d399' },
+    { bg: 'rgba(168,85,247,0.10)', border: 'rgba(168,85,247,0.30)', hoverBorder: 'rgba(168,85,247,0.70)', hoverBg: 'rgba(168,85,247,0.15)', text: '#a855f7' },
+    { bg: 'rgba(251,191,36,0.10)', border: 'rgba(251,191,36,0.30)', hoverBorder: 'rgba(251,191,36,0.70)', hoverBg: 'rgba(251,191,36,0.15)', text: '#fbbf24' },
+    { bg: 'rgba(244,63,94,0.10)', border: 'rgba(244,63,94,0.30)', hoverBorder: 'rgba(244,63,94,0.70)', hoverBg: 'rgba(244,63,94,0.15)', text: '#f43f5e' },
+    { bg: 'rgba(232,121,249,0.10)', border: 'rgba(232,121,249,0.30)', hoverBorder: 'rgba(232,121,249,0.70)', hoverBg: 'rgba(232,121,249,0.15)', text: '#e879f9' },
+    { bg: 'rgba(253,224,71,0.10)', border: 'rgba(253,224,71,0.30)', hoverBorder: 'rgba(253,224,71,0.70)', hoverBg: 'rgba(253,224,71,0.15)', text: '#fde047' },
+]
+
 const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
     const [expandedId, setExpandedId] = useState(null)
     const [editingId, setEditingId] = useState(null)
@@ -123,13 +134,21 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
 
     return (
         <>
-            {sessions.map((session) => (
+            {sessions.map((session, index) => {
+                const color = CARD_COLORS[index % CARD_COLORS.length]
+                return (
                 <div key={session.id} className='mb-3'>
                     <div
                         onClick={() =>
                             setExpandedId(expandedId === session.id ? null : session.id)
                         }
-                        className='bg-orange-500/10 border border-orange-500/30 hover:border-orange-500/70 hover:bg-orange-500/15 p-4 rounded-xl cursor-pointer transition-all duration-300'
+                        style={{
+                            backgroundColor: expandedId === session.id ? color.hoverBg : color.bg,
+                            borderColor: expandedId === session.id ? color.hoverBorder : color.border,
+                        }}
+                        className='border p-4 rounded-xl cursor-pointer transition-all duration-300 hover:scale-[1.01]'
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = color.hoverBorder; e.currentTarget.style.backgroundColor = color.hoverBg }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = expandedId === session.id ? color.hoverBorder : color.border; e.currentTarget.style.backgroundColor = expandedId === session.id ? color.hoverBg : color.bg }}
                     >
                         <div className='flex items-center justify-between'>
                             <div className='flex-1 min-w-0'>
@@ -227,7 +246,7 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
                         </div>
                     )}
                 </div>
-            ))}
+            )})}
             {notesPopup.open && (
                 <div
                     className='fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4'
