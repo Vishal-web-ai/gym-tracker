@@ -5,7 +5,43 @@ import { getSessions, deleteSession, removeExerciseMedia } from '../services/sto
 import { deleteMedia } from '../services/media'
 import { getErrorMessage } from '../services/errors'
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+const formatDate = (dateStr) => {
+    if (!dateStr) return ''
+    if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\s+\d{1,2}\s+\w+\s+\d{4}$/.test(dateStr)) return dateStr
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return dateStr
+    return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+}
+
+const CARD_COLORS = [
+    { text: '#fb923c', dropdownBg: 'rgba(249,115,22,0.05)', dropdownBorder: 'rgba(249,115,22,0.12)', cardBg: 'rgba(249,115,22,0.07)', cardBorder: 'rgba(249,115,22,0.15)' },
+    { text: '#38bdf8', dropdownBg: 'rgba(56,189,248,0.05)', dropdownBorder: 'rgba(56,189,248,0.12)', cardBg: 'rgba(56,189,248,0.07)', cardBorder: 'rgba(56,189,248,0.15)' },
+    { text: '#34d399', dropdownBg: 'rgba(52,211,153,0.05)', dropdownBorder: 'rgba(52,211,153,0.12)', cardBg: 'rgba(52,211,153,0.07)', cardBorder: 'rgba(52,211,153,0.15)' },
+    { text: '#a855f7', dropdownBg: 'rgba(168,85,247,0.05)', dropdownBorder: 'rgba(168,85,247,0.12)', cardBg: 'rgba(168,85,247,0.07)', cardBorder: 'rgba(168,85,247,0.15)' },
+    { text: '#fbbf24', dropdownBg: 'rgba(251,191,36,0.05)', dropdownBorder: 'rgba(251,191,36,0.12)', cardBg: 'rgba(251,191,36,0.07)', cardBorder: 'rgba(251,191,36,0.15)' },
+    { text: '#f43f5e', dropdownBg: 'rgba(244,63,94,0.05)', dropdownBorder: 'rgba(244,63,94,0.12)', cardBg: 'rgba(244,63,94,0.07)', cardBorder: 'rgba(244,63,94,0.15)' },
+    { text: '#e879f9', dropdownBg: 'rgba(232,121,249,0.05)', dropdownBorder: 'rgba(232,121,249,0.12)', cardBg: 'rgba(232,121,249,0.07)', cardBorder: 'rgba(232,121,249,0.15)' },
+    { text: '#fde047', dropdownBg: 'rgba(253,224,71,0.05)', dropdownBorder: 'rgba(253,224,71,0.12)', cardBg: 'rgba(253,224,71,0.07)', cardBorder: 'rgba(253,224,71,0.15)' },
+]
+
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+const setLines = (ex) => {
+    const sets = Array.isArray(ex.sets) ? ex.sets : []
+    return sets
+        .map((s) => {
+            if (s && typeof s === 'object') {
+                const parts = []
+                if (s.weight && s.weight !== '—') parts.push(s.weight)
+                if (s.reps && s.reps !== '—') parts.push(s.reps)
+                return parts.filter(Boolean).join(' × ')
+            }
+            return s !== '—' ? s : ''
+        })
+        .filter(Boolean)
+}
 
 const setsText = (ex) => {
     const sets = Array.isArray(ex.sets) ? ex.sets : []
@@ -87,15 +123,16 @@ const WorkoutHistory = ({ onClose, onDeleted }) => {
         let currentDate = null
         for (const item of filtered) {
             const date = item.session.date
-            const dayName = DAYS[new Date(date).getDay()]
             if (date !== currentDate) {
                 currentDate = date
-                groups.push({ type: 'date', date, dayName, key: date })
+                groups.push({ type: 'date', date: formatDate(date), key: date })
             }
-            groups.push({ type: 'exercise', ...item, key: item.session.id + '-' + item.exercise.name })
+            const sessionIdx = sessions.findIndex(s => s.id === item.session.id)
+            const color = CARD_COLORS[sessionIdx >= 0 ? sessionIdx % CARD_COLORS.length : 0]
+            groups.push({ type: 'exercise', ...item, color, key: item.session.id + '-' + item.exercise.name })
         }
         return groups
-    }, [filtered])
+    }, [filtered, sessions])
 
     const handleDelete = async (id) => {
         try {
@@ -165,7 +202,7 @@ const WorkoutHistory = ({ onClose, onDeleted }) => {
                                     setSearchQuery(name)
                                     setShowSuggestions(false)
                                 }}
-                                className='w-full text-left px-4 py-2.5 text-orange-400 font-mono text-sm hover:bg-orange-500/10 transition-colors cursor-pointer'
+                                className='w-full text-left px-4 py-2.5 text-orange-400 font-mono text-sm hover:bg-white/[0.06] transition-colors cursor-pointer'
                             >
                                 {name}
                             </button>
@@ -176,12 +213,12 @@ const WorkoutHistory = ({ onClose, onDeleted }) => {
 
             <div className='flex-1 overflow-y-auto p-4 scroll'>
                 {loading ? (
-                    <p className='text-orange-500/50 text-center font-mono py-10'>Loading...</p>
+                    <p className='text-white/30 text-center font-mono py-10'>Loading...</p>
                 ) : loadError ? (
                     <p className='text-red-400 text-center font-mono text-sm py-10'>{loadError}</p>
                 ) : isSearching ? (
                     filtered.length === 0 ? (
-                        <p className='text-orange-500/50 text-center font-mono py-10'>
+                        <p className='text-white/30 text-center font-mono py-10'>
                             No exercises found for "{searchQuery}"
                         </p>
                     ) : (
@@ -193,31 +230,43 @@ const WorkoutHistory = ({ onClose, onDeleted }) => {
                                             <p className='text-orange-400 font-mono text-sm font-bold'>
                                                 {item.date}
                                             </p>
-                                            <p className='text-orange-500/40 font-mono text-xs'>
-                                                {item.dayName}
-                                            </p>
                                         </div>
                                     )
                                 }
-                                const { exercise } = item
+                                const { exercise, color } = item
                                 return (
                                     <div
                                         key={item.key}
-                                        className='bg-orange-500/10 border border-orange-500/20 hover:border-orange-500/50 p-3 rounded-xl transition-all duration-300'
+                                        style={{ backgroundColor: color.cardBg, borderColor: color.cardBorder }}
+                                        className='border p-3 rounded-xl transition-all duration-300'
                                     >
                                         <div className='flex items-center justify-between'>
-                                            <p className='text-orange-400 font-semibold font-mono'>
+                                            <p className='font-semibold font-mono' style={{ color: color.text }}>
                                                 {exercise.name}
                                             </p>
                                             {exercise.mode === 'timer' && (
-                                                <span className='text-orange-500/40 font-mono text-xs border border-orange-500/20 px-1.5 py-0.5 rounded'>
+                                                <span className='font-mono text-xs border px-1.5 py-0.5 rounded' style={{ color: color.text, opacity: 0.5, borderColor: color.cardBorder }}>
                                                     timer
                                                 </span>
                                             )}
                                         </div>
-                                        <p className='text-orange-500/60 font-mono text-sm mt-1'>
-                                            {exercise.mode === 'timer' ? 'Time' : 'Sets'}: {setsText(exercise)}
-                                        </p>
+                                        {exercise.mode === 'timer' ? (
+                                            <p className='font-mono text-sm mt-1' style={{ color: color.text, opacity: 0.5 }}>
+                                                Time: {setsText(exercise)}
+                                            </p>
+                                        ) : typeof exercise.sets?.[0] === 'object' ? (
+                                            <div className='mt-1.5 space-y-1'>
+                                                {setLines(exercise).map((line, li) => (
+                                                    <p key={li} className='font-mono text-sm' style={{ color: color.text, opacity: 0.5 }}>
+                                                        Set {li + 1}: {line}
+                                                    </p>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className='font-mono text-sm mt-1' style={{ color: color.text, opacity: 0.5 }}>
+                                                Sets: {setsText(exercise)}
+                                            </p>
+                                        )}
                                     </div>
                                 )
                             })}

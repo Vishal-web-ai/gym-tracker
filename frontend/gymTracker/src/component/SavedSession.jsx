@@ -5,15 +5,26 @@ import { renameSession } from '../services/storage'
 import { readMediaFile } from '../services/media'
 import { getErrorMessage } from '../services/errors'
 
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+const formatDate = (dateStr) => {
+    if (!dateStr) return ''
+    if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\s+\d{1,2}\s+\w+\s+\d{4}$/.test(dateStr)) return dateStr
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return dateStr
+    return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+}
+
 const CARD_COLORS = [
-    { bg: 'rgba(249,115,22,0.10)', border: 'rgba(249,115,22,0.30)', hoverBorder: 'rgba(249,115,22,0.70)', hoverBg: 'rgba(249,115,22,0.15)', text: '#fb923c' },
-    { bg: 'rgba(56,189,248,0.10)', border: 'rgba(56,189,248,0.30)', hoverBorder: 'rgba(56,189,248,0.70)', hoverBg: 'rgba(56,189,248,0.15)', text: '#38bdf8' },
-    { bg: 'rgba(52,211,153,0.10)', border: 'rgba(52,211,153,0.30)', hoverBorder: 'rgba(52,211,153,0.70)', hoverBg: 'rgba(52,211,153,0.15)', text: '#34d399' },
-    { bg: 'rgba(168,85,247,0.10)', border: 'rgba(168,85,247,0.30)', hoverBorder: 'rgba(168,85,247,0.70)', hoverBg: 'rgba(168,85,247,0.15)', text: '#a855f7' },
-    { bg: 'rgba(251,191,36,0.10)', border: 'rgba(251,191,36,0.30)', hoverBorder: 'rgba(251,191,36,0.70)', hoverBg: 'rgba(251,191,36,0.15)', text: '#fbbf24' },
-    { bg: 'rgba(244,63,94,0.10)', border: 'rgba(244,63,94,0.30)', hoverBorder: 'rgba(244,63,94,0.70)', hoverBg: 'rgba(244,63,94,0.15)', text: '#f43f5e' },
-    { bg: 'rgba(232,121,249,0.10)', border: 'rgba(232,121,249,0.30)', hoverBorder: 'rgba(232,121,249,0.70)', hoverBg: 'rgba(232,121,249,0.15)', text: '#e879f9' },
-    { bg: 'rgba(253,224,71,0.10)', border: 'rgba(253,224,71,0.30)', hoverBorder: 'rgba(253,224,71,0.70)', hoverBg: 'rgba(253,224,71,0.15)', text: '#fde047' },
+    { bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.35)', hoverBorder: 'rgba(249,115,22,0.75)', hoverBg: 'rgba(249,115,22,0.18)', text: '#fb923c', dropdownBg: 'rgba(249,115,22,0.05)', dropdownBorder: 'rgba(249,115,22,0.12)', cardBg: 'rgba(249,115,22,0.07)', cardBorder: 'rgba(249,115,22,0.15)', cardHover: 'rgba(249,115,22,0.25)' },
+    { bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.35)', hoverBorder: 'rgba(56,189,248,0.75)', hoverBg: 'rgba(56,189,248,0.18)', text: '#38bdf8', dropdownBg: 'rgba(56,189,248,0.05)', dropdownBorder: 'rgba(56,189,248,0.12)', cardBg: 'rgba(56,189,248,0.07)', cardBorder: 'rgba(56,189,248,0.15)', cardHover: 'rgba(56,189,248,0.25)' },
+    { bg: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.35)', hoverBorder: 'rgba(52,211,153,0.75)', hoverBg: 'rgba(52,211,153,0.18)', text: '#34d399', dropdownBg: 'rgba(52,211,153,0.05)', dropdownBorder: 'rgba(52,211,153,0.12)', cardBg: 'rgba(52,211,153,0.07)', cardBorder: 'rgba(52,211,153,0.15)', cardHover: 'rgba(52,211,153,0.25)' },
+    { bg: 'rgba(168,85,247,0.12)', border: 'rgba(168,85,247,0.35)', hoverBorder: 'rgba(168,85,247,0.75)', hoverBg: 'rgba(168,85,247,0.18)', text: '#a855f7', dropdownBg: 'rgba(168,85,247,0.05)', dropdownBorder: 'rgba(168,85,247,0.12)', cardBg: 'rgba(168,85,247,0.07)', cardBorder: 'rgba(168,85,247,0.15)', cardHover: 'rgba(168,85,247,0.25)' },
+    { bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.35)', hoverBorder: 'rgba(251,191,36,0.75)', hoverBg: 'rgba(251,191,36,0.18)', text: '#fbbf24', dropdownBg: 'rgba(251,191,36,0.05)', dropdownBorder: 'rgba(251,191,36,0.12)', cardBg: 'rgba(251,191,36,0.07)', cardBorder: 'rgba(251,191,36,0.15)', cardHover: 'rgba(251,191,36,0.25)' },
+    { bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.35)', hoverBorder: 'rgba(244,63,94,0.75)', hoverBg: 'rgba(244,63,94,0.18)', text: '#f43f5e', dropdownBg: 'rgba(244,63,94,0.05)', dropdownBorder: 'rgba(244,63,94,0.12)', cardBg: 'rgba(244,63,94,0.07)', cardBorder: 'rgba(244,63,94,0.15)', cardHover: 'rgba(244,63,94,0.25)' },
+    { bg: 'rgba(232,121,249,0.12)', border: 'rgba(232,121,249,0.35)', hoverBorder: 'rgba(232,121,249,0.75)', hoverBg: 'rgba(232,121,249,0.18)', text: '#e879f9', dropdownBg: 'rgba(232,121,249,0.05)', dropdownBorder: 'rgba(232,121,249,0.12)', cardBg: 'rgba(232,121,249,0.07)', cardBorder: 'rgba(232,121,249,0.15)', cardHover: 'rgba(232,121,249,0.25)' },
+    { bg: 'rgba(253,224,71,0.12)', border: 'rgba(253,224,71,0.35)', hoverBorder: 'rgba(253,224,71,0.75)', hoverBg: 'rgba(253,224,71,0.18)', text: '#fde047', dropdownBg: 'rgba(253,224,71,0.05)', dropdownBorder: 'rgba(253,224,71,0.12)', cardBg: 'rgba(253,224,71,0.07)', cardBorder: 'rgba(253,224,71,0.15)', cardHover: 'rgba(253,224,71,0.25)' },
 ]
 
 const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
@@ -23,11 +34,6 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
     const [saving, setSaving] = useState(false)
     const [notesPopup, setNotesPopup] = useState({ open: false, text: '' })
     const [viewer, setViewer] = useState(null)
-
-    const getDay = (dateStr) => {
-        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-        return days[new Date(dateStr).getDay()]
-    }
 
     const startEditing = (session) => {
         setEditingId(session.id)
@@ -107,6 +113,21 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
 
     const exercisesOf = (session) => Array.isArray(session.exercises) ? session.exercises : []
 
+    const setLines = (ex) => {
+        const sets = Array.isArray(ex.sets) ? ex.sets : []
+        return sets
+            .map((s) => {
+                if (s && typeof s === 'object') {
+                    const parts = []
+                    if (s.weight && s.weight !== '—') parts.push(s.weight)
+                    if (s.reps && s.reps !== '—') parts.push(s.reps)
+                    return parts.filter(Boolean).join(' × ')
+                }
+                return s !== '—' ? s : ''
+            })
+            .filter(Boolean)
+    }
+
     const setsText = (ex) => {
         const sets = Array.isArray(ex.sets) ? ex.sets : []
         if (!sets.length) return '—'
@@ -126,7 +147,7 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
 
     if (sessions.length === 0) {
         return (
-            <p className='text-orange-500/50 text-center mt-10 font-mono tracking-wide'>
+            <p className='text-white/30 text-center mt-10 font-mono tracking-wide'>
                 No saved sessions yet. Start a workout and hit Save!
             </p>
         )
@@ -162,17 +183,18 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
                                             if (e.key === 'Enter') saveName()
                                             if (e.key === 'Escape') cancelEditing()
                                         }}
-                                        className='w-full bg-neutral-700 text-orange-400 font-bold font-mono text-lg px-2 py-1 rounded border border-orange-500/50 outline-none focus:border-orange-500'
+                                        className='w-full bg-neutral-700 font-bold font-mono text-lg px-2 py-1 rounded border outline-none'
+                                        style={{ color: color.text, borderColor: color.border }}
                                         autoFocus
                                         onClick={(e) => e.stopPropagation()}
                                     />
                                 ) : (
-                                    <h2 className='text-orange-400 font-bold font-mono text-lg truncate'>
+                                    <h2 className='font-bold font-mono text-lg truncate' style={{ color: color.text }}>
                                         {session.name || 'Workout'}
                                     </h2>
                                 )}
-                                <p className='text-orange-500/50 font-mono text-sm mt-0.5'>
-                                    {session.date}, {getDay(session.date)}
+                                <p className='font-mono text-sm mt-0.5' style={{ color: color.text, opacity: 0.5 }}>
+                                    {formatDate(session.date)}
                                 </p>
                             </div>
                             <div className='flex items-center gap-2 shrink-0 ml-3'>
@@ -181,7 +203,8 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
                                         e.stopPropagation()
                                         startEditing(session)
                                     }}
-                                    className='border border-orange-500/40 text-orange-400 hover:bg-orange-500 hover:text-black p-2 rounded-lg transition-all duration-300'
+                                    style={{ borderColor: color.border, color: color.text }}
+                                    className='border p-2 rounded-lg transition-all duration-300 hover:bg-white/10 hover:text-white/80'
                                 >
                                     <Pencil size={18} />
                                 </button>
@@ -199,34 +222,38 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
                     </div>
 
                     {expandedId === session.id && (
-                        <div className='bg-orange-500/5 border border-orange-500/20 mt-1 rounded-xl p-4 space-y-3'>
+                        <div style={{ backgroundColor: color.dropdownBg, borderColor: color.dropdownBorder }} className='border mt-1 rounded-xl p-4 space-y-3'>
                             {exercisesOf(session).map((ex, i) => (
-                                <div key={i} className='bg-orange-500/10 border border-orange-500/20 hover:border-orange-500/50 p-3 rounded-lg transition-all duration-300'>
+                                <div key={i} style={{ backgroundColor: color.cardBg, borderColor: color.cardBorder }} className='border p-3 rounded-lg transition-all duration-300'>
                                     <div className='flex items-center justify-between'>
-                                        <p className='text-orange-400 font-semibold font-mono'>{ex.name}</p>
+                                        <p className='text-white/80 font-semibold font-mono'>{ex.name}</p>
                                         {ex.notes && (
                                             <button
                                                 onClick={() => setNotesPopup({ open: true, text: ex.notes })}
-                                                className='text-neutral-400 hover:text-orange-500 p-1 rounded-lg transition-all duration-300 cursor-pointer'
+                                                className='text-neutral-400 hover:text-white/60 p-1 rounded-lg transition-all duration-300 cursor-pointer'
                                             >
                                                 <StickyNote size={18} />
                                             </button>
                                         )}
                                     </div>
                                     {ex.mode === 'timer' ? (
-                                        <p className='text-orange-500/60 font-mono text-sm mt-1'>
+                                        <p className='text-white/40 font-mono text-sm mt-1'>
                                             Time: {setsText(ex)}
                                         </p>
                                     ) : typeof ex.sets?.[0] === 'object' ? (
-                                        <p className='text-orange-500/60 font-mono text-sm mt-1'>
-                                            Sets: {setsText(ex)}
-                                        </p>
+                                        <div className='mt-1.5 space-y-1'>
+                                            {setLines(ex).map((line, li) => (
+                                                <p key={li} className='text-white/40 font-mono text-sm'>
+                                                    Set {li + 1}: {line}
+                                                </p>
+                                            ))}
+                                        </div>
                                     ) : (
                                         <>
-                                            <p className='text-orange-500/60 font-mono text-sm mt-1'>
+                                            <p className='text-white/40 font-mono text-sm mt-1'>
                                                 Weight: {ex.weight}
                                             </p>
-                                            <p className='text-orange-500/60 font-mono text-sm'>
+                                            <p className='text-white/40 font-mono text-sm'>
                                                 Sets: {setsText(ex)}
                                             </p>
                                         </>
@@ -234,7 +261,8 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
                                     {Array.isArray(ex.media) && ex.media.length > 0 && (
                                         <button
                                             onClick={() => openViewer(session.id, i, ex.media, 0)}
-                                            className='flex items-center gap-1.5 px-3 py-1 bg-orange-500/10 border border-orange-500/40 text-orange-400 font-mono text-xs rounded-full hover:bg-orange-500/20 transition-all cursor-pointer mt-2'
+                                            style={{ backgroundColor: color.cardBg, borderColor: color.cardBorder }}
+                                            className='flex items-center gap-1.5 px-3 py-1 border text-white/60 font-mono text-xs rounded-full transition-all cursor-pointer mt-2'
                                             title='View media'
                                         >
                                             <ImageIcon size={14} />
@@ -253,11 +281,11 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
                     onClick={() => setNotesPopup({ open: false, text: '' })}
                 >
                     <div
-                        className='bg-neutral-800 border border-orange-500/40 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-popIn'
+                        className='bg-neutral-800 border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-popIn'
                         onClick={e => e.stopPropagation()}
                     >
                         <div className='flex justify-between items-center mb-4'>
-                            <h2 className='text-orange-400 font-bold font-mono text-lg'>Notes</h2>
+                            <h2 className='text-white/80 font-bold font-mono text-lg'>Notes</h2>
                             <button
                                 onClick={() => setNotesPopup({ open: false, text: '' })}
                                 className='text-neutral-400 hover:text-white transition-all duration-300 cursor-pointer'
@@ -325,14 +353,14 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
                             <button
                                 onClick={(e) => { e.stopPropagation(); viewerPrevNext(-1) }}
                                 disabled={viewer.index === 0}
-                                className='rounded-full bg-orange-500/20 p-2.5 text-white cursor-pointer hover:bg-orange-500/40 disabled:opacity-30 transition-all'
+                                className='rounded-full bg-white/10 p-2.5 text-white cursor-pointer hover:bg-white/20 disabled:opacity-30 transition-all'
                             >
                                 <ChevronLeft size={24} />
                             </button>
                             <button
                                 onClick={(e) => { e.stopPropagation(); viewerPrevNext(1) }}
                                 disabled={viewer.index === viewer.items.length - 1}
-                                className='rounded-full bg-orange-500/20 p-2.5 text-white cursor-pointer hover:bg-orange-500/40 disabled:opacity-30 transition-all'
+                                className='rounded-full bg-white/10 p-2.5 text-white cursor-pointer hover:bg-white/20 disabled:opacity-30 transition-all'
                             >
                                 <ChevronRight size={24} />
                             </button>

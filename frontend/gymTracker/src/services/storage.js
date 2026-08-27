@@ -26,6 +26,17 @@ export async function renameSession(id, name) {
 }
 
 export async function deleteSession(id) {
+    const session = await dbGet('sessions', id)
+    if (session?.exercises) {
+        for (const ex of session.exercises) {
+            for (const m of (ex.media || [])) {
+                try {
+                    const { deleteMedia } = await import('./media')
+                    await deleteMedia(m.id)
+                } catch { /* best effort */ }
+            }
+        }
+    }
     await dbDelete('sessions', id)
 }
 
@@ -124,19 +135,6 @@ export function getDayKey(date = new Date()) {
 export function getTodaysExercises(schedule, date = new Date()) {
     const list = schedule?.[getDayKey(date)]
     return Array.isArray(list) ? list.filter(e => e?.name) : []
-}
-
-// ---------------------------------------------------------------------------
-// Personal records (PRs)
-// ---------------------------------------------------------------------------
-
-export async function getPrs() {
-    const row = await dbGet('meta', 'prs')
-    return row?.value || []
-}
-
-export async function savePrs(prs) {
-    await dbPut('meta', { key: 'prs', value: prs })
 }
 
 // ---------------------------------------------------------------------------

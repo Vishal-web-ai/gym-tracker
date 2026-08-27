@@ -3,7 +3,6 @@ import {
     sessionXp,
     totalXp,
     analyzeSession,
-    mergePrs,
     computePrsFromSessions,
     rankForXp,
     xpThresholdForLevel,
@@ -202,26 +201,6 @@ describe('computePrsFromSessions', () => {
         const sessions = [weightSession('Bench', 65, 8, 'a')]
         const remaining = sessions.filter(s => s.id !== 'a')
         expect(computePrsFromSessions(remaining)).toEqual([])
-    })
-})
-
-describe('mergePrs', () => {
-    it('adds new entries', () => {
-        expect(mergePrs([], [{ name: 'Deadlift', weight: '180', reps: '5' }])).toEqual([
-            { name: 'Deadlift', weight: '180', reps: '5' }
-        ])
-    })
-
-    it('upgrades an existing entry only when heavier', () => {
-        const prs = [{ name: 'Bench', weight: '60', reps: '10' }]
-        expect(mergePrs(prs, [{ name: 'Bench', weight: '65', reps: '8' }])[0]).toMatchObject({ weight: '65' })
-        expect(mergePrs(prs, [{ name: 'Bench', weight: '55', reps: '12' }])[0]).toMatchObject({ weight: '60' })
-    })
-
-    it('is case-insensitive on names', () => {
-        const merged = mergePrs([{ name: 'Bench', weight: '60', reps: '10' }], [{ name: 'bench', weight: '70', reps: '6' }])
-        expect(merged).toHaveLength(1)
-        expect(merged[0].weight).toBe('70')
     })
 })
 
@@ -570,9 +549,8 @@ describe('computeProgress / refreshProgress', () => {
 
     it('builds a full snapshot', async () => {
         const sessions = [iso('2026-08-10T09:00:00'), iso('2026-08-11T09:00:00')]
-        const prs = [{ name: 'DL' }]
         const ladders = seedLaddersFromHistory(sessions, 70, {})
-        const progress = computeProgress({ sessions, prs, frozenDays: [], now: new Date('2026-08-11T12:00:00'), ladders })
+        const progress = computeProgress({ sessions, frozenDays: [], now: new Date('2026-08-11T12:00:00'), ladders })
         expect(progress.workoutCount).toBe(2)
         expect(progress.totalSets).toBe(2)
         expect(progress.streak).toBe(2)

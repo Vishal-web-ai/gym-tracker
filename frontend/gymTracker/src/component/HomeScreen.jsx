@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RiMenuLine, RiCloseLine } from '@remixicon/react'
-import { Check, Zap, Edit3, Plus, BicepsFlexed, User, CalendarDays, RotateCcw } from 'lucide-react'
+import { Check, Zap, BicepsFlexed, User, CalendarDays, RotateCcw } from 'lucide-react'
 import ExercisesList from './ExercisesList'
 import SessionTracker from './SessionTracker'
 import ExerciseDetail from './ExerciseDetail'
@@ -12,18 +12,16 @@ import MyExercises from './MyExercises'
 import Settings from './Settings'
 import GreetingUser from './GreetingUser'
 import Streak from './Streak'
-import PrsBadge from './PrsBadge'
 import RankBadge from './RankBadge'
 import RankScreen from './RankScreen'
 import LevelUpOverlay from './LevelUpOverlay'
 import ExerciseBadgeOverlay from './ExerciseBadgeOverlay'
-import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, mergePrs, computePrsFromSessions, challengeStatusForLevel, getChallengePicks, ensureLadders, recordSessionLadders, computeProgress, getStartRank } from '../services/progression'
+import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, computePrsFromSessions, challengeStatusForLevel, getChallengePicks, ensureLadders, rebuildLadders, recordSessionLadders, computeProgress, getStartRank } from '../services/progression'
 import { exerciseMetaByName } from '../services/exercises'
 import {
     getName,
+    setName,
     getSessions,
-    getPrs,
-    savePrs,
     getUserProfile,
     saveUserProfile,
     getSchedule,
@@ -76,9 +74,6 @@ function HaloCard({ children, className = '' }) {
         </div>
     )
 }
-
-const modalInputClass =
-    'w-full bg-neutral-900 text-white border border-orange-500/30 rounded-xl px-4 py-3 font-mono outline-none focus:border-orange-500 placeholder-neutral-500'
 
 const normalizeWeights = (raw) => {
     const out = {}
@@ -143,21 +138,16 @@ const HomeScreen = () => {
     const [monthlyCount, setMonthlyCount] = useState(0)
     const [statKey, setStatKey] = useState(0)
     const [prs, setPrs] = useState([])
-    const [manualPrs, setManualPrs] = useState([])
-    const manualPrsRef = useRef([])
-    const [showAddPr, setShowAddPr] = useState(false)
-    const [showManagePr, setShowManagePr] = useState(false)
-    const [editingPrIndex, setEditingPrIndex] = useState(null)
-    const [prName, setPrName] = useState('')
-    const [prWeight, setPrWeight] = useState('')
-    const [prReps, setPrReps] = useState('')
-    const [editPrName, setEditPrName] = useState('')
-    const [editPrWeight, setEditPrWeight] = useState('')
-    const [editPrReps, setEditPrReps] = useState('')
     const [photoData, setPhotoData] = useState('')
     const [bodyweight, setBodyweight] = useState(0)
     const [sessions, setSessions] = useState([])
     const [showPhotoModal, setShowPhotoModal] = useState(false)
+    const [profileName, setProfileName] = useState('')
+    const [profileAge, setProfileAge] = useState('')
+    const [profileWeight, setProfileWeight] = useState('')
+    const [profileFeet, setProfileFeet] = useState('')
+    const [profileInch, setProfileInch] = useState('')
+    const [profileSaving, setProfileSaving] = useState(false)
     const [customExercises, setCustomExercises] = useState([])
     const [challengePicks, setChallengePicks] = useState({})
     const [todayExercises, setTodayExercises] = useState([])
@@ -195,7 +185,7 @@ const HomeScreen = () => {
             .then(list => {
                 setSessions(list)
                 setMonthlyCount(computeMonthlyCount(list))
-                setPrs(mergePrs(manualPrsRef.current, computePrsFromSessions(list)))
+                setPrs(computePrsFromSessions(list))
             })
             .catch(() => {})
     }, [])
@@ -211,8 +201,17 @@ const HomeScreen = () => {
     }, [])
 
     const handleDeletedSession = useCallback(() => {
-        refreshSessionsAndPrs()
-        refreshProgress()
+        getSessions()
+            .then(list => {
+                setSessions(list)
+                setMonthlyCount(computeMonthlyCount(list))
+                setPrs(computePrsFromSessions(list))
+                return rebuildLadders(list, bodyweight)
+            })
+            .then(l => {
+                if (l) setLadders(l)
+                return refreshProgress()
+            })
             .then(result => {
                 if (!result) return
                 setProgress(result.progress)
@@ -226,28 +225,30 @@ const HomeScreen = () => {
             })
             .catch(() => {})
         setStatKey(k => k + 1)
-    }, [refreshSessionsAndPrs])
+    }, [bodyweight])
 
     useEffect(() => {
-        getName().then(setUserName).catch(() => {})
-        getPrs()
-            .then(list => {
-                const manual = Array.isArray(list) ? list : []
-                manualPrsRef.current = manual
-                setManualPrs(manual)
-                getSessions()
-                    .then(sess => {
-                        setSessions(sess)
-                        setMonthlyCount(computeMonthlyCount(sess))
-                        setPrs(mergePrs(manual, computePrsFromSessions(sess)))
-                    })
-                    .catch(() => {})
+        getName().then(name => {
+            setUserName(name)
+            setProfileName(name)
+        }).catch(() => {})
+        getSessions()
+            .then(sess => {
+                setSessions(sess)
+                setMonthlyCount(computeMonthlyCount(sess))
+                setPrs(computePrsFromSessions(sess))
             })
+            .catch(() => {})
             .catch(() => {})
         getUserProfile()
             .then(profile => {
                 setPhotoData(profile.photoData || '')
                 setBodyweight(parseFloat(profile.weight) || 0)
+                setProfileAge(profile.age || '')
+                setProfileWeight(profile.weight || '')
+                const h = parseInt(profile.height, 10) || 0
+                setProfileFeet(String(Math.floor(h / 30.48)))
+                setProfileInch(String(Math.round((h % 30.48) / 2.54)))
             })
             .catch(() => {})
         refreshTodaysSchedule()
@@ -364,7 +365,6 @@ const HomeScreen = () => {
             const data = await imageFileToDataUrl(file)
             await saveUserProfile({ photoData: data })
             setPhotoData(data)
-            setShowPhotoModal(false)
         } catch {
             // ignore unreadable/unsupported image
         }
@@ -374,7 +374,6 @@ const HomeScreen = () => {
         try {
             await saveUserProfile({ photoData: '' })
             setPhotoData('')
-            setShowPhotoModal(false)
         } catch {
             // ignore storage errors
         }
@@ -440,6 +439,7 @@ const HomeScreen = () => {
             return next
         })
         setPlannedExercises(prev => [...prev, newExercise])
+        setCurrentIndex(selectedExercises.length)
         setPreviewExercise(null)
         setShowExercisesList(false)
     }
@@ -657,53 +657,6 @@ const HomeScreen = () => {
         }
     }, [refreshStats, refreshSessionsAndPrs, customExercises, challengePicks, bodyweight])
 
-    const persistPrs = (next) => {
-        const manual = [...next]
-        manualPrsRef.current = manual
-        setManualPrs(manual)
-        setPrs(mergePrs(manual, computePrsFromSessions(sessions)))
-        savePrs(manual).catch(() => {})
-    }
-
-    const handleAddPr = () => {
-        if (!prName.trim() || !prWeight.trim() || !prReps.trim()) return
-        persistPrs([...manualPrs, { name: prName.trim(), weight: prWeight.trim(), reps: prReps.trim() }])
-        setPrName('')
-        setPrWeight('')
-        setPrReps('')
-        setShowAddPr(false)
-    }
-
-    const handleEditPr = (idx) => {
-        const pr = manualPrs[idx]
-        setEditingPrIndex(idx)
-        setEditPrName(pr.name)
-        setEditPrWeight(pr.weight)
-        setEditPrReps(pr.reps)
-    }
-
-    const handleSaveEditPr = () => {
-        if (editingPrIndex === null || !editPrName.trim() || !editPrWeight.trim() || !editPrReps.trim()) return
-        persistPrs(manualPrs.map((pr, i) =>
-            i === editingPrIndex
-                ? { name: editPrName.trim(), weight: editPrWeight.trim(), reps: editPrReps.trim() }
-                : pr
-        ))
-        setEditingPrIndex(null)
-        setEditPrName('')
-        setEditPrWeight('')
-        setEditPrReps('')
-    }
-
-    const handleDeletePr = (idx) => {
-        persistPrs(manualPrs.filter((_, i) => i !== idx))
-    }
-
-    const closeManagePr = () => {
-        setEditingPrIndex(null)
-        setShowManagePr(false)
-    }
-
     const staggeredMenuItems = [
         { label: 'My Ranks', ariaLabel: 'Open my ranks', onClick: () => { setIsHamburgerOpen(false); setShowRanks(true) } },
         { label: 'Workout History', ariaLabel: 'Open workout history', onClick: () => { setIsHamburgerOpen(false); setShowHistory(true) } },
@@ -719,7 +672,17 @@ const HomeScreen = () => {
         >
             {/* Header */}
             <header className='w-full flex items-center justify-center px-4 sm:px-5 h-16 sm:h-20 relative shrink-0'>
-                <div className='absolute left-4 sm:left-5 cursor-pointer' onClick={() => setShowPhotoModal(true)} title='Profile photo'>
+                <div className='absolute left-4 sm:left-5 cursor-pointer' onClick={() => {
+                    setProfileName(userName)
+                    getUserProfile().then(p => {
+                        setProfileAge(p.age || '')
+                        setProfileWeight(p.weight || '')
+                        const h = parseInt(p.height, 10) || 0
+                        setProfileFeet(String(Math.floor(h / 30.48)))
+                        setProfileInch(String(Math.round((h % 30.48) / 2.54)))
+                    }).catch(() => {})
+                    setShowPhotoModal(true)
+                }} title='Profile'>
                     {photoData ? (
                         <img
                             src={photoData}
@@ -796,18 +759,12 @@ const HomeScreen = () => {
 
                             <div className='flex-[0.6] border border-orange-500/30 rounded-2xl bg-[rgba(10,10,10,0.85)] px-4 py-2.5 flex flex-col justify-start'>
                             <div className='flex items-center justify-between w-full mb-2'>
-                                <PrsBadge />
-                                <div className='flex items-center gap-2'>
-                                    <button onClick={() => setShowManagePr(true)} className='p-1 cursor-pointer' title='Manage PRs'>
-                                        <Edit3 size={14} className='text-orange-500' />
-                                    </button>
-                                    <button onClick={() => setShowAddPr(true)} className='bg-orange-500 rounded-full w-5 h-5 flex items-center justify-center cursor-pointer' title='Add PR'>
-                                        <Plus size={14} className='text-black font-bold' />
-                                    </button>
+                                <div className='flex items-center gap-1.5'>
+                                    <span className='text-orange-500 font-bebas tracking-[2px] text-sm'>PRs</span>
                                 </div>
                             </div>
                             {prs.length === 0 ? (
-                                <p className='font-inter text-white/30 italic text-center w-full text-xs'>Write your PR here</p>
+                                <p className='font-inter text-white/30 italic text-center w-full text-xs'>Complete workouts to earn PRs</p>
                             ) : (
                                 <div className='max-h-20 overflow-y-auto scroll flex flex-col gap-1'>
                                     {prs.map((pr, i) => (
@@ -1056,193 +1013,156 @@ const HomeScreen = () => {
                 />
             )}
 
-            {/* Add PR bottom sheet */}
-            <AnimatePresence>
-                {showAddPr && (
-                    <motion.div
-                        key='add-pr'
-                        className='fixed inset-0 z-[60] flex items-end justify-center'
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                    >
-                        <div className='absolute inset-0 bg-black/60' onClick={() => setShowAddPr(false)} />
-                        <motion.div
-                            className='relative w-full max-w-md bg-[#1a1a1a] rounded-t-3xl p-6 flex flex-col gap-4'
-                            initial={{ y: '100%' }}
-                            animate={{ y: 0 }}
-                            exit={{ y: '100%' }}
-                            transition={{ type: 'spring', damping: 26, stiffness: 300 }}
-                        >
-                            <p className='font-bebas text-orange-500 tracking-[2px] text-center text-2xl'>
-                                ADD PERSONAL RECORD
-                            </p>
-                            <input
-                                value={prName}
-                                onChange={(e) => setPrName(e.target.value)}
-                                placeholder='Exercise name'
-                                className={modalInputClass}
-                            />
-                            <div className='flex gap-3'>
-                                <input
-                                    value={prWeight}
-                                    onChange={(e) => setPrWeight(e.target.value)}
-                                    placeholder='Weight (kg)'
-                                    inputMode='decimal'
-                                    className={modalInputClass}
-                                />
-                                <input
-                                    value={prReps}
-                                    onChange={(e) => setPrReps(e.target.value)}
-                                    placeholder='Reps'
-                                    inputMode='numeric'
-                                    className={modalInputClass}
-                                />
-                            </div>
-                            <button
-                                onClick={handleAddPr}
-                                disabled={!prName.trim() || !prWeight.trim() || !prReps.trim()}
-                                className='bg-orange-500 rounded-xl py-3 font-bebas text-black tracking-[2px] text-xl cursor-pointer hover:bg-orange-400 transition-all disabled:opacity-50'
-                            >
-                                ADD PR
-                            </button>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Manage PR bottom sheet */}
-            <AnimatePresence>
-                {showManagePr && (
-                    <motion.div
-                        key='manage-pr'
-                        className='fixed inset-0 z-[60] flex items-end justify-center'
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                    >
-                        <div className='absolute inset-0 bg-black/60' onClick={closeManagePr} />
-                        <motion.div
-                            className='relative w-full max-w-md bg-[#1a1a1a] rounded-t-3xl p-6 flex flex-col gap-4'
-                            initial={{ y: '100%' }}
-                            animate={{ y: 0 }}
-                            exit={{ y: '100%' }}
-                            transition={{ type: 'spring', damping: 26, stiffness: 300 }}
-                        >
-                            <p className='font-bebas text-orange-500 tracking-[2px] text-center text-2xl'>
-                                {editingPrIndex !== null ? 'EDIT PR' : 'MANAGE PRs'}
-                            </p>
-                            {editingPrIndex !== null ? (
-                                <>
-                                    <input
-                                        value={editPrName}
-                                        onChange={(e) => setEditPrName(e.target.value)}
-                                        placeholder='Exercise name'
-                                        className={modalInputClass}
-                                    />
-                                    <div className='flex gap-3'>
-                                        <input
-                                            value={editPrWeight}
-                                            onChange={(e) => setEditPrWeight(e.target.value)}
-                                            placeholder='Weight (kg)'
-                                            inputMode='decimal'
-                                            className={modalInputClass}
-                                        />
-                                        <input
-                                            value={editPrReps}
-                                            onChange={(e) => setEditPrReps(e.target.value)}
-                                            placeholder='Reps'
-                                            inputMode='numeric'
-                                            className={modalInputClass}
-                                        />
-                                    </div>
-                                    <div className='flex gap-3'>
-                                        <button
-                                            onClick={() => setEditingPrIndex(null)}
-                                            className='flex-1 border border-orange-500/40 rounded-xl py-3 font-bebas text-orange-500 tracking-[2px] cursor-pointer'
-                                        >
-                                            CANCEL
-                                        </button>
-                                        <button
-                                            onClick={handleSaveEditPr}
-                                            disabled={!editPrName.trim() || !editPrWeight.trim() || !editPrReps.trim()}
-                                            className='flex-1 bg-orange-500 rounded-xl py-3 font-bebas text-black tracking-[2px] cursor-pointer hover:bg-orange-400 transition-all disabled:opacity-50'
-                                        >
-                                            SAVE
-                                        </button>
-                                    </div>
-                                </>
-                            ) : prs.length === 0 ? (
-                                <p className='font-inter text-white/40 text-center'>No PRs yet. Add one!</p>
-                            ) : (
-                                prs.map((pr, i) => (
-                                    <div
-                                        key={i}
-                                        className='flex items-center justify-between bg-[#111] rounded-2xl border border-orange-500/20 px-4 py-3'
-                                    >
-                                        <button onClick={() => handleEditPr(i)} className='text-left cursor-pointer'>
-                                            <p className='font-inter text-white'>{pr.name}</p>
-                                            <p className='font-mono text-gray-400'>{pr.weight} kg × {pr.reps}</p>
-                                        </button>
-                                        <button onClick={() => handleDeletePr(i)} className='font-inter font-bold text-red-400 cursor-pointer text-sm'>
-                                            Delete
-                                        </button>
-                                    </div>
-                                ))
-                            )}
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Profile photo modal */}
+            {/* Profile editor modal */}
             {showPhotoModal && (
                 <div
                     className='fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4'
                     onClick={() => setShowPhotoModal(false)}
                 >
                     <div
-                        className='bg-[#1a1a1a] border border-orange-500/40 rounded-2xl p-6 w-full max-w-sm animate-popIn'
+                        className='bg-[#1a1a1a] border border-orange-500/40 rounded-2xl p-6 w-full max-w-sm animate-popIn max-h-[90vh] overflow-y-auto'
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className='flex flex-col items-center gap-3 mb-5'>
-                            {photoData ? (
-                                <img
-                                    src={photoData}
-                                    alt='Profile'
-                                    className='rounded-full border-2 border-orange-500 object-cover'
-                                    style={{ width: 88, height: 88 }}
-                                />
-                            ) : (
-                                <div
-                                    className='rounded-full bg-orange-500/20 border-2 border-orange-500 flex items-center justify-center'
-                                    style={{ width: 88, height: 88 }}
+                            <div className='relative'>
+                                {photoData ? (
+                                    <img
+                                        src={photoData}
+                                        alt='Profile'
+                                        className='rounded-full border-2 border-orange-500 object-cover'
+                                        style={{ width: 88, height: 88 }}
+                                    />
+                                ) : (
+                                    <div
+                                        className='rounded-full bg-orange-500/20 border-2 border-orange-500 flex items-center justify-center'
+                                        style={{ width: 88, height: 88 }}
+                                    >
+                                        <User size={36} color='#f97316' />
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => photoInputRef.current?.click()}
+                                    className='absolute -bottom-1 -right-1 bg-orange-500 rounded-full flex items-center justify-center cursor-pointer'
+                                    style={{ width: 30, height: 30 }}
+                                    title='Change photo'
                                 >
-                                    <User size={36} color='#f97316' />
-                                </div>
-                            )}
-                            <h2 className='font-bebas text-orange-500 tracking-[2px] text-2xl'>PROFILE PHOTO</h2>
+                                    <svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='black' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><path d='M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z'/></svg>
+                                </button>
+                            </div>
+                            <h2 className='font-bebas text-orange-500 tracking-[2px] text-2xl'>EDIT PROFILE</h2>
                         </div>
-                        <button
-                            onClick={() => photoInputRef.current?.click()}
-                            className='w-full flex items-center justify-center gap-2 bg-orange-500 rounded-xl py-3 font-mono font-bold text-black cursor-pointer hover:bg-orange-400 transition-all'
-                        >
-                            {photoData ? 'Change Photo' : 'Upload Photo'}
-                        </button>
+
+                        <div className='space-y-3'>
+                            <div>
+                                <label className='block text-white/40 font-mono text-xs mb-1'>Name</label>
+                                <input
+                                    value={profileName}
+                                    onChange={(e) => setProfileName(e.target.value)}
+                                    placeholder='Your name'
+                                    className='w-full bg-neutral-800 text-white font-mono text-sm px-3 py-2.5 rounded-lg border border-white/10 outline-none focus:border-orange-500/60 transition-colors'
+                                />
+                            </div>
+                            <div>
+                                <label className='block text-white/40 font-mono text-xs mb-1'>Age</label>
+                                <input
+                                    value={profileAge}
+                                    onChange={(e) => setProfileAge(e.target.value)}
+                                    placeholder='Age'
+                                    inputMode='numeric'
+                                    className='w-full bg-neutral-800 text-white font-mono text-sm px-3 py-2.5 rounded-lg border border-white/10 outline-none focus:border-orange-500/60 transition-colors'
+                                />
+                            </div>
+                            <div>
+                                <label className='block text-white/40 font-mono text-xs mb-1'>Weight (kg)</label>
+                                <input
+                                    value={profileWeight}
+                                    onChange={(e) => setProfileWeight(e.target.value)}
+                                    placeholder='Weight in kg'
+                                    inputMode='decimal'
+                                    className='w-full bg-neutral-800 text-white font-mono text-sm px-3 py-2.5 rounded-lg border border-white/10 outline-none focus:border-orange-500/60 transition-colors'
+                                />
+                            </div>
+                            <div>
+                                <label className='block text-white/40 font-mono text-xs mb-1'>Height</label>
+                                <div className='flex gap-3'>
+                                    <input
+                                        value={profileFeet}
+                                        onChange={(e) => setProfileFeet(e.target.value)}
+                                        placeholder='ft'
+                                        inputMode='numeric'
+                                        className='w-full bg-neutral-800 text-white font-mono text-sm px-3 py-2.5 rounded-lg border border-white/10 outline-none focus:border-orange-500/60 transition-colors'
+                                    />
+                                    <input
+                                        value={profileInch}
+                                        onChange={(e) => setProfileInch(e.target.value)}
+                                        placeholder='in'
+                                        inputMode='numeric'
+                                        className='w-full bg-neutral-800 text-white font-mono text-sm px-3 py-2.5 rounded-lg border border-white/10 outline-none focus:border-orange-500/60 transition-colors'
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className='flex gap-3 mt-5'>
+                            <button
+                                onClick={() => setShowPhotoModal(false)}
+                                className='flex-1 rounded-xl py-2.5 font-mono font-bold text-white/50 cursor-pointer hover:text-white/80 transition-all'
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (profileSaving) return
+                                    setProfileSaving(true)
+                                    try {
+                                        const ft = parseInt(profileFeet, 10) || 0
+                                        const inc = parseInt(profileInch, 10) || 0
+                                        const heightCm = String(Math.round(ft * 30.48 + inc * 2.54))
+                                        const newWeight = profileWeight
+                                        const newName = profileName.trim() || 'Athlete'
+
+                                        await Promise.all([
+                                            setName(newName),
+                                            saveUserProfile({
+                                                age: profileAge,
+                                                weight: newWeight,
+                                                height: heightCm,
+                                            })
+                                        ])
+
+                                        setUserName(newName)
+
+                                        const newBw = parseFloat(newWeight) || 0
+                                        if (newBw !== bodyweight) {
+                                            setBodyweight(newBw)
+                                            const sess = await getSessions()
+                                            const newLadders = await ensureLadders(sess, newBw)
+                                            setLadders(newLadders)
+                                        }
+
+                                        setShowPhotoModal(false)
+                                    } catch {
+                                        // ignore
+                                    } finally {
+                                        setProfileSaving(false)
+                                    }
+                                }}
+                                disabled={profileSaving}
+                                className='flex-1 bg-orange-500 rounded-xl py-2.5 font-mono font-bold text-black cursor-pointer hover:bg-orange-400 transition-all disabled:opacity-50'
+                            >
+                                {profileSaving ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+
                         {photoData && (
                             <button
                                 onClick={handlePhotoRemove}
-                                className='w-full mt-3 rounded-xl py-3 font-mono font-bold text-red-400 cursor-pointer hover:bg-red-500/10 transition-all'
+                                className='w-full mt-3 rounded-xl py-2.5 font-mono font-bold text-red-400 text-sm cursor-pointer hover:bg-red-500/10 transition-all'
                             >
                                 Remove Photo
                             </button>
                         )}
-                        <button
-                            onClick={() => setShowPhotoModal(false)}
-                            className='w-full mt-3 rounded-xl py-3 font-mono font-bold text-white/50 cursor-pointer hover:text-white/80 transition-all'
-                        >
-                            Cancel
-                        </button>
+
                         <input
                             ref={photoInputRef}
                             type='file'

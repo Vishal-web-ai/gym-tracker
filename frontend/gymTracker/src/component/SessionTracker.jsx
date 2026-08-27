@@ -1,6 +1,6 @@
 import { useState, useLayoutEffect, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check, Images, Film, Trophy, Flame, Zap, Timer } from 'lucide-react'
+import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check, Images, Film, Flame, Zap, Timer } from 'lucide-react'
 import NumberOfSets from './NumberOfSets'
 import ExerciseMedia from './ExerciseMedia'
 import RestTimer from './RestTimer'
@@ -232,7 +232,20 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         [idx]: [...(prev[idx] || []), item]
     }))
 
-    const savedEntry = useMemo(() => buildHistoryIndex(sessions)[exercise.name], [sessions, exercise.name])
+    const savedEntry = useMemo(() => {
+        const liveSets = []
+        for (let si = 0; si < setCount; si++) {
+            if (!exerciseDone[idx]?.[si]) continue
+            liveSets.push({
+                reps: exerciseSets[idx]?.[si] || '—',
+                weight: isTimer ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
+            })
+        }
+        const synthetic = liveSets.length > 0
+            ? [{ exercises: [{ name: exercise.name, mode: exercise.mode, sets: liveSets }] }]
+            : []
+        return buildHistoryIndex([...(sessions || []), ...synthetic])[exercise.name]
+    }, [sessions, exercise.name, exercise.mode, exerciseDone, exerciseSets, exerciseWeights, idx, setCount, isTimer])
     const ladder = ladders?.[exercise.name] ? ladderView(ladders[exercise.name], bodyweight) : null
     let livePerf = 0
     for (let si = 0; si < setCount; si++) {
@@ -555,9 +568,9 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                 {/* Set input rows — scrollable when they don't fit */}
                 <div
                     ref={setsScrollRef}
-                    className='flex-initial min-h-0 overflow-y-auto scroll mt-1.5'
+                    className='flex-1 min-h-0 overflow-y-auto scroll mt-1.5'
                 >
-                    <div className='flex flex-col gap-6 pt-4'>
+                    <div className='flex flex-col gap-6 pt-3'>
                         {Array.from({ length: setCount }, (_, setIdx) => {
                             const done = !!exerciseDone[idx]?.[setIdx]
                             const unlocked = setIdx === 0 || !!exerciseDone[idx]?.[setIdx - 1]
@@ -572,7 +585,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                                     {!isTimer && (
                                         <div className='flex-1 min-w-0 relative'>
                                             <label className='absolute -top-3.5 left-0 text-[9px] font-bold text-neutral-500 tracking-[2px]'>
-                                                {isBodyweight ? 'EXTRA WT (KG)' : 'WEIGHT (KG)'}
+                                                {isBodyweight ? 'TOTAL (KG)' : 'WEIGHT (KG)'}
                                             </label>
                                             <WeightCell
                                                 value={exerciseWeights[idx]?.[setIdx] || ''}
@@ -657,44 +670,40 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                 </div>
 
                 {/* Badge ladder + PR — centered between set controls and rest timer */}
-                <div className='flex flex-col items-center gap-1 pt-1.5 mt-auto'>
-                    <div className='flex items-center gap-2 min-w-0'>
-                        <span className='h-3 w-3 rounded-full shrink-0' style={{ background: displayColor }} />
-                        <span className='font-bebas text-sm tracking-[1px] whitespace-nowrap' style={{ color: displayColor }}>
+                <div className='flex flex-col items-center gap-0.5 pt-1.5 shrink-0'>
+                    <div className='flex items-center gap-1.5 min-w-0'>
+                        <span className='h-2.5 w-2.5 rounded-full shrink-0' style={{ background: displayColor }} />
+                        <span className='font-mono text-[11px] whitespace-nowrap' style={{ color: displayColor }}>
                             {!laddersReady ? '…' : displayLevel === 0 ? 'UNRANKED' : displayLevelName.toUpperCase()}
                         </span>
-                        <span className={`font-mono text-[11px] whitespace-nowrap ${challengeHit ? 'text-emerald-400' : 'text-neutral-500'}`}>
-                            {challengeHit
-                                ? 'CHALLENGE DONE ✓'
-                                : !laddersReady
-                                    ? ''
-                                    : !ladder && !projected
-                                        ? 'COMPLETE A SET TO RANK'
-                                        : (displayLevel === 0 && projected)
-                                            ? isBodyweight
-                                                ? `${projected.entry.nextTarget} REPS FOR LEVEL 1`
-                                                : `${isTimer ? 'HOLD' : '6 REPS @'} ${fmtLoad(projected.entry.nextTarget)} FOR LEVEL 1`
-                                            : projected
-                                                ? isBodyweight
-                                                    ? `BODYWEIGHT + ${fmtLoad(projected.entry.nextTarget)} × 6 → LEVEL ${displayLevel + 1}`
-                                                    : `${fmtLoad(projected.entry.nextTarget)} x 6reps → LEVEL ${displayLevel + 1}`
-                                                : ladder?.tier === 0
-                                                    ? isBodyweight
-                                                        ? `${ladder.nextTarget} REPS FOR LEVEL 1`
-                                                        : `${isTimer ? 'HOLD' : '6 REPS @'} ${fmtLoad(ladder.nextTarget)} FOR LEVEL 1`
-                                                    : isBodyweight
-                                                        ? `BODYWEIGHT + ${fmtLoad(ladder.nextTarget)} × 6 → LEVEL ${ladder.tier + 1}`
-                                                        : `${fmtLoad(ladder.lastSuccess)} → ${fmtLoad(ladder.nextTarget)} FOR LEVEL ${ladder.tier + 1}`}
-                        </span>
+                        {pr && (
+                            <>
+                                <span className='text-neutral-600 font-mono text-[11px]'>|</span>
+                                <span className='font-mono text-[11px] text-orange-300 whitespace-nowrap'>
+                                    PR : {pr.weight}kg × {pr.reps}
+                                </span>
+                            </>
+                        )}
                     </div>
-                    {pr && (
-                        <div className='flex items-center gap-1.5'>
-                            <Trophy size={14} className='text-orange-400 shrink-0' />
-                            <span className='font-mono text-[11px] text-orange-300 whitespace-nowrap'>
-                                PR {pr.weight}kg × {pr.reps}
-                            </span>
-                        </div>
-                    )}
+                    <span className={`font-mono text-[11px] whitespace-nowrap ${challengeHit ? 'text-emerald-400' : 'text-neutral-500'}`}>
+                        {challengeHit
+                            ? 'CHALLENGE DONE ✓'
+                            : !laddersReady
+                                ? ''
+                                : !ladder && !projected
+                                    ? 'COMPLETE A SET TO RANK'
+                                    : (() => {
+                                        const target = projected ? projected.entry.nextTarget : ladder?.nextTarget
+                                        const level = projected ? displayLevel + 1 : (ladder?.tier ?? 0) + 1
+                                        if (target == null) return ''
+                                        const atRepStage = isBodyweight && (ladder?.tier ?? displayLevel) === 0
+                                        const load = atRepStage
+                                            ? `BODYWEIGHT x ${target}reps`
+                                            : `${fmtLoad(target)} x 6reps`
+                                        return `FOR LEVEL ${level} : ${load}`
+                                    })()
+                        }
+                    </span>
                 </div>
 
                 {/* Rest timer — always pinned to the bottom */}
@@ -760,10 +769,10 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
         const isTimer = (idx) => exercises[idx].mode === 'timer'
         const isBodyweight = (idx) => exercises[idx].mode === 'bodyweight'
         try {
+            const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+            const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
             const session = await createSession({
-                date: now.toLocaleDateString('en-US', {
-                    year: 'numeric', month: 'long', day: 'numeric'
-                }),
+                date: `${DAYS[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`,
                 name: workoutName.trim() || 'Workout',
                 exercises: exercises.map((exercise, idx) => ({
                     name: exercise.name,

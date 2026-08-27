@@ -190,7 +190,9 @@ export default function RankScreen({ onClose }) {
                                                 </div>
                                                 <p className='font-mono text-white/30 text-[9px]'>
                                                     {e.tier === 0
-                                                        ? `${fmt(e.nextTarget)} × 5 reps earns LEVEL 1`
+                                                        ? e.mode === 'bodyweight'
+                                                            ? `${e.nextTarget} reps earns LEVEL 1`
+                                                            : `${fmt(e.nextTarget)} × 5 reps earns LEVEL 1`
                                                         : `${fmt(Math.max(0, (e.nextTarget || 0) - (e.lastSuccess || 0)))} to go for LEVEL ${nextLevel}`}
                                                 </p>
                                                 {e.strengthRatio != null && (

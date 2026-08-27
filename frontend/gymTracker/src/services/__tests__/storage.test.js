@@ -10,8 +10,6 @@ import {
     deleteExercise,
     getName,
     setName,
-    getPrs,
-    savePrs,
     getUserProfile,
     saveUserProfile,
     getSchedule,
@@ -65,15 +63,6 @@ describe('storage', () => {
         expect(await getName()).toBe('Vishal')
         await setName('Priya')
         expect(await getName()).toBe('Priya')
-    })
-
-    it('persists personal records', async () => {
-        expect(await getPrs()).toEqual([])
-        const prs = [{ name: 'Deadlift', weight: '180', reps: '5' }]
-        await savePrs(prs)
-        expect(await getPrs()).toEqual(prs)
-        await savePrs([])
-        expect(await getPrs()).toEqual([])
     })
 
     it('returns an empty profile before onboarding', async () => {

@@ -17,9 +17,7 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
     const doneCount = groups.filter((g) => g.done).length
     const nextThreshold = progress?.rank?.nextThreshold
     const currentXp = progress?.xp ?? 0
-    const prevXp = xpTotal != null ? Math.max(0, currentXp - xpTotal) : currentXp
     const totalFraction = nextThreshold != null ? Math.min(currentXp / nextThreshold, 1) : 1
-    const prevFraction = nextThreshold != null ? Math.min(prevXp / nextThreshold, 1) : 0
     const xpRemaining = nextThreshold != null ? Math.max(0, nextThreshold - currentXp) : 0
     const isMaxRank = nextThreshold == null
     const nextRank = rank.level < RANKS.length ? RANKS[rank.level] : null
@@ -27,7 +25,7 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
     return (
         <AnimatePresence>
             <motion.div
-                className='fixed inset-0 z-[80] flex items-end justify-center bg-black/60'
+                className='fixed inset-0 z-[80] flex items-center justify-center bg-black/60'
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -36,11 +34,11 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
             >
                 <motion.div
                     key='card'
-                    className='relative w-full max-w-[400px] max-h-[85vh] border-t rounded-t-3xl flex flex-col overflow-hidden'
-                    style={{ borderColor: rank.color + '30', background: 'rgba(10,10,10,0.98)', boxShadow: `0 -4px 40px ${rank.color}18` }}
-                    initial={{ y: '100%' }}
-                    animate={{ y: 0 }}
-                    exit={{ y: '100%' }}
+                    className='relative w-full h-full max-w-[400px] max-h-[90vh] border rounded-3xl flex flex-col overflow-hidden'
+                    style={{ borderColor: rank.color + '30', background: 'rgba(10,10,10,0.98)', boxShadow: `0 0 60px ${rank.color}18` }}
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
                     transition={{ type: 'spring', damping: 28, stiffness: 260 }}
                     onClick={(e) => e.stopPropagation()}
                 >
@@ -61,11 +59,15 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
                             transition={{ delay: 0.15, duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
                         >
                             <div className='relative mb-3'>
-                                <RankIcon rank={rank} size={80} />
                                 <div
-                                    className='absolute inset-0 rounded-full blur-xl opacity-25'
+                                    className='absolute inset-[-20px] rounded-full opacity-40 blur-2xl'
+                                    style={{ background: `radial-gradient(circle, ${rank.color}, transparent 70%)` }}
+                                />
+                                <div
+                                    className='absolute inset-[-10px] rounded-full opacity-20 blur-xl'
                                     style={{ background: rank.color }}
                                 />
+                                <RankIcon rank={rank} size={120} />
                             </div>
 
                             <p className='font-bebas text-[32px] leading-none tracking-[3px]' style={{ color: rank.color }}>
@@ -96,19 +98,43 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
                                     {currentXp.toLocaleString()} / {nextThreshold != null ? nextThreshold.toLocaleString() : 'MAX'}
                                 </span>
                             </div>
-                            <div className='h-3.5 rounded-full bg-white/[0.07] overflow-hidden'>
+                            <div className='relative h-4 rounded-full bg-white/[0.07] overflow-hidden'>
                                 <motion.div
-                                    className='h-full rounded-full'
-                                    style={{ background: rank.color, boxShadow: `0 0 14px ${rank.color}55` }}
-                                    initial={{ width: `${Math.round(prevFraction * 100)}%` }}
+                                    className='absolute inset-0 rounded-full opacity-30 blur-sm'
+                                    style={{ background: rank.color }}
+                                    initial={{ width: '0%' }}
                                     animate={{ width: `${Math.round(totalFraction * 100)}%` }}
-                                    transition={{ delay: 0.5, duration: 1.0, ease: 'easeOut' }}
+                                    transition={{ delay: 0.6, duration: 1.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+                                />
+                                <motion.div
+                                    className='absolute inset-0 h-full rounded-full'
+                                    style={{
+                                        background: `linear-gradient(90deg, ${rank.color}cc, ${rank.color})`,
+                                        boxShadow: `0 0 18px ${rank.color}66, inset 0 1px 0 rgba(255,255,255,0.15)`
+                                    }}
+                                    initial={{ width: '0%' }}
+                                    animate={{ width: `${Math.round(totalFraction * 100)}%` }}
+                                    transition={{ delay: 0.6, duration: 1.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+                                />
+                                <motion.div
+                                    className='absolute top-0 left-0 h-full w-12 rounded-full'
+                                    style={{
+                                        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)',
+                                    }}
+                                    initial={{ left: '0%' }}
+                                    animate={{ left: `${Math.round(totalFraction * 100)}%` }}
+                                    transition={{ delay: 2.0, duration: 0.6, ease: 'easeOut' }}
                                 />
                             </div>
                             {!isMaxRank && (
-                                <p className='font-mono text-[11px] text-white/40 mt-2 text-center'>
+                                <motion.p
+                                    className='font-mono text-[11px] text-white/40 mt-2 text-center'
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 1.8, duration: 0.4 }}
+                                >
                                     <span className='text-orange-400 font-medium'>{xpRemaining.toLocaleString()} XP</span> to {nextRank?.name?.toUpperCase()}
-                                </p>
+                                </motion.p>
                             )}
                             {isMaxRank && (
                                 <p className='font-mono text-[11px] text-white/30 mt-2 text-center'>
@@ -120,9 +146,9 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
                         {/* Challenges */}
                         {groups.length > 0 && (
                             <motion.div className='mt-6' {...stagger(3)}>
-                                <div className='flex items-center justify-between mb-2.5'>
-                                    <p className='font-mono text-[10px] tracking-[2px] text-white/35'>RANK CHALLENGES</p>
-                                    <p className='font-mono text-[10px] text-orange-400/80'>{doneCount}/{groups.length}</p>
+                                <div className='flex items-center justify-between mb-3 rounded-xl bg-white/[0.04] border border-white/[0.06] px-4 py-2.5'>
+                                    <p className='font-bebas text-[16px] tracking-[2px] text-white/70'>RANK CHALLENGES</p>
+                                    <p className='font-bebas text-[22px] text-orange-400'>{doneCount}<span className='text-white/30'>/{groups.length}</span></p>
                                 </div>
                                 <div className='flex flex-col gap-1.5'>
                                     {groups.map((ch) => (
@@ -145,22 +171,23 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
                         {/* Next Target */}
                         {!isMaxRank && (
                             <motion.div
-                                className='mt-5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5 text-center'
+                                className='mt-5 rounded-xl border p-4 text-center'
+                                style={{ borderColor: (nextRank?.color || rank.color) + '25', background: `linear-gradient(180deg, ${(nextRank?.color || rank.color)}08, transparent)` }}
                                 {...stagger(4)}
                             >
-                                <p className='font-mono text-[9px] tracking-[2px] text-white/25 mb-1.5'>NEXT TARGET</p>
-                                <p className='font-bebas text-[17px] tracking-[2px]' style={{ color: nextRank?.color || rank.color }}>
+                                <p className='font-mono text-[10px] tracking-[2px] text-white/40 mb-1.5'>NEXT TARGET</p>
+                                <p className='font-bebas text-[24px] tracking-[3px]' style={{ color: nextRank?.color || rank.color }}>
                                     {nextRank?.name?.toUpperCase()}
                                 </p>
-                                <p className='font-mono text-[10px] text-white/35 mt-0.5'>
-                                    {xpRemaining.toLocaleString()} XP remaining
+                                <p className='font-mono text-[12px] text-white/50 mt-1'>
+                                    <span className='text-orange-400 font-bold'>{xpRemaining.toLocaleString()} XP</span> remaining
                                 </p>
                             </motion.div>
                         )}
                     </div>
 
                     {/* CTA */}
-                    <div className='px-5 pb-6 pt-3'>
+                    <div className='px-5 pb-5 pt-3'>
                         <button
                             onClick={onClose}
                             className='w-full border rounded-2xl py-3.5 font-bebas tracking-[3px] text-[17px] cursor-pointer hover:opacity-80 transition-opacity'
