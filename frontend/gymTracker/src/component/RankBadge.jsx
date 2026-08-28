@@ -9,7 +9,6 @@ export default function RankBadge({ rank, compact = false }) {
                 <p className='font-bebas tracking-[1px] leading-none' style={{ color: rank.color, fontSize: 10 }}>
                     {rank.name.toUpperCase()}
                 </p>
-                <p className='font-mono text-white/40 text-[9px] leading-none'>LV.{rank.level}</p>
                 <p className='font-mono font-bold text-orange-500 text-[10px] leading-none ml-auto'>{rank.xp} XP</p>
             </div>
         )

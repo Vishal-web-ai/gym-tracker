@@ -57,13 +57,13 @@ export default function RankScreen({ onClose }) {
                         className={`rounded-full px-4 py-1.5 font-mono text-[10px] tracking-[1px] transition-all cursor-pointer ${
                             view === 'rank' ? 'bg-orange-500 text-black' : 'text-white/50 hover:text-white/80'
                         }`}>
-                        RANK BADGE
+                        MY RANKS
                     </button>
                     <button onClick={() => setView('exercise')}
                         className={`rounded-full px-4 py-1.5 font-mono text-[10px] tracking-[1px] transition-all cursor-pointer ${
                             view === 'exercise' ? 'bg-orange-500 text-black' : 'text-white/50 hover:text-white/80'
                         }`}>
-                        MY EXERCISE BADGE
+                        MY EXERCISE RANKS
                     </button>
                 </div>
 
@@ -181,9 +181,6 @@ export default function RankScreen({ onClose }) {
                                                     <p className='font-bebas text-xs tracking-[1px]' style={{ color: e.color }}>
                                                         {e.levelName.toUpperCase()}
                                                     </p>
-                                                    <p className='font-mono text-white/30 text-[10px]'>
-                                                        {fmt(e.lastSuccess)} → {fmt(e.nextTarget)}
-                                                    </p>
                                                 </div>
                                                 <div className='h-1.5 rounded-full bg-white/10 overflow-hidden'>
                                                     <div className='h-full rounded-full' style={{ width: `${Math.round(e.progress * 100)}%`, background: e.color }} />
@@ -193,13 +190,8 @@ export default function RankScreen({ onClose }) {
                                                         ? e.mode === 'bodyweight'
                                                             ? `${e.nextTarget} reps earns LEVEL 1`
                                                             : `${fmt(e.nextTarget)} × 5 reps earns LEVEL 1`
-                                                        : `${fmt(Math.max(0, (e.nextTarget || 0) - (e.lastSuccess || 0)))} to go for LEVEL ${nextLevel}`}
+                                                        : `${fmt(e.nextTarget)} × 5 reps to go for LEVEL ${nextLevel}`}
                                                 </p>
-                                                {e.strengthRatio != null && (
-                                                    <p className='font-mono text-white/20 text-[9px]'>
-                                                        {e.strengthRatio.toFixed(2)}× bodyweight{e.personalBest > (e.lastSuccess || 0) ? ` · PB ${fmt(e.personalBest)}` : ''}
-                                                    </p>
-                                                )}
                                             </div>
                                         )
                                     })}
