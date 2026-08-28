@@ -371,6 +371,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         const currentlyDone = !!exerciseDone[idx]?.[setIdx]
         if (!currentlyDone) {
             checkBonus(setIdx)
+            buzz()
         }
         setDone(idx, setIdx, !currentlyDone)
     }

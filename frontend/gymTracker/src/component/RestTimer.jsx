@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Timer, Play, Square, ChevronUp, ChevronDown } from 'lucide-react'
 import { getRestSound } from '../services/storage'
 import { playBeep, ensureCtx } from '../services/audio'
+import { buzzMed, buzzStrong } from '../services/haptics'
 
 const PRESETS = [
     { label: '1:00', minutes: 1, seconds: 0 },
@@ -117,16 +118,19 @@ const RestTimer = ({ sound }) => {
         setRemaining(from)
         setRunning(true)
         setOpen(false)
+        buzzMed()
     }, [stopAlarm, total, remaining])
 
     const stop = useCallback(() => {
         stopAlarm()
         setRunning(false)
+        buzzMed()
     }, [stopAlarm])
 
     const restart = useCallback(() => {
         stopAlarm()
         setRemaining(total)
+        buzzMed()
     }, [stopAlarm, total])
 
     const handlePlayClick = useCallback(() => {
@@ -154,6 +158,7 @@ const RestTimer = ({ sound }) => {
                 setRunning(false)
                 setDone(true)
                 playAlarmSound()
+                buzzStrong()
             }
         }
         tick()

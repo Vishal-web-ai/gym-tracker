@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, CheckCircle2, Circle } from 'lucide-react'
 import RankIcon from './RankIcon'
 import { RANKS } from '../services/progression'
+import { buzzStrong } from '../services/haptics'
 
 const challengeTarget = (ch) => {
     if (ch.kind === 'weight') return `${ch.value}kg`
@@ -21,6 +23,10 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
     const xpRemaining = nextThreshold != null ? Math.max(0, nextThreshold - currentXp) : 0
     const isMaxRank = nextThreshold == null
     const nextRank = rank.level < RANKS.length ? RANKS[rank.level] : null
+
+    useEffect(() => {
+        if (isLevelUp) buzzStrong()
+    }, [isLevelUp])
 
     return (
         <AnimatePresence>

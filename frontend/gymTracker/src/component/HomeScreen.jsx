@@ -16,6 +16,8 @@ import RankBadge from './RankBadge'
 import RankScreen from './RankScreen'
 import LevelUpOverlay from './LevelUpOverlay'
 import ExerciseBadgeOverlay from './ExerciseBadgeOverlay'
+import { useDevice } from './DeviceContext'
+import { buzz, buzzSuccess } from '../services/haptics'
 import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, computePrsFromSessions, challengeStatusForLevel, getChallengePicks, ensureLadders, rebuildLadders, recordSessionLadders, computeProgress, getStartRank } from '../services/progression'
 import { exerciseMetaByName } from '../services/exercises'
 import {
@@ -97,6 +99,7 @@ const getSavedSession = () => {
 }
 
 const HomeScreen = () => {
+    const { config } = useDevice()
     const [savedSession] = useState(getSavedSession)
     const [userName, setUserName] = useState('Vishal')
     const [showSession, setShowSession] = useState(() => {
@@ -485,6 +488,7 @@ const HomeScreen = () => {
     }
 
     const handleStartClick = () => {
+        buzz()
         if (todayExercises.length > 0) {
             const list = todayExercises.map(e => ({
                 id: crypto.randomUUID(),
@@ -537,6 +541,7 @@ const HomeScreen = () => {
     }
 
     const handleSessionSaved = useCallback(async (name, session) => {
+        buzzSuccess()
         try {
             localStorage.removeItem(SESSION_KEY)
         } catch {
@@ -840,7 +845,12 @@ const HomeScreen = () => {
                                 </div>
                             </HaloCard>
                         </div>
-                        <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }} className='shrink-0' style={{ marginTop: 17 }}>
+                        <motion.div
+                            animate={config.infiniteMotion ? { y: [0, -8, 0] } : undefined}
+                            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                            className='shrink-0'
+                            style={{ marginTop: 17 }}
+                        >
                             <button
                                 onClick={selectedExercises.length > 0 ? handleResumeSession : handleStartClick}
                                 className='flex items-center gap-3 rounded-2xl bg-[#f97316] border border-[#c2410c] px-6 py-2 cursor-pointer'
