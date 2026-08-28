@@ -536,41 +536,53 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
             }
 
             if (perf > 0) {
-                const stepFn = isTimer ? nextTimeTarget : (p) => nextWeightTarget(p, ex.name)
-                let successes = 1
-                let target = perf
                 if (isBodyweight) {
-                    // Bodyweight: Level 1 = bodyweight baseline (already placed),
-                    // higher levels follow a total-load ladder above the profile
-                    // bodyweight. Perf here is max total weight with 6+ reps.
+                    // Bodyweight: a session already carries enough total load to
+                    // place the ladder. Perf here is max total weight with 6+ reps.
                     const bw = parseFloat(bodyweight) || 0
                     const added = Math.max(0, perf - bw)
-                    successes = bw > 0 && perf >= bw ? 1 + Math.floor(added / BODYWEIGHT_STEP) : 1
-                    target = perf
+                    const successes = bw > 0 && perf >= bw ? 1 + Math.floor(added / BODYWEIGHT_STEP) : 1
+                    entry = {
+                        mode: ex.mode || 'bodyweight',
+                        category,
+                        startTarget: perf,
+                        lastSuccess: perf,
+                        personalBest: perf,
+                        nextTarget: bodyweightTargetForLevel(successes + 1, bodyweight),
+                        successes,
+                        highestLevel: successes,
+                        bodyweightAtTime: parseFloat(bodyweight) || null,
+                        updatedAt: now.toISOString()
+                    }
                 } else {
+                    // Weight/timer: place the ladder by climbing from the beginner
+                    // target up to the achieved effort — the same math the live
+                    // session projection uses — so a strong first session lands at
+                    // its real level instead of always starting at Level 1.
+                    const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : 'weight', name: ex.name })
+                    const stepFn = isTimer ? nextTimeTarget : (p) => nextWeightTarget(p, ex.name)
+                    let successes = 0
+                    let target = start
                     while (successes < 1000) {
-                        const nextTarget = stepFn(target)
-                        if (perf < nextTarget) break
-                        target = nextTarget
+                        if (perf < target) break
                         successes++
+                        target = stepFn(target)
+                    }
+                    entry = {
+                        mode: ex.mode || (isTimer ? 'timer' : 'weight'),
+                        category,
+                        startTarget: start,
+                        lastSuccess: perf,
+                        personalBest: perf,
+                        nextTarget: target,
+                        successes,
+                        highestLevel: successes,
+                        bodyweightAtTime: parseFloat(bodyweight) || null,
+                        updatedAt: now.toISOString()
                     }
                 }
-                entry = {
-                    mode: ex.mode || (isTimer ? 'timer' : isBodyweight ? 'bodyweight' : 'weight'),
-                    category,
-                    startTarget: perf,
-                    lastSuccess: perf,
-                    personalBest: perf,
-                    nextTarget: isBodyweight
-                        ? bodyweightTargetForLevel(successes + 1, bodyweight)
-                        : stepFn(target),
-                    successes,
-                    highestLevel: successes,
-                    bodyweightAtTime: parseFloat(bodyweight) || null,
-                    updatedAt: now.toISOString()
-                }
-                const badge = badgeFor(successes)
-                promotions.push({ exerciseName: ex.name, ...badge })
+                const badge = badgeFor(entry.successes || 0)
+                if (badge) promotions.push({ exerciseName: ex.name, ...badge })
                 next[ex.name] = entry
                 continue
             }

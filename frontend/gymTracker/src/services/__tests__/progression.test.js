@@ -300,23 +300,23 @@ describe('exercise badge ladders', () => {
         expect(nextTimeTarget(90)).toBe(100)
     })
 
-    it('case 1+6: 60kg beginner completes exactly 8 reps and earns Level 1', () => {
+    it('case 1+6: first-session weight lands at the level the lift earns', () => {
         const { ladders, promotions } = applySessionToLadders({}, bench([{ reps: '8', weight: '18' }]), 60)
         const entry = ladders['Flat Bench Press']
         expect(promotions).toHaveLength(1)
-        expect(promotions[0].name).toBe('Level 1')
-        expect(entry.successes).toBe(1)
+        expect(promotions[0].name).toBe('Level 4')
+        expect(entry.successes).toBe(4)
         expect(entry.lastSuccess).toBe(18)
-        expect(entry.nextTarget).toBe(nextWeightTarget(18))
+        expect(entry.nextTarget).toBe(20)
         const view = ladderView(entry, 60)
-        expect(view.levelName).toBe('Level 1')
+        expect(view.levelName).toBe('Level 4')
         expect(view.strengthRatio).toBeCloseTo(0.3)
     })
 
-    it('case 2: an 80kg beginner gets a higher starting target and climbs the same way', () => {
+    it('case 2: a higher first lift places the ladder higher', () => {
         const { ladders, promotions } = applySessionToLadders({}, bench([{ reps: '10', weight: '25' }]), 80)
-        expect(ladders['Flat Bench Press'].startTarget).toBe(25)
-        expect(promotions[0].name).toBe('Level 1')
+        expect(ladders['Flat Bench Press'].startTarget).toBe(10)
+        expect(promotions[0].name).toBe('Level 7')
         expect(ladders['Flat Bench Press'].nextTarget).toBe(27.5)
     })
 
@@ -449,10 +449,10 @@ describe('exercise badge ladders', () => {
             ]
         }
         const { ladders } = applySessionToLadders({}, session, 60)
-        expect(ladders['Flat Bench Press'].successes).toBe(1)
+        expect(ladders['Flat Bench Press'].successes).toBe(4)
         expect(ladders['Barbell Curl'].category).toBe('Biceps')
-        expect(ladders['Barbell Curl'].successes).toBe(1)
-        expect(ladders['Plank'].successes).toBe(1)
+        expect(ladders['Barbell Curl'].successes).toBe(2)
+        expect(ladders['Plank'].successes).toBe(2)
         expect(ladders['Plank'].nextTarget).toBe(35)
         expect(ladders['Flat Bench Press'].nextTarget).not.toBe(ladders['Barbell Curl'].nextTarget)
     })
@@ -462,8 +462,8 @@ describe('exercise badge ladders', () => {
             exercises: [{ name: 'Plank', mode: 'timer', category: 'Core', sets: [{ reps: '1:30' }] }]
         }, 60)
         expect(ladders.Plank.personalBest).toBe(90)
-        expect(ladders.Plank.successes).toBe(1)
-        expect(ladders.Plank.nextTarget).toBe(nextTimeTarget(90))
+        expect(ladders.Plank.successes).toBe(12)
+        expect(ladders.Plank.nextTarget).toBe(95)
     })
 
     it('orders the badge list alphabetically', () => {
