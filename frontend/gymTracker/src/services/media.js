@@ -1,4 +1,5 @@
 import { dbGetAll, dbPut, dbDelete, dbGetPage } from './idb'
+import { getDeviceTier } from './device'
 
 const DIR = 'media'
 
@@ -146,6 +147,7 @@ export async function cleanupOrphans() {
 }
 
 function makeThumbnail(file) {
+    const max = getDeviceTier().lite ? 320 : 600
     return new Promise((resolve) => {
         const url = URL.createObjectURL(file)
         if (file.type.startsWith('video')) {
@@ -158,7 +160,7 @@ function makeThumbnail(file) {
                 video.currentTime = Math.min(1, (video.duration || 0) / 2)
             }
             video.onseeked = () => {
-                resolve(drawThumb(video))
+                resolve(drawThumb(video, max))
                 URL.revokeObjectURL(url)
             }
             video.onerror = () => {
@@ -168,7 +170,7 @@ function makeThumbnail(file) {
         } else {
             const img = new Image()
             img.onload = () => {
-                resolve(drawThumb(img))
+                resolve(drawThumb(img, max))
                 URL.revokeObjectURL(url)
             }
             img.onerror = () => {
@@ -180,11 +182,10 @@ function makeThumbnail(file) {
     })
 }
 
-function drawThumb(source) {
+function drawThumb(source, max) {
     const w = source.videoWidth || source.naturalWidth
     const h = source.videoHeight || source.naturalHeight
     if (!w || !h) return ''
-    const max = 600
     const scale = Math.min(1, max / w)
     const canvas = document.createElement('canvas')
     canvas.width = Math.round(w * scale)

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Trophy } from 'lucide-react'
+import { useDevice } from './DeviceContext'
+import { buzzStrong } from '../services/haptics'
 
 const CONFETTI_COLORS = ['#f97316', '#facc15', '#34d399', '#38bdf8', '#a855f7', '#f43f5e']
 
-function confettiPieces() {
-    return Array.from({ length: 40 }, (_, i) => {
+function confettiPieces(count) {
+    return Array.from({ length: count }, (_, i) => {
         const seed = (i * 7919 + 104729) % 100000
         const r = (n) => ((seed * (n + 1) * 13) % 1000) / 1000
         return {
@@ -20,8 +22,9 @@ function confettiPieces() {
     })
 }
 
-function Confetti({ color }) {
-    const pieces = confettiPieces(color)
+function Confetti() {
+    const { config } = useDevice()
+    const pieces = confettiPieces(config.confettiCount)
 
     return (
         <div className='absolute inset-0 overflow-hidden pointer-events-none'>
@@ -77,6 +80,7 @@ function extrudedTextShadow(faceColor, layers = 14, depthPx = 14) {
 export default function ExerciseBadgeOverlay({ exerciseName, level, color, onClose }) {
     const [show, setShow] = useState(false)
     useEffect(() => {
+        buzzStrong()
         const t = setTimeout(() => setShow(true), 50)
         return () => clearTimeout(t)
     }, [])
@@ -95,7 +99,7 @@ export default function ExerciseBadgeOverlay({ exerciseName, level, color, onClo
                     transition={{ duration: 0.3 }}
                     onClick={onClose}
                 >
-                    <Confetti color={color} />
+                    <Confetti />
 
                     <motion.div
                         className='relative z-10 flex flex-col items-center text-center px-8'

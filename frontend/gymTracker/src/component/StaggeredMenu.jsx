@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
-import { gsap } from 'gsap'
+import { useDevice } from './DeviceContext'
+
+let gsapPromise = null
+function loadGsap() {
+    if (!gsapPromise) gsapPromise = import('gsap')
+    return gsapPromise
+}
 
 const StaggeredMenu = ({
     position = 'right',
@@ -16,7 +22,8 @@ const StaggeredMenu = ({
 }) => {
     const openRef = useRef(open)
     const busyRef = useRef(false)
-
+    const gsapRef = useRef(null)
+    const { lite } = useDevice()
     const panelRef = useRef(null)
     const preLayersRef = useRef(null)
     const preLayerElsRef = useRef([])
@@ -24,26 +31,60 @@ const StaggeredMenu = ({
     const openTlRef = useRef(null)
     const closeTweenRef = useRef(null)
     const itemEntranceTweenRef = useRef(null)
+    const ctxRef = useRef(null)
+
+    const setLiteOpen = (open) => {
+        const panel = panelRef.current
+        const preContainer = preLayersRef.current
+        if (!panel) return
+        const preLayers = preContainer ? Array.from(preContainer.querySelectorAll('.sm-prelayer')) : []
+        if (open) {
+            panel.style.opacity = '1'
+            panel.style.transform = 'translateX(0)'
+            preLayers.forEach((el) => { el.style.transform = 'translateX(0)'; el.style.opacity = '1' })
+            panel.querySelectorAll('.sm-panel-itemLabel').forEach((el) => { el.style.transform = 'none'; el.style.opacity = '1' })
+        } else {
+            panel.style.opacity = '0'
+            panel.style.transform = 'translateX(100%)'
+            preLayers.forEach((el) => { el.style.transform = 'translateX(100%)'; el.style.opacity = '0' })
+        }
+    }
 
     useLayoutEffect(() => {
-        const ctx = gsap.context(() => {
-            const panel = panelRef.current
-            const preContainer = preLayersRef.current
-            if (!panel) return
+        if (lite) return
+        let mounted = true
+        loadGsap().then((mod) => {
+            if (!mounted) return
+            gsapRef.current = mod.gsap
+            const gsap = mod.gsap
+            const ctx = gsap.context(() => {
+                const panel = panelRef.current
+                const preContainer = preLayersRef.current
+                if (!panel) return
 
-            let preLayers = []
-            if (preContainer) {
-                preLayers = Array.from(preContainer.querySelectorAll('.sm-prelayer'))
-            }
-            preLayerElsRef.current = preLayers
+                let preLayers = []
+                if (preContainer) {
+                    preLayers = Array.from(preContainer.querySelectorAll('.sm-prelayer'))
+                }
+                preLayerElsRef.current = preLayers
 
-            const offscreen = position === 'left' ? -100 : 100
-            gsap.set([panel, ...preLayers], { xPercent: offscreen, opacity: 1 })
+                const offscreen = position === 'left' ? -100 : 100
+                gsap.set([panel, ...preLayers], { xPercent: offscreen, opacity: 1 })
+            })
+            ctxRef.current = ctx
         })
-        return () => ctx.revert()
-    }, [position])
+        return () => { mounted = false; ctxRef.current?.revert() }
+    }, [position, lite])
 
-    const buildOpenTimeline = useCallback(() => {
+    const withG = async (fn) => {
+        if (!gsapRef.current) {
+            const mod = await loadGsap()
+            gsapRef.current = mod.gsap
+        }
+        return fn(gsapRef.current)
+    }
+
+    const buildOpenTimeline = useCallback((gsap) => {
         const panel = panelRef.current
         const layers = preLayerElsRef.current
         if (!panel) return null
@@ -133,16 +174,23 @@ const StaggeredMenu = ({
     const playOpen = useCallback(() => {
         if (busyRef.current) return
         busyRef.current = true
-        const tl = buildOpenTimeline()
-        if (tl) {
-            tl.eventCallback('onComplete', () => {
-                busyRef.current = false
-            })
-            tl.play(0)
-        } else {
+        if (lite) {
+            setLiteOpen(true)
             busyRef.current = false
+            return
         }
-    }, [buildOpenTimeline])
+        withG((gsap) => {
+            const tl = buildOpenTimeline(gsap)
+            if (tl) {
+                tl.eventCallback('onComplete', () => {
+                    busyRef.current = false
+                })
+                tl.play(0)
+            } else {
+                busyRef.current = false
+            }
+        })
+    }, [lite, buildOpenTimeline])
 
     const playClose = useCallback(() => {
         openTlRef.current?.kill()
@@ -154,6 +202,18 @@ const StaggeredMenu = ({
         if (!panel) return
 
         closeTweenRef.current?.kill()
+
+        if (lite) {
+            setLiteOpen(false)
+            busyRef.current = false
+            return
+        }
+
+        const gsap = gsapRef.current
+        if (!gsap) {
+            busyRef.current = false
+            return
+        }
 
         const offscreen = position === 'left' ? -100 : 100
 
@@ -183,7 +243,7 @@ const StaggeredMenu = ({
             tl.to(layer, { xPercent: offscreen, duration, ease: 'power4.in', force3D: true }, start)
         })
         closeTweenRef.current = tl
-    }, [position])
+    }, [position, lite])
 
     useEffect(() => {
         if (open === openRef.current) return

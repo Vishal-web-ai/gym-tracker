@@ -3,10 +3,13 @@ import { createRoot } from 'react-dom/client'
 import { Agentation } from 'agentation'
 import './index.css'
 import App from './App.jsx'
+import { DeviceProvider } from './component/DeviceContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <DeviceProvider>
+      <App />
+    </DeviceProvider>
     {import.meta.env.DEV && <Agentation />}
   </StrictMode>,
 )
