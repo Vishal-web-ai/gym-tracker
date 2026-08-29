@@ -1,6 +1,21 @@
 // Haptic feedback wrapper. Degrades silently where the Vibration API is
 // unavailable (desktop, iOS Safari without vibration) or on heavy use.
 
+import { playBeep } from './audio'
+
+// Android requires a user gesture before navigator.vibrate works from async
+// callbacks/timeouts. Unlock once on first interaction.
+let gestureUnlocked = false
+function unlockGesture() {
+    if (gestureUnlocked) return
+    gestureUnlocked = true
+    try { navigator.vibrate?.(1) } catch { /* unsupported */ }
+    document.removeEventListener('pointerdown', unlockGesture)
+    document.removeEventListener('touchend', unlockGesture)
+}
+document.addEventListener('pointerdown', unlockGesture)
+document.addEventListener('touchend', unlockGesture)
+
 export const PATTERNS = {
     tap: 15,
     medium: [40, 40, 40],
@@ -14,12 +29,16 @@ function supported() {
 }
 
 export function vibrate(pattern) {
-    if (!supported()) return false
-    try {
-        return navigator.vibrate(pattern)
-    } catch {
-        return false
+    if (supported()) {
+        try {
+            if (navigator.vibrate(pattern)) return true
+        } catch { /* native vibration unavailable */ }
     }
+    // iOS Safari: no Vibration API. Fall back to an audible beep so users
+    // still get feedback on every vibe call.
+    const len = Array.isArray(pattern) ? pattern.length : (pattern || 0)
+    if (len > 0) playBeep()
+    return false
 }
 
 // Short confirmatory buzz — good for finishing a set or saving.
