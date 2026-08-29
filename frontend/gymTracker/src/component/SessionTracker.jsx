@@ -79,15 +79,30 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const shift = CW - 40
     const enterOffset = Math.max(90, Math.round(shift * 0.42))
 
+    // Snappy animation timings/easings. Shorter durations + harder curves read
+    // as faster and instant on touch, without feeling harsh.
+    const SETTLE_EASE = 'cubic-bezier(0.34, 1.4, 0.64, 1)' // springy snap-back
+    const EXIT_EASE = 'cubic-bezier(0.5, 0, 0.9, 0.4)'     // accelerate off-screen
+    const ENTER_EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
+    const SNAP_MS = 170
+    const EXIT_MS = 240
+    const ENTER_MS = 190
+
     const setCardTransform = (px, ms = 0) => {
         const el = cardRef.current
         if (!el) return
         const prog = Math.min(1, Math.abs(px) / shift)
         const rot = prog * 7 * Math.sign(px)
-        el.style.transition = ms > 0 ? `transform ${ms}ms cubic-bezier(0.16, 1, 0.3, 1)` : 'none'
-        el.style.transform = `translateX(${px}px) rotate(${rot}deg) scale(${1 - 0.04 * prog})`
+        // translateZ(0) pins the card to its own GPU layer so transform writes
+        // skip compositor work entirely during drag — key for smooth tracking.
+        el.style.transition = ms > 0 ? `transform ${ms}ms ${SETTLE_EASE}` : 'none'
+        el.style.transform = `translate3d(${px}px, 0, 0) rotate(${rot}deg) scale(${1 - 0.04 * prog})`
         el.style.willChange = 'transform'
-        if (glowRef.current) glowRef.current.style.opacity = 0.55 * prog
+        // Glow opacity is a separate layer paint every frame; leave it at a
+        // fixed mid-state while dragging and let it snap on release.
+        if (glowRef.current && glowRef.current.style.opacity === '0') {
+            glowRef.current.style.opacity = '0.28'
+        }
         clearTimeout(settleTimerRef.current)
         if (px !== 0) {
             // backdrop-blur is very expensive on weak devices while a layer is
@@ -98,10 +113,12 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
             settleTimerRef.current = setTimeout(() => {
                 el.style.willChange = ''
                 el.style.backdropFilter = ''
+                if (glowRef.current) glowRef.current.style.opacity = '0'
             }, ms + 50)
         } else {
             el.style.willChange = ''
             el.style.backdropFilter = ''
+            if (glowRef.current) glowRef.current.style.opacity = '0'
         }
     }
 
@@ -109,7 +126,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         try { navigator.vibrate?.(pattern) } catch { /* unsupported */ }
     }
 
-    const snapBack = () => setCardTransform(0, 220)
+    const snapBack = () => setCardTransform(0, SNAP_MS)
 
     // Flings the card fully off-screen in the given direction, then advances.
     const flyOut = (dir) => {
@@ -117,11 +134,11 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         if (!el) return
         const exit = (width + CW) / 2 + 30
         clearTimeout(settleTimerRef.current)
-        el.style.transition = 'transform 340ms cubic-bezier(0.22, 1, 0.36, 1)'
-        el.style.transform = `translateX(${exit * dir}px) rotate(${22 * dir}deg) scale(0.95)`
+        el.style.transition = `transform ${EXIT_MS}ms ${EXIT_EASE}`
+        el.style.transform = `translate3d(${exit * dir}px, 0, 0) rotate(${22 * dir}deg) scale(0.95)`
         el.style.willChange = 'transform'
         el.style.backdropFilter = 'none'
-        snapTimerRef.current = setTimeout(dir < 0 ? onGoNext : onGoPrev, 310)
+        snapTimerRef.current = setTimeout(dir < 0 ? onGoNext : onGoPrev, EXIT_MS - 30)
     }
 
     const handlePointerDown = (e) => {
@@ -187,17 +204,18 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         if (!el) return
         const from = enterDir === 'prev' ? -enterOffset : enterOffset
         el.style.transition = 'none'
-        el.style.transform = `translateX(${from}px)`
+        el.style.transform = `translate3d(${from}px, 0, 0)`
         el.style.willChange = 'transform'
         el.style.backdropFilter = 'none'
         const raf = requestAnimationFrame(() => {
-            el.style.transition = 'transform 240ms cubic-bezier(0.16, 1, 0.3, 1)'
-            el.style.transform = 'translateX(0px)'
+            el.style.transition = `transform ${ENTER_MS}ms ${ENTER_EASE}`
+            el.style.transform = 'translate3d(0px, 0, 0)'
         })
         const settle = setTimeout(() => {
             el.style.willChange = ''
             el.style.backdropFilter = ''
-        }, 340)
+            if (glowRef.current) glowRef.current.style.opacity = '0'
+        }, ENTER_MS + 60)
         return () => { cancelAnimationFrame(raf); clearTimeout(settle) }
     }, [enterOffset, enterDir])
 

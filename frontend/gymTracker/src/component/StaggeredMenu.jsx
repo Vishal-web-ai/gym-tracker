@@ -42,16 +42,31 @@ const StaggeredMenu = ({
             panel.style.opacity = '1'
             panel.style.transform = 'translateX(0)'
             preLayers.forEach((el) => { el.style.transform = 'translateX(0)'; el.style.opacity = '1' })
-            panel.querySelectorAll('.sm-panel-itemLabel').forEach((el) => { el.style.transform = 'none'; el.style.opacity = '1' })
+            // CSS transition-delay (--i) gives a cheap staggered entrance — no GSAP needed on lite.
+            panel.querySelectorAll('.sm-panel-itemLabel').forEach((el) => { el.style.transform = 'translateY(0)'; el.style.opacity = '1' })
         } else {
             panel.style.opacity = '0'
             panel.style.transform = 'translateX(100%)'
             preLayers.forEach((el) => { el.style.transform = 'translateX(100%)'; el.style.opacity = '0' })
+            // Hidden start state so the next open animates from behind.
+            panel.querySelectorAll('.sm-panel-itemLabel').forEach((el) => { el.style.transform = 'translateY(120%)'; el.style.opacity = '0' })
         }
     }
 
     useLayoutEffect(() => {
-        if (lite) return
+        if (lite) {
+            // Initial closed state: labels behind, panel off-screen. CSS handles
+            // the stagger on open so weak devices skip the GSAP timeline.
+            const panel = panelRef.current
+            if (panel) {
+                panel.style.opacity = '0'
+                panel.style.transform = 'translateX(100%)'
+                panel.querySelectorAll('.sm-panel-itemLabel').forEach((el) => { el.style.transform = 'translateY(120%)'; el.style.opacity = '0' })
+            }
+            const preContainer = preLayersRef.current
+            if (preContainer) Array.from(preContainer.querySelectorAll('.sm-prelayer')).forEach((el) => { el.style.transform = 'translateX(100%)'; el.style.opacity = '0' })
+            return
+        }
         let mounted = true
         loadGsap().then((mod) => {
             if (!mounted) return
@@ -275,12 +290,13 @@ const StaggeredMenu = ({
 
     return (
         <div className='sm-scope absolute inset-0 z-30 pointer-events-none'>
-            <div
-                className='staggered-menu-wrapper pointer-events-none relative w-full h-full'
-                style={accentColor ? { '--sm-accent': accentColor } : undefined}
-                data-position={position}
-                data-open={open || undefined}
-            >
+                <div
+                    className='staggered-menu-wrapper pointer-events-none relative w-full h-full'
+                    style={accentColor ? { '--sm-accent': accentColor } : undefined}
+                    data-position={position}
+                    data-lite={lite || undefined}
+                    data-open={open || undefined}
+                >
                 <div ref={preLayersRef} className='sm-prelayers absolute top-0 right-0 bottom-0 pointer-events-none z-[5]' aria-hidden='true'>
                     {(() => {
                         const raw = colors && colors.length ? colors.slice(0, 4) : ['#1e1e22', '#35353c']
@@ -322,7 +338,7 @@ const StaggeredMenu = ({
                                                     {String(idx + 1).padStart(2, '0')}
                                                 </span>
                                             )}
-                                            <span className='sm-panel-itemLabel inline-block [transform-origin:50%_100%] will-change-transform'>
+                                            <span className='sm-panel-itemLabel inline-block [transform-origin:50%_100%] will-change-transform' style={{ '--i': idx }}>
                                                 {it.label}
                                             </span>
                                         </button>
@@ -380,6 +396,8 @@ const StaggeredMenu = ({
 .sm-scope .sm-socials-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: row; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .sm-scope .sm-socials-link { font-size: 1.2rem; font-weight: 500; color: #ffffff; padding: 2px 0; display: inline-block; transition: color 0.3s ease, opacity 0.3s ease; }
 .sm-scope .sm-socials-link:hover { color: var(--sm-accent, #f97316); }
+[data-lite] .sm-prelayer, [data-lite] .staggered-menu-panel { transition: transform 0.45s cubic-bezier(0.32, 0.72, 0.32, 1), opacity 0.35s ease; }
+[data-lite] .sm-panel-itemLabel { transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1) calc(var(--i, 0) * 45ms), opacity 0.4s ease calc(var(--i, 0) * 45ms); }
             `}</style>
         </div>
     )
