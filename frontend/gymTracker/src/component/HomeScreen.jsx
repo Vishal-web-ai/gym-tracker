@@ -99,7 +99,7 @@ const getSavedSession = () => {
 }
 
 const HomeScreen = () => {
-    const { config } = useDevice()
+    const { config, lite } = useDevice()
     const [savedSession] = useState(getSavedSession)
     const [userName, setUserName] = useState('Vishal')
     const [showSession, setShowSession] = useState(() => {
@@ -722,7 +722,7 @@ const HomeScreen = () => {
             <motion.div
                 className='relative z-10 flex-1 overflow-hidden'
                 animate={{ opacity: showSession ? 0 : 1 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: lite ? 0 : 0.3 }}
             >
                 <div className='h-full flex flex-col'>
                     <div className='flex flex-col items-center gap-2 w-full px-4 sm:px-10 pt-5 pb-3'>
@@ -886,7 +886,7 @@ const HomeScreen = () => {
                     y: showSession ? 0 : 40,
                     visibility: showSession ? 'visible' : 'hidden'
                 }}
-                transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                transition={{ duration: lite ? 0 : 0.22, ease: [0.25, 1, 0.5, 1] }}
                 inert={!showSession}
                 aria-hidden={!showSession}
             >
