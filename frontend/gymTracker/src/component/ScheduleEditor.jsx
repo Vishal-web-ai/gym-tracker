@@ -114,7 +114,7 @@ const ScheduleEditor = ({ schedule = {}, onChange, selectedFirst = false }) => {
     }
 
     const renderGroups = (rows) => (
-        <div ref={listRef} className='flex flex-col gap-1 max-h-64 overflow-y-auto scroll'>
+        <div ref={listRef} className='flex flex-col gap-1 max-h-32 overflow-y-auto scroll'>
             {visibleGroups.map(group => {
                 const open = q ? true : openGroup === group.category
                 const addedCount = group.names.filter(n => assignedNames.has(n.toLowerCase())).length

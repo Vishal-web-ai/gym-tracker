@@ -2,14 +2,15 @@ import { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, CheckCircle2, Circle } from 'lucide-react'
 import RankIcon from './RankIcon'
-import { RANKS } from '../services/progression'
+import { RANKS, formatChallengeValue } from '../services/progression'
 import { useDevice } from './DeviceContext'
 import { buzzStrong } from '../services/haptics'
 
 const challengeTarget = (ch) => {
     if (ch.kind === 'weight') return `${ch.value}kg`
     if (ch.kind === 'reps') return `${ch.value} reps`
-    return `${ch.value}min`
+    if (ch.kind === 'counts') return `${ch.value} counts`
+    return formatChallengeValue(ch.value)
 }
 
 const stagger = (i) => ({ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.15 + i * 0.1, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } })

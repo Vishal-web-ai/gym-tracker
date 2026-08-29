@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, X, Check, Dumbbell, Timer, User } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Check, Dumbbell, Timer, User, Hash } from 'lucide-react'
 import { getCustomExercises, createExercise, updateExercise, deleteExercise } from '../services/storage'
-import { parseChallengeTime, formatChallengeTime } from '../services/progression'
+import { parseChallengeTime, formatChallengeTime, formatChallengeStep, parseChallengeStep } from '../services/progression'
 import ThemedSelect from './ThemedSelect'
 
 const CATEGORIES = ['Chest', 'Back', 'Biceps', 'Triceps', 'Arms', 'Shoulders', 'Legs', 'Core', 'Cardio']
@@ -9,6 +9,7 @@ const CATEGORIES = ['Chest', 'Back', 'Biceps', 'Triceps', 'Arms', 'Shoulders', '
 const MODES = [
     { key: 'weight', label: 'Weight (Strength)', Icon: Dumbbell },
     { key: 'bodyweight', label: 'Bodyweight (Reps + Extra)', Icon: User },
+    { key: 'counts', label: 'Counts (Reps Only)', Icon: Hash },
     { key: 'timer', label: 'Timer (Cardio)', Icon: Timer }
 ]
 
@@ -26,7 +27,7 @@ function groupByCategory(exercises) {
     })
 }
 
-const formInitial = { name: '', category: 'Chest', mode: 'weight', muscle: '', challengeTime: '' }
+const formInitial = { name: '', category: 'Chest', mode: 'weight', muscle: '', challengeTime: '', challengeStep: '' }
 
 const MyExercises = ({ onClose }) => {
     const [customExercises, setCustomExercises] = useState([])
@@ -69,10 +70,23 @@ const MyExercises = ({ onClose }) => {
                 return
             }
         }
+        const stepText = formData.challengeStep.trim()
+        let challengeStep = null
+        if (formData.mode === 'timer' && !stepText) {
+            setSaveError('Level increment is required for timer exercises')
+            return
+        }
+        if (stepText) {
+            challengeStep = parseChallengeStep(stepText)
+            if (!challengeStep) {
+                setSaveError('Invalid increment — use e.g. 10s, 30 or 1m')
+                return
+            }
+        }
         setSaving(true)
         setSaveError('')
         try {
-            const payload = { ...formData, challengeTime }
+            const payload = { ...formData, challengeTime, challengeStep }
             if (editingId) {
                 await updateExercise(editingId, payload)
             } else {
@@ -89,7 +103,7 @@ const MyExercises = ({ onClose }) => {
 
     const handleEdit = (ex) => {
         setEditingId(ex.id)
-        setFormData({ name: ex.name, category: ex.category, mode: ex.mode === 'timer' ? 'timer' : ex.mode === 'bodyweight' ? 'bodyweight' : 'weight', muscle: ex.muscle || '', challengeTime: formatChallengeTime(ex.challengeTime) })
+        setFormData({ name: ex.name, category: ex.category, mode: ex.mode === 'timer' ? 'timer' : ex.mode === 'bodyweight' ? 'bodyweight' : ex.mode === 'counts' ? 'counts' : 'weight', muscle: ex.muscle || '', challengeTime: formatChallengeTime(ex.challengeTime), challengeStep: formatChallengeStep(ex.challengeStep) })
         setShowForm(true)
     }
 
@@ -103,12 +117,15 @@ const MyExercises = ({ onClose }) => {
     }
 
     const ModeBadge = ({ mode }) => {
-        const m = MODES.find(x => x.key === (mode === 'timer' ? 'timer' : mode === 'bodyweight' ? 'bodyweight' : 'weight'))
+        const key = mode === 'timer' ? 'timer' : mode === 'bodyweight' ? 'bodyweight' : mode === 'counts' ? 'counts' : 'weight'
+        const m = MODES.find(x => x.key === key)
         const { Icon } = m
+        const style = mode === 'timer' ? 'bg-teal-500/15 text-teal-300 border-teal-500/30' : mode === 'bodyweight' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : mode === 'counts' ? 'bg-purple-500/15 text-purple-300 border-purple-500/30' : 'bg-orange-500/15 text-orange-300 border-orange-500/30'
+        const label = mode === 'timer' ? 'TIMER' : mode === 'bodyweight' ? 'BODYWT' : mode === 'counts' ? 'COUNT' : 'WEIGHT'
         return (
-            <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-mono font-bold tracking-wide ${mode === 'timer' ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30' : mode === 'bodyweight' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-orange-500/15 text-orange-300 border border-orange-500/30'}`}>
+            <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-mono font-bold tracking-wide border ${style}`}>
                 <Icon size={10} />
-                {mode === 'timer' ? 'TIMER' : mode === 'bodyweight' ? 'BODYWT' : 'WEIGHT'}
+                {label}
             </span>
         )
     }
@@ -163,7 +180,7 @@ const MyExercises = ({ onClose }) => {
                                 placeholder='Target muscle (optional)'
                                 className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
                             />
-                            {(formData.mode === 'timer' || formData.category === 'Cardio') && (
+                            {(formData.mode === 'timer' || (formData.category === 'Cardio' && formData.mode !== 'counts')) && (
                                 <div>
                                     <p className='text-[10px] font-mono tracking-widest text-teal-400/60 mb-1'>CHALLENGE TIME — RANK 1 TARGET</p>
                                     <input
@@ -173,6 +190,19 @@ const MyExercises = ({ onClose }) => {
                                         placeholder='e.g. 90s, 5m or 2:30'
                                         className='w-full bg-black/50 border border-teal-500/30 rounded-lg px-3 py-2 text-white placeholder-teal-500/50 outline-none focus:border-teal-500 font-mono text-sm'
                                     />
+                                </div>
+                            )}
+                            {formData.mode === 'timer' && (
+                                <div>
+                                    <p className='text-[10px] font-mono tracking-widest text-teal-400/60 mb-1'>LEVEL INCREMENT — SECONDS PER LEVEL</p>
+                                    <input
+                                        type='text'
+                                        value={formData.challengeStep}
+                                        onChange={e => setFormData(p => ({ ...p, challengeStep: e.target.value }))}
+                                        placeholder='e.g. 10s, 30 or 1m'
+                                        className='w-full bg-black/50 border border-teal-500/30 rounded-lg px-3 py-2 text-white placeholder-teal-500/50 outline-none focus:border-teal-500 font-mono text-sm'
+                                    />
+                                    <p className='text-[9px] font-mono text-teal-400/40 mt-1'>Required for timer exercises — ranks can't advance past level 1 without it.</p>
                                 </div>
                             )}
                             <div className='flex gap-2'>

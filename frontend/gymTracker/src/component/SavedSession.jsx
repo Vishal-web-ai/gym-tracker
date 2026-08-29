@@ -240,6 +240,10 @@ const SavedSession = ({ sessions, onDelete, onUpdate, onDeleteMedia }) => {
                                         <p className='text-white/40 font-mono text-sm mt-1'>
                                             Time: {setsText(ex)}
                                         </p>
+                                    ) : ex.mode === 'counts' ? (
+                                        <p className='text-white/40 font-mono text-sm mt-1'>
+                                            Counts: {setsText(ex)}
+                                        </p>
                                     ) : typeof ex.sets?.[0] === 'object' ? (
                                         <div className='mt-1.5 space-y-1'>
                                             {setLines(ex).map((line, li) => (

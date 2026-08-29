@@ -90,11 +90,16 @@ export function buildHistoryIndex(sessions) {
     const index = {}
     for (const s of sessions) {
         for (const ex of (s?.exercises || [])) {
-            const entry = index[ex.name] || (index[ex.name] = { bestWeight: -Infinity, bestRepsAtWeight: {}, bestDuration: 0 })
+            const entry = index[ex.name] || (index[ex.name] = { bestWeight: -Infinity, bestRepsAtWeight: {}, bestDuration: 0, bestCount: 0 })
             if (ex.mode === 'timer') {
                 for (const set of (ex?.sets || [])) {
                     const r = parseDurationSeconds(set?.reps)
                     if (r > entry.bestDuration) entry.bestDuration = r
+                }
+            } else if (ex.mode === 'counts') {
+                for (const set of (ex?.sets || [])) {
+                    const r = parseReps(set?.reps)
+                    if (r > entry.bestCount) entry.bestCount = r
                 }
             } else {
                 for (const set of (ex?.sets || [])) {
@@ -140,6 +145,25 @@ function exerciseBonus(ex, index) {
             if (duration > runningBest) {
                 bonuses.push({ type: 'timer-record', points: PR_XP, name: ex.name, value: duration })
                 runningBest = duration
+            }
+        }
+        return bonuses
+    }
+
+    if (ex.mode === 'counts') {
+        const bonuses = []
+        let runningBest = entry ? (entry.bestCount || 0) : 0
+        let firstSet = !entry
+        for (const s of sets) {
+            const count = parseReps(s.reps)
+            if (firstSet) {
+                runningBest = count
+                firstSet = false
+                continue
+            }
+            if (count > runningBest) {
+                bonuses.push({ type: 'count-pr', points: PR_XP, name: ex.name, value: count })
+                runningBest = count
             }
         }
         return bonuses
@@ -195,8 +219,12 @@ export function analyzeSession(session, history = []) {
         bonuses,
         xp: BASE_SESSION_XP + bonuses.reduce((sum, b) => sum + b.points, 0),
         newPrs: bonuses
-            .filter((b) => b.type === 'weight-pr')
-            .map((b) => ({ name: b.name, weight: String(b.value), reps: String(b.reps) }))
+            .filter((b) => b.type !== 'extra-rep')
+            .map((b) => {
+                if (b.type === 'timer-record') return { name: b.name, kind: 'timer', value: Number(b.value) }
+                if (b.type === 'count-pr') return { name: b.name, kind: 'counts', value: Number(b.value) }
+                return { name: b.name, kind: 'weight', value: Number(b.value), reps: Number(b.reps) }
+            })
     }
 }
 
@@ -215,13 +243,19 @@ export function totalXp(sessions) {
 }
 
 // Derives the personal-records list purely from saved sessions. Deleting a
-// session therefore removes any PR that only existed in it.
+// session therefore removes any PR that only existed in it. Weight, timer and
+// counts exercises each report their own record kind.
 export function computePrsFromSessions(sessions) {
     const index = buildHistoryIndex(sessions || [])
     const prs = []
     for (const [name, entry] of Object.entries(index)) {
-        if (entry.bestWeight === -Infinity) continue
-        prs.push({ name, weight: String(entry.bestWeight), reps: String(entry.bestRepsAtWeight?.[entry.bestWeight] || '') })
+        if (entry.bestWeight !== -Infinity) {
+            prs.push({ name, kind: 'weight', value: Number(entry.bestWeight), reps: Number(entry.bestRepsAtWeight?.[entry.bestWeight] || 0) })
+        } else if (entry.bestDuration > 0) {
+            prs.push({ name, kind: 'timer', value: Number(entry.bestDuration) })
+        } else if (entry.bestCount > 0) {
+            prs.push({ name, kind: 'counts', value: Number(entry.bestCount) })
+        }
     }
     return prs
 }
@@ -268,7 +302,7 @@ export function colorForLevel(level) {
 }
 
 // Bodyweight exercises score like weight (extra weight + reps), not timer.
-function scoringMode(mode) { return mode === 'timer' ? 'timer' : 'weight' }
+function scoringMode(mode) { return mode === 'timer' ? 'timer' : mode === 'counts' ? 'counts' : 'weight' }
 
 // Exercise-specific presets: beginner starting weight (kg) and increment per
 // level. Weights are TOTAL weight (both hands combined for dumbbells, full bar
@@ -379,6 +413,15 @@ const CATEGORY_TIME_FACTORS = {
     Shoulders: 60, Legs: 60, Core: 90, Cardio: 600
 }
 
+// Per-exercise time presets for built-in timer exercises. Short bursts (sprint)
+// climb in tiny steps while steady-state cardio (jump rope) needs big chunks
+// so both progress naturally on the badge ladder.
+const TIME_PRESETS = {
+    'Sprint':     { start: 20,  step: 5  },
+    'Skipping':   { start: 150, step: 30 },
+    'Jump Rope':  { start: 300, step: 60 }
+}
+
 function roundTo(value, step) {
     return Math.round(value / step) * step
 }
@@ -394,8 +437,12 @@ export function nextWeightTarget(lastSuccess, exerciseName) {
     return Math.max(lastSuccess + step, roundTo(lastSuccess * 1.08, step))
 }
 
-// Timer mirror: ~10% longer holds, rounded to 5s, never under +5s.
-export function nextTimeTarget(lastSuccess) {
+// Timer mirror: ~10% longer holds, rounded to 5s, never under +5s. A custom
+// per-exercise step (or a time preset like sprint) overrides the growth.
+export function nextTimeTarget(lastSuccess, exerciseName, step) {
+    if (step > 0) return lastSuccess + step
+    const preset = exerciseName ? TIME_PRESETS[exerciseName] : null
+    if (preset) return lastSuccess + preset.step
     return Math.max(roundTo(lastSuccess * 1.1, 5), lastSuccess + 5)
 }
 
@@ -404,15 +451,27 @@ export function nextRepTarget(lastSuccess) {
     return Math.max(roundTo(lastSuccess * 1.1, 2), lastSuccess + 2)
 }
 
+// Counts target: every level costs a flat +3 counts so 12 → 15 → 18 → 21 is
+// easy to read. Past 50 counts the step switches to ~10% so huge counts like
+// jump rope don't rank up on the back of a trivial +3.
+export function nextCountTarget(lastSuccess) {
+    if (lastSuccess > 50) return roundTo(lastSuccess * 1.1, 2)
+    return lastSuccess + 3
+}
+
 // Initial placement for a new exercise. Uses exercise-specific presets from
 // research data — e.g. lateral raises start at 5 kg (tiny muscle), leg press
 // starts at 50 kg (large muscle group). Falls back to category defaults.
-export function beginnerTarget({ category, mode, name }) {
+export function beginnerTarget({ category, mode, name, challengeTime }) {
     if (mode === 'timer') {
+        if (challengeTime > 0) return challengeTime * 60
+        const preset = name ? TIME_PRESETS[name] : null
+        if (preset) return preset.start
         const cat = CATEGORY_TIME_FACTORS[category] ?? 60
         return Math.max(15, roundTo(cat * 0.3, 5))
     }
     if (mode === 'bodyweight') return 12
+    if (mode === 'counts') return 12
     const preset = presetForExercise(name)
     return preset.start ?? 2.5
 }
@@ -428,13 +487,18 @@ export function bestExerciseEffort(sessions) {
     const best = {}
     for (const s of sessions) {
         for (const ex of (s?.exercises || [])) {
-            const mode = ex.mode === 'timer' ? 'timer' : ex.mode === 'bodyweight' ? 'bodyweight' : 'weight'
-            const entry = best[ex.name] || (best[ex.name] = { weight: 0, duration: 0, category: ex.category || null, mode: scoringMode(ex.mode) })
+            const mode = ex.mode === 'timer' ? 'timer' : ex.mode === 'bodyweight' ? 'bodyweight' : ex.mode === 'counts' ? 'counts' : 'weight'
+            const entry = best[ex.name] || (best[ex.name] = { weight: 0, duration: 0, count: 0, category: ex.category || null, mode: scoringMode(ex.mode) })
             entry.category = entry.category || ex.category || exerciseMetaByName(ex.name)?.category || inferCategoryByName(ex.name) || null
             if (mode === 'timer') {
                 for (const set of (ex?.sets || [])) {
                     const d = parseDurationSeconds(set?.reps)
                     if (d > entry.duration) entry.duration = d
+                }
+            } else if (mode === 'counts') {
+                for (const set of (ex?.sets || [])) {
+                    const r = parseReps(set?.reps)
+                    if (r > entry.count) entry.count = r
                 }
             } else if (mode === 'bodyweight') {
                 for (const set of (ex?.sets || [])) {
@@ -463,7 +527,7 @@ export function seedLaddersFromHistory(sessions, bodyweight = 0, existing = {}) 
     let changed = false
     for (const [name, e] of Object.entries(best)) {
         if (next[name] && !(next[name].successes === 0 && next[name].lastSuccess > 0)) continue
-        const perf = e.mode === 'timer' ? e.duration : e.weight
+        const perf = e.mode === 'timer' ? e.duration : e.mode === 'counts' ? e.count : e.weight
         if (!(perf > 0)) continue
         const category = e.category || 'Chest'
         if (e.mode === 'bodyweight') {
@@ -479,8 +543,21 @@ export function seedLaddersFromHistory(sessions, bodyweight = 0, existing = {}) 
                 bodyweightAtTime: parseFloat(bodyweight) || null,
                 updatedAt: new Date().toISOString()
             }
+        } else if (e.mode === 'counts') {
+            next[name] = {
+                mode: e.mode,
+                category,
+                startTarget: perf,
+                lastSuccess: perf,
+                personalBest: perf,
+                nextTarget: nextCountTarget(perf),
+                successes: 1,
+                highestLevel: 1,
+                bodyweightAtTime: null,
+                updatedAt: new Date().toISOString()
+            }
         } else {
-            const stepFn = e.mode === 'timer' ? nextTimeTarget : (p) => nextWeightTarget(p, name)
+            const stepFn = e.mode === 'timer' ? (p) => nextTimeTarget(p, name, e.challengeStep) : (p) => nextWeightTarget(p, name)
             next[name] = {
                 mode: e.mode,
                 category,
@@ -520,6 +597,7 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
     for (const ex of (session?.exercises || [])) {
         const isTimer = ex.mode === 'timer'
         const isBodyweight = ex.mode === 'bodyweight'
+        const isCounts = ex.mode === 'counts'
         let entry = next[ex.name] ? { ...next[ex.name] } : null
         if (!entry) {
             const category = ex.category || exerciseMetaByName(ex.name)?.category || inferCategoryByName(ex.name) || 'Chest'
@@ -527,6 +605,8 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
             let perf = 0
             if (isTimer) {
                 for (const s of (ex?.sets || [])) perf = Math.max(perf, parseDurationSeconds(s?.reps))
+            } else if (isCounts) {
+                for (const s of (ex?.sets || [])) perf = Math.max(perf, parseReps(s?.reps))
             } else {
                 for (const s of (ex?.sets || [])) {
                     const r = parseReps(s?.reps)
@@ -555,12 +635,13 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
                         updatedAt: now.toISOString()
                     }
                 } else {
-                    // Weight/timer: place the ladder by climbing from the beginner
-                    // target up to the achieved effort — the same math the live
-                    // session projection uses — so a strong first session lands at
-                    // its real level instead of always starting at Level 1.
-                    const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : 'weight', name: ex.name })
-                    const stepFn = isTimer ? nextTimeTarget : (p) => nextWeightTarget(p, ex.name)
+                    // Weight/timer/counts: place the ladder by climbing from the
+                    // beginner target up to the achieved effort — the same math
+                    // the live session projection uses — so a strong first
+                    // session lands at its real level instead of always starting
+                    // at Level 1.
+                    const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isCounts ? 'counts' : 'weight', name: ex.name, challengeTime: ex.challengeTime })
+                    const stepFn = isTimer ? (p) => nextTimeTarget(p, ex.name, ex.challengeStep) : isCounts ? nextCountTarget : (p) => nextWeightTarget(p, ex.name)
                     let successes = 0
                     let target = start
                     while (successes < 1000) {
@@ -569,7 +650,7 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
                         target = stepFn(target)
                     }
                     entry = {
-                        mode: ex.mode || (isTimer ? 'timer' : 'weight'),
+                        mode: ex.mode || (isTimer ? 'timer' : isCounts ? 'counts' : 'weight'),
                         category,
                         startTarget: start,
                         lastSuccess: perf,
@@ -587,9 +668,9 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
                 continue
             }
 
-            const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isBodyweight ? 'bodyweight' : 'weight', name: ex.name })
+            const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isCounts ? 'counts' : isBodyweight ? 'bodyweight' : 'weight', name: ex.name, challengeTime: ex.challengeTime })
             entry = {
-                mode: ex.mode || (isTimer ? 'timer' : isBodyweight ? 'bodyweight' : 'weight'),
+                mode: ex.mode || (isTimer ? 'timer' : isCounts ? 'counts' : isBodyweight ? 'bodyweight' : 'weight'),
                 category,
                 startTarget: start,
                 lastSuccess: null,
@@ -605,6 +686,8 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
         let perf = 0
         if (isTimer) {
             for (const s of (ex?.sets || [])) perf = Math.max(perf, parseDurationSeconds(s?.reps))
+        } else if (isCounts) {
+            for (const s of (ex?.sets || [])) perf = Math.max(perf, parseReps(s?.reps))
         } else if (isBodyweight) {
             const curLevel = entry.successes || 0
             if (curLevel === 0) {
@@ -646,7 +729,7 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
                 entry.successes = (entry.successes || 0) + levelUps
                 entry.lastSuccess = perf
             } else {
-                const stepFn = isTimer ? nextTimeTarget : (p) => nextWeightTarget(p, ex.name)
+                const stepFn = isTimer ? (p) => nextTimeTarget(p, ex.name, ex.challengeStep) : isCounts ? nextCountTarget : (p) => nextWeightTarget(p, ex.name)
                 let target = entry.nextTarget
                 while (perf >= target) {
                     levelUps++
@@ -712,16 +795,17 @@ export async function recordSessionLadders(session, bodyweight = 0) {
 // Projects the ladder state for a single exercise based on in-progress sets.
 // Used for live level display during active sessions. Returns the projected
 // ladder entry (or null if no data) and whether a level-up occurred.
-export function projectExerciseLadder(persistedEntry, sets, mode, category, bodyweight = 0, exerciseName = '') {
+export function projectExerciseLadder(persistedEntry, sets, mode, category, bodyweight = 0, exerciseName = '', challengeTime, challengeStep) {
     const isTimer = mode === 'timer'
     const isBodyweight = mode === 'bodyweight'
+    const isCounts = mode === 'counts'
     let entry = persistedEntry ? { ...persistedEntry } : null
 
     // If no persisted entry, create a beginner entry
     if (!entry) {
-        const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isBodyweight ? 'bodyweight' : 'weight', name: exerciseName })
+        const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isCounts ? 'counts' : isBodyweight ? 'bodyweight' : 'weight', name: exerciseName, challengeTime })
         entry = {
-            mode: mode || (isTimer ? 'timer' : isBodyweight ? 'bodyweight' : 'weight'),
+            mode: mode || (isTimer ? 'timer' : isCounts ? 'counts' : isBodyweight ? 'bodyweight' : 'weight'),
             category,
             startTarget: start,
             lastSuccess: null,
@@ -743,6 +827,8 @@ export function projectExerciseLadder(persistedEntry, sets, mode, category, body
     let maxWeight = 0
     if (isTimer) {
         for (const s of (sets || [])) perf = Math.max(perf, parseDurationSeconds(s?.reps))
+    } else if (isCounts) {
+        for (const s of (sets || [])) perf = Math.max(perf, parseReps(s?.reps))
     } else {
         for (const s of (sets || [])) {
             const r = parseReps(s?.reps)
@@ -787,7 +873,19 @@ export function projectExerciseLadder(persistedEntry, sets, mode, category, body
             let target = entry.nextTarget
             while (perf >= target) {
                 levelUps++
-                target = nextTimeTarget(target)
+                target = nextTimeTarget(target, exerciseName, challengeStep)
+            }
+            entry.successes = (entry.successes || 0) + levelUps
+            entry.lastSuccess = perf
+            entry.nextTarget = target
+        }
+    } else if (isCounts) {
+        if (perf > (entry.personalBest || 0)) entry.personalBest = perf
+        if (perf > 0 && perf >= entry.nextTarget) {
+            let target = entry.nextTarget
+            while (perf >= target) {
+                levelUps++
+                target = nextCountTarget(target)
             }
             entry.successes = (entry.successes || 0) + levelUps
             entry.lastSuccess = perf
@@ -870,11 +968,39 @@ const DEADLIFT_LADDER = [20, 35, 50, 65, 80, 95, 110, 130, 150, 170, 190, 210]
 const CURL_LADDER = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
 const PULLUP_LADDER = [8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 30, 35]
 const CARDIO_LADDER = [2, 4, 6, 8, 10, 12, 15, 18, 22, 26, 30, 35]
+const COUNTS_LADDER = [12, 15, 20, 25, 30, 40, 50, 60, 75, 90, 110, 130]
 
 // A custom challenge time becomes the Rookie target; higher ranks follow the
 // default cardio ladder's shape scaled from it.
 export function scaledCardioLadder(baseMinutes) {
     return CARDIO_LADDER.map((v) => Math.round(((v * baseMinutes) / CARDIO_LADDER[0]) * 2) / 2)
+}
+
+// Accelerating duration ladder: rank 1 sits on the exercise's first badge
+// target, then each rank adds a GROWING chunk (1×, 2×, 3×… of the increment),
+// so rank challenges pull further and further ahead of the flat +increment
+// badge ladder — e.g. 5:00 + 10s → 5:00, 5:10, 5:30, 6:00, 6:40…
+function acceleratingDurationLadder(baseSec, stepSec) {
+    return Array.from({ length: MAX_LEVEL }, (_, i) => (baseSec + stepSec * ((i * (i + 1)) / 2)) / 60)
+}
+
+// Rank-challenge ladder for a timed exercise. Custom timer exercises accelerate
+// from their challenge time (or the default cardio start) using their required
+// increment; without an increment they're capped at Rookie. Built-in cardio
+// accelerates from its time preset. Everything else keeps the fixed ladder.
+function durationChallengeLadder(name, custom) {
+    if (custom?.mode === 'timer') {
+        const t = Number(custom?.challengeTime)
+        const stepSec = Number(custom?.challengeStep)
+        if (stepSec > 0) return acceleratingDurationLadder((t > 0 ? t : CARDIO_LADDER[0]) * 60, stepSec)
+        const ladder = Array(MAX_LEVEL).fill(Infinity)
+        ladder[0] = t > 0 ? t : CARDIO_LADDER[0]
+        return ladder
+    }
+    const preset = TIME_PRESETS[name]
+    if (preset) return acceleratingDurationLadder(preset.start, preset.step)
+    const t = Number(custom?.challengeTime)
+    return t > 0 ? scaledCardioLadder(t) : CARDIO_LADDER
 }
 
 // The five challenge groups. `categories` drives the picker (scheduled +
@@ -947,10 +1073,33 @@ export function formatChallengeTime(min) {
     return `${Math.floor(min)}:${String(secs).padStart(2, '0')}`
 }
 
+// Seconds per level -> editable text ("10" -> "10s", "120" -> "2m").
+export function formatChallengeStep(sec) {
+    if (!sec || sec <= 0) return ''
+    if (sec % 60 === 0) return `${sec / 60}m`
+    return `${sec}s`
+}
+
+// Parse a per-level increment ("10s", "30", "1m", "1:30") into whole seconds.
+export function parseChallengeStep(v) {
+    const m = parseChallengeTime(v)
+    if (!m || m <= 0) return null
+    return Math.max(1, Math.round(m * 60))
+}
+
+// Minutes -> compact challenge label ("5" -> "5m", 5.1667 -> "5:10",
+// unreachable rank levels -> "∞").
+export function formatChallengeValue(min) {
+    if (min == null || !Number.isFinite(min)) return '∞'
+    const totalSec = Math.round(min * 60)
+    if (totalSec % 60 === 0) return `${totalSec / 60}m`
+    return `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, '0')}`
+}
+
 // Best weight / reps / duration ever recorded per normalized exercise name.
 // Weight and reps only count when the set had at least 5 reps — a 1RM-style
 // single won't clear a challenge.
-const MIN_CHALLENGE_REPS = 6
+const MIN_CHALLENGE_REPS = 5
 
 export function buildBestLifts(sessions) {
     const bests = {}
@@ -958,13 +1107,16 @@ export function buildBestLifts(sessions) {
         for (const ex of (s?.exercises || [])) {
             const key = normalizeName(ex.name)
             if (!key) continue
-            const b = bests[key] || (bests[key] = { weight: 0, reps: 0, duration: 0 })
+            const b = bests[key] || (bests[key] = { weight: 0, reps: 0, duration: 0, count: 0 })
             for (const set of (ex?.sets || [])) {
                 const r = parseReps(set?.reps)
                 if (r >= MIN_CHALLENGE_REPS) {
                     if (r > b.reps) b.reps = r
                     const w = parseWeight(set?.weight)
                     if (w != null && w > b.weight) b.weight = w
+                }
+                if (ex.mode === 'counts') {
+                    if (r > b.count) b.count = r
                 }
                 if (ex.mode === 'timer') {
                     const d = parseDuration(set?.reps)
@@ -984,9 +1136,11 @@ function resolveChallengeExercise(name, group, customExercises = []) {
     const meta = exerciseMetaByName(name)
     const custom = customExercises.find((e) => normalizeName(e.name) === key)
     const mode = meta?.mode || custom?.mode || 'weight'
+    if (mode === 'counts') {
+        return { key, name, kind: 'counts', ladder: COUNTS_LADDER }
+    }
     if (group.key === 'cardio' || mode === 'timer' || TIMED_REPS.has(key)) {
-        const t = Number(custom?.challengeTime)
-        return { key, name, kind: 'duration', ladder: t > 0 ? scaledCardioLadder(t) : CARDIO_LADDER }
+        return { key, name, kind: 'duration', ladder: durationChallengeLadder(name, custom) }
     }
     if (BODYWEIGHT_REPS.has(key)) {
         return { key, name, kind: 'reps', ladder: PULLUP_LADDER }
@@ -1021,7 +1175,8 @@ function meetsTarget(bests, ch) {
     if (!b) return false
     if (ch.kind === 'weight') return b.weight >= ch.value
     if (ch.kind === 'reps') return b.reps >= ch.value
-    if (ch.kind === 'duration') return b.duration >= ch.value
+    if (ch.kind === 'counts') return b.count >= ch.value
+    if (ch.kind === 'duration') return b.duration + 1e-9 >= ch.value
     return false
 }
 

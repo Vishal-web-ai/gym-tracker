@@ -62,36 +62,37 @@ const ChallengePicker = ({ schedule = {}, customExercises = [], picks = {}, onCh
                 const selected = picks[g.key]
                 const skipped = selected === null
                 return (
-                    <div key={g.key} className={skipped ? 'opacity-40' : ''}>
+                    <div key={g.key} className={g.key === 'cardio' && skipped ? 'opacity-60' : ''}>
                         <div className='flex items-center justify-between mb-1.5'>
                             <p className='font-bebas text-orange-400 tracking-[2px]' style={{ fontSize: 16 }}>
                                 {g.label.toUpperCase()}
                             </p>
-                            {g.key === 'cardio' && (
+                            {g.key === 'cardio' && !skipped && (
                                 <button
-                                    onClick={() => select('cardio', skipped ? DEFAULT_CHALLENGE_PICKS.cardio : null)}
-                                    className={`font-mono rounded-lg px-2 py-1 border transition-all cursor-pointer ${
-                                        skipped
-                                            ? 'border-white/20 text-white/40'
-                                            : 'border-orange-500/40 text-orange-400'
-                                    }`}
+                                    onClick={() => select('cardio', null)}
+                                    className='font-mono rounded-lg px-2 py-1 border border-orange-500/60 text-orange-400 transition-all cursor-pointer'
                                     style={{ fontSize: 10 }}
                                 >
-                                    {skipped ? 'SKIPPED' : 'INCLUDED'}
+                                    REMOVE
                                 </button>
                             )}
                         </div>
                         {g.key === 'cardio' && skipped && (
-                            <button
-                                onClick={() => select('cardio', DEFAULT_CHALLENGE_PICKS.cardio)}
-                                className='mb-1.5 w-full flex items-center justify-between rounded-lg border border-dashed border-orange-500/40 px-3 py-2 font-mono transition-all cursor-pointer hover:bg-orange-500/10'
-                                style={{ fontSize: 11 }}
-                            >
-                                <span className='text-white/50'>Want cardio? Suggested: <span className='text-orange-400'>{DEFAULT_CHALLENGE_PICKS.cardio}</span></span>
-                                <Check size={13} className='text-orange-400 shrink-0 ml-2' />
-                            </button>
+                            <div className='rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 flex items-center justify-between gap-2'>
+                                <p className='font-mono text-white/70' style={{ fontSize: 12 }}>
+                                    Do you want cardio as a challenge?
+                                </p>
+                                <button
+                                    onClick={() => select('cardio', DEFAULT_CHALLENGE_PICKS.cardio)}
+                                    className='shrink-0 rounded-lg bg-orange-500 px-4 py-1.5 font-mono font-bold text-black transition-all cursor-pointer'
+                                    style={{ fontSize: 12 }}
+                                >
+                                    YES
+                                </button>
+                            </div>
                         )}
-                        <div className={`flex gap-2 overflow-x-auto scroll pb-1 -mx-1 px-1 ${skipped ? 'pointer-events-none' : ''}`}>
+                        {!(g.key === 'cardio' && skipped) && (
+                            <div className='flex gap-2 overflow-x-auto scroll pb-1 -mx-1 px-1'>
                             {list.map((name) => {
                                 const active = selected === name
                                 return (
@@ -112,7 +113,8 @@ const ChallengePicker = ({ schedule = {}, customExercises = [], picks = {}, onCh
                                     </button>
                                 )
                             })}
-                        </div>
+                            </div>
+                        )}
                     </div>
                 )
             })}

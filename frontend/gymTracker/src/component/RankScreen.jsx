@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import RankIcon from './RankIcon'
-import { RANKS, refreshProgress, xpThresholdForLevel, formatDuration } from '../services/progression'
+import { RANKS, refreshProgress, xpThresholdForLevel, formatDuration, formatChallengeValue } from '../services/progression'
 
 const slideVariants = {
     enter: (dir) => ({ y: dir > 0 ? '100%' : '-100%', opacity: 0 }),
@@ -41,7 +41,8 @@ export default function RankScreen({ onClose }) {
     const challengeLabel = (ch) => {
         if (ch.kind === 'weight') return `${ch.value}kg with 8+ reps`
         if (ch.kind === 'reps') return `${ch.value} reps`
-        return `${ch.value} min`
+        if (ch.kind === 'counts') return `${ch.value} counts`
+        return formatChallengeValue(ch.value)
     }
 
     return (
@@ -172,7 +173,8 @@ export default function RankScreen({ onClose }) {
                                 <div className='flex-1 overflow-y-auto scroll flex flex-col gap-2.5 pr-1'>
                                     {progress.exerciseRanks.map((e) => {
                                         const isTimer = e.mode === 'timer'
-                                        const fmt = (v) => (v == null || !(v > 0) ? '—' : isTimer ? formatDuration(v) : `${v}kg`)
+                                        const isCounts = e.mode === 'counts'
+                                        const fmt = (v) => (v == null || !(v > 0) ? '—' : isTimer ? formatDuration(v) : isCounts ? String(v) : `${v}kg`)
                                         const nextLevel = e.tier + 1
                                         return (
                                             <div key={e.name} className='flex flex-col gap-1'>
@@ -187,10 +189,18 @@ export default function RankScreen({ onClose }) {
                                                 </div>
                                                 <p className='font-mono text-white/30 text-[9px]'>
                                                     {e.tier === 0
-                                                        ? e.mode === 'bodyweight'
-                                                            ? `${e.nextTarget} reps earns LEVEL 1`
-                                                            : `${fmt(e.nextTarget)} × 5 reps earns LEVEL 1`
-                                                        : `${fmt(e.nextTarget)} × 5 reps to go for LEVEL ${nextLevel}`}
+                                                    ? e.mode === 'bodyweight'
+                                                        ? `${e.nextTarget} reps earns LEVEL 1`
+                                                        : e.mode === 'counts'
+                                                            ? `${e.nextTarget} counts earns LEVEL 1`
+                                                            : e.mode === 'timer'
+                                                                ? `${fmt(e.nextTarget)} earns LEVEL 1`
+                                                                : `${fmt(e.nextTarget)} × 5 reps earns LEVEL 1`
+                                                    : e.mode === 'counts'
+                                                        ? `${e.nextTarget} counts to go for LEVEL ${nextLevel}`
+                                                        : e.mode === 'timer'
+                                                            ? `${fmt(e.nextTarget)} to go for LEVEL ${nextLevel}`
+                                                            : `${fmt(e.nextTarget)} × 5 reps to go for LEVEL ${nextLevel}`}
                                                 </p>
                                             </div>
                                         )

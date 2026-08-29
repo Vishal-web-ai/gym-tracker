@@ -4,12 +4,10 @@ import Onboarding from './component/Onboarding'
 import { getUserProfile } from './services/storage'
 
 const DESIGN_WIDTH = 375
-const DESIGN_HEIGHT = 667
 
 const getScale = () => {
     const widthScale = window.innerWidth / DESIGN_WIDTH
-    const heightScale = window.innerHeight / DESIGN_HEIGHT
-    return Math.min(Math.max(Math.min(widthScale, heightScale), 0.5), 1.4)
+    return Math.min(Math.max(widthScale, 0.5), 1.8)
 }
 
 export default function App() {

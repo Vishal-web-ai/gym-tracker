@@ -244,15 +244,19 @@ const WorkoutHistory = ({ onClose, onDeleted }) => {
                                             <p className='font-semibold font-mono' style={{ color: color.text }}>
                                                 {exercise.name}
                                             </p>
-                                            {exercise.mode === 'timer' && (
+                                            {(exercise.mode === 'timer' || exercise.mode === 'counts') && (
                                                 <span className='font-mono text-xs border px-1.5 py-0.5 rounded' style={{ color: color.text, opacity: 0.5, borderColor: color.cardBorder }}>
-                                                    timer
+                                                    {exercise.mode === 'timer' ? 'timer' : 'counts'}
                                                 </span>
                                             )}
                                         </div>
                                         {exercise.mode === 'timer' ? (
                                             <p className='font-mono text-sm mt-1' style={{ color: color.text, opacity: 0.5 }}>
                                                 Time: {setsText(exercise)}
+                                            </p>
+                                        ) : exercise.mode === 'counts' ? (
+                                            <p className='font-mono text-sm mt-1' style={{ color: color.text, opacity: 0.5 }}>
+                                                Counts: {setsText(exercise)}
                                             </p>
                                         ) : typeof exercise.sets?.[0] === 'object' ? (
                                             <div className='mt-1.5 space-y-1'>

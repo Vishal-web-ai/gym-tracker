@@ -12,7 +12,7 @@ const inputClass =
     'bg-black/50 border border-orange-500/30 rounded-xl text-white font-mono text-center outline-none focus:border-orange-500 placeholder-neutral-600'
 
 const cardClass =
-    'relative rounded-2xl w-full max-w-lg px-5 py-8 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,107,26,0.2)] backdrop-blur-md'
+    'relative rounded-2xl w-full max-w-lg px-5 py-8 flex flex-col h-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,107,26,0.2)] backdrop-blur-md'
 
 const STEP_TITLES = [
     'WELCOME',
@@ -202,7 +202,7 @@ const Onboarding = ({ onDone }) => {
         }
 
         return (
-            <div className='flex flex-col items-center gap-6 w-full'>
+            <div className='flex flex-col items-center gap-6 w-full h-full'>
                 <motion.div
                     key={`card-${step}`}
                     initial={{ opacity: 0, y: 20 }}
@@ -218,7 +218,8 @@ const Onboarding = ({ onDone }) => {
                         {progress(step)}
                     </div>
 
-                    {step === 1 && (
+                    <div className='flex-1 min-h-0 w-full overflow-y-auto scroll flex flex-col'>
+                        {step === 1 && (
                         <input
                             value={age}
                             onChange={(e) => setAge(e.target.value)}
@@ -348,8 +349,9 @@ const Onboarding = ({ onDone }) => {
                             onChange={setChallengePicks}
                         />
                     )}
+                    </div>
 
-                    <div className='sticky bottom-0 flex gap-4 mt-6 pt-3 bg-gradient-to-b from-transparent to-[#050505] -mx-4 px-4 pb-2'>
+                    <div className='flex gap-4 mt-6 pt-3' style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
                         {step < STEP_TITLES.length - 1 ? (
                             <>
                                 <button
@@ -423,11 +425,11 @@ const Onboarding = ({ onDone }) => {
             </div>
 
             <div className='relative z-10 flex-1 overflow-y-auto scroll'>
-                <div className='min-h-full flex flex-col items-center justify-center px-4 py-6'>
+                <div className='min-h-full flex flex-col px-4 py-6'>
                     <AnimatePresence mode='wait'>
                         <motion.div
                             key={step}
-                            className='w-full flex flex-col items-center'
+                            className='w-full flex flex-col items-center h-full'
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}

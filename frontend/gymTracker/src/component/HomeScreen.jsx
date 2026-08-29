@@ -18,7 +18,7 @@ import LevelUpOverlay from './LevelUpOverlay'
 import ExerciseBadgeOverlay from './ExerciseBadgeOverlay'
 import { useDevice } from './DeviceContext'
 import { buzz, buzzSuccess } from '../services/haptics'
-import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, computePrsFromSessions, challengeStatusForLevel, getChallengePicks, ensureLadders, rebuildLadders, recordSessionLadders, computeProgress, getStartRank } from '../services/progression'
+import { refreshProgress, applyFreezeProtection, getFreezeState, analyzeSession, computePrsFromSessions, challengeStatusForLevel, getChallengePicks, ensureLadders, rebuildLadders, recordSessionLadders, computeProgress, getStartRank, formatDuration } from '../services/progression'
 import { exerciseMetaByName } from '../services/exercises'
 import {
     getName,
@@ -430,7 +430,9 @@ const HomeScreen = () => {
             id: crypto.randomUUID(),
             name: exercise.name,
             mode: exercise.mode,
-            category: exercise.category || exerciseMetaByName(exercise.name)?.category
+            category: exercise.category || exerciseMetaByName(exercise.name)?.category,
+            challengeTime: exercise.challengeTime || null,
+            challengeStep: exercise.challengeStep || null
         }
         setSelectedExercises(prev => {
             const next = [...prev, newExercise]
@@ -492,12 +494,17 @@ const HomeScreen = () => {
     const handleStartClick = () => {
         buzz()
         if (todayExercises.length > 0) {
-            const list = todayExercises.map(e => ({
-                id: crypto.randomUUID(),
-                name: e.name,
-                mode: e.mode,
-                category: e.category || exerciseMetaByName(e.name)?.category
-            }))
+            const list = todayExercises.map(e => {
+                const custom = customExercises.find(c => c.name === e.name)
+                return {
+                    id: crypto.randomUUID(),
+                    name: e.name,
+                    mode: e.mode,
+                    category: e.category || exerciseMetaByName(e.name)?.category,
+                    challengeTime: custom?.challengeTime || null,
+                    challengeStep: custom?.challengeStep || null
+                }
+            })
             setPlannedExercises(list)
             setSelectedExercises(list)
             const weights = {}
@@ -798,7 +805,7 @@ const HomeScreen = () => {
                                         .map((pr, i) => (
                                         <div key={i} className='flex justify-between items-center w-full'>
                                             <p className='font-mono text-gray-300 flex-1 truncate text-[10px]'>{pr.name}</p>
-                                            <p className='font-mono text-gray-300 text-[10px]'>{pr.weight}kg × {pr.reps}</p>
+                                            <p className='font-mono text-gray-300 text-[10px]'>{pr.kind === 'timer' ? formatDuration(pr.value) : pr.kind === 'counts' ? `${pr.value} counts` : `${pr.value}kg × ${pr.reps}`}</p>
                                         </div>
                                     ))}
                                 </div>

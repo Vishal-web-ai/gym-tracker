@@ -1,6 +1,6 @@
 import { useState, useLayoutEffect, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check, Images, Film, Flame, Zap, Timer } from 'lucide-react'
+import { Camera, Video, StickyNote, Trash2, X, Plus, Minus, Save, Check, Images, Film, Flame, Zap, Timer, Hash } from 'lucide-react'
 import NumberOfSets from './NumberOfSets'
 import ExerciseMedia from './ExerciseMedia'
 import RestTimer from './RestTimer'
@@ -73,6 +73,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const settleTimerRef = useRef(null)
     const isTimer = exercise.mode === 'timer'
     const isBodyweight = exercise.mode === 'bodyweight'
+    const isCounts = exercise.mode === 'counts'
     const setCount = Math.max(3, Math.min(10, exerciseSetCount?.[idx] || 3))
     const prevSetCount = useRef(setCount)
     const width = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 375))[0]
@@ -327,20 +328,22 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
             if (!exerciseDone[idx]?.[si]) continue
             liveSets.push({
                 reps: exerciseSets[idx]?.[si] || '—',
-                weight: isTimer ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
+                weight: (isTimer || isCounts) ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
             })
         }
         const synthetic = liveSets.length > 0
             ? [{ exercises: [{ name: exercise.name, mode: exercise.mode, sets: liveSets }] }]
             : []
         return buildHistoryIndex([...(sessions || []), ...synthetic])[exercise.name]
-    }, [sessions, exercise.name, exercise.mode, exerciseDone, exerciseSets, exerciseWeights, idx, setCount, isTimer])
+    }, [sessions, exercise.name, exercise.mode, exerciseDone, exerciseSets, exerciseWeights, idx, setCount, isTimer, isCounts])
     const ladder = ladders?.[exercise.name] ? ladderView(ladders[exercise.name], bodyweight) : null
     let livePerf = 0
     for (let si = 0; si < setCount; si++) {
         if (!exerciseDone[idx]?.[si]) continue
         if (isTimer) {
             livePerf = Math.max(livePerf, parseDurationSeconds(exerciseSets[idx]?.[si]))
+        } else if (isCounts) {
+            livePerf = Math.max(livePerf, parseFloat(exerciseSets[idx]?.[si]) || 0)
         } else {
             const reps = parseFloat(exerciseSets[idx]?.[si]) || 0
             const w = parseFloat(String(exerciseWeights[idx]?.[si]).replace('kg', '')) || 0
@@ -357,11 +360,11 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
             if (!exerciseDone[idx]?.[si]) continue
             sets.push({
                 reps: exerciseSets[idx]?.[si] || '—',
-                weight: isTimer ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
+                weight: (isTimer || isCounts) ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
             })
         }
         return sets
-    }, [exerciseDone, exerciseSets, exerciseWeights, idx, setCount, isTimer])
+    }, [exerciseDone, exerciseSets, exerciseWeights, idx, setCount, isTimer, isCounts])
 
     const projected = useMemo(() => {
         if (completedSets.length === 0) return null
@@ -371,9 +374,11 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
             exercise.mode,
             exercise.category || 'Chest',
             bodyweight,
-            exercise.name
+            exercise.name,
+            exercise.challengeTime,
+            exercise.challengeStep
         )
-    }, [completedSets, ladders, exercise.name, exercise.mode, exercise.category, bodyweight])
+    }, [completedSets, ladders, exercise.name, exercise.mode, exercise.category, bodyweight, exercise.challengeTime, exercise.challengeStep])
 
     const prevLevelRef = useRef(projected?.projectedLevel ?? 0)
     const levelUpTimerRef = useRef(null)
@@ -398,10 +403,16 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const displayLevelName = projected?.badge?.name || ladder?.levelName || 'Unranked'
     const displayColor = projected?.badge?.color || ladder?.color || '#737373'
 
-    const fmtLoad = (v) => (v == null || !(v > 0) ? '—' : isTimer ? formatDuration(v) : `${v}kg`)
-    const pr = savedEntry && savedEntry.bestWeight > 0
-        ? { name: exercise.name, weight: savedEntry.bestWeight, reps: savedEntry.bestRepsAtWeight?.[savedEntry.bestWeight] || '—' }
-        : null
+    const fmtLoad = (v) => (v == null || !(v > 0) ? '—' : isTimer ? formatDuration(v) : isCounts ? String(v) : `${v}kg`)
+    const pr = savedEntry && (
+        isCounts
+            ? (savedEntry.bestCount > 0 ? { label: `${savedEntry.bestCount} counts` } : null)
+            : isTimer
+                ? (savedEntry.bestDuration > 0 ? { label: formatDuration(savedEntry.bestDuration) } : null)
+                : savedEntry.bestWeight > 0
+                    ? { label: `${savedEntry.bestWeight}kg × ${savedEntry.bestRepsAtWeight?.[savedEntry.bestWeight] || '—'}` }
+                    : null
+    )
 
     const handleFiles = async (e) => {
         const files = Array.from(e.target.files || [])
@@ -425,7 +436,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
             if (si !== setIdx && exerciseDone[idx]?.[si]) {
                 doneSets.push({
                     reps: exerciseSets[idx]?.[si] || '—',
-                    weight: isTimer ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
+                    weight: (isTimer || isCounts) ? '—' : (exerciseWeights[idx]?.[si] ? `${exerciseWeights[idx][si]}kg` : '—')
                 })
             }
         }
@@ -444,6 +455,8 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
             let bonus = null
             if (isTimerMode) {
                 if (entry && reps > entry.bestDuration) bonus = { type: 'timer-record', points: 10 }
+            } else if (exerciseMode === 'counts') {
+                if (entry && reps > (entry.bestCount || 0)) bonus = { type: 'count-pr', points: 10 }
             } else if (entry && entry.bestWeight > -Infinity && weight > entry.bestWeight) {
                 bonus = { type: 'weight-pr', points: 10 }
             } else if (entry && weight > 0 && weight in (entry.bestRepsAtWeight || {}) && reps > entry.bestRepsAtWeight[weight]) {
@@ -520,6 +533,11 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                     {isBodyweight && (
                         <span className='absolute left-0 top-0 text-[10px] font-mono font-bold tracking-[1px] text-emerald-400/70 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-1 leading-tight text-center'>
                             Bodyweight<br/>Exercise
+                        </span>
+                    )}
+                    {isCounts && (
+                        <span className='absolute left-0 top-0 text-[10px] font-mono font-bold tracking-[1px] text-purple-300/80 bg-purple-500/10 border border-purple-500/25 rounded px-2 py-1 leading-tight text-center'>
+                            Counts<br/>Exercise
                         </span>
                     )}
                     <button
@@ -672,7 +690,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                                             <span className='font-bebas text-orange-400 text-base leading-none'>{setIdx + 1}</span>
                                         </div>
                                     </div>
-                                    {!isTimer && (
+                                    {!isTimer && !isCounts && (
                                         <div className='flex-1 min-w-0 relative'>
                                             <label className='absolute -top-3.5 left-0 text-[9px] font-bold text-neutral-500 tracking-[2px]'>
                                                 {isBodyweight ? 'TOTAL (KG)' : 'WEIGHT (KG)'}
@@ -688,7 +706,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                                     )}
                                     <div className='flex-1 min-w-0 relative'>
                                         <label className='absolute -top-3.5 left-0 text-[9px] font-bold text-neutral-500 tracking-[2px]'>
-                                            {isTimer ? 'TIME' : 'REPS'}
+                                            {isTimer ? 'TIME' : isCounts ? 'COUNT' : 'REPS'}
                                         </label>
                                         {isTimer ? (
                                             locked ? (
@@ -770,7 +788,7 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                             <>
                                 <span className='text-neutral-600 font-mono text-[11px]'>|</span>
                                 <span className='font-mono text-[11px] text-orange-300 whitespace-nowrap'>
-                                    PR : {pr.weight}kg × {pr.reps}
+                                    PR : {pr.label}
                                 </span>
                             </>
                         )}
@@ -789,7 +807,11 @@ className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 
                                         const atRepStage = isBodyweight && (ladder?.tier ?? displayLevel) === 0
                                         const load = atRepStage
                                             ? `BODYWEIGHT x ${target}reps`
-                                            : `${fmtLoad(target)} x 6reps`
+                                            : isCounts
+                                                ? `${target} counts`
+                                                : isTimer
+                                                    ? fmtLoad(target)
+                                                    : `${fmtLoad(target)} x 6reps`
                                         return `FOR LEVEL ${level} : ${load}`
                                     })()
                         }
@@ -858,6 +880,7 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
         const now = new Date()
         const isTimer = (idx) => exercises[idx].mode === 'timer'
         const isBodyweight = (idx) => exercises[idx].mode === 'bodyweight'
+        const isCounts = (idx) => exercises[idx].mode === 'counts'
         try {
             const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
             const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -866,11 +889,11 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                 name: workoutName.trim() || 'Workout',
                 exercises: exercises.map((exercise, idx) => ({
                     name: exercise.name,
-                    mode: exercise.mode === 'timer' ? 'timer' : exercise.mode === 'bodyweight' ? 'bodyweight' : 'weight',
+                    mode: exercise.mode === 'timer' ? 'timer' : exercise.mode === 'bodyweight' ? 'bodyweight' : exercise.mode === 'counts' ? 'counts' : 'weight',
                     category: exercise.category,
                     sets: Array.from({ length: Math.max(3, Math.min(10, exerciseSetCount?.[idx] || 3)) }, (_, setIdx) => ({
                         reps: exerciseSets[idx]?.[setIdx] || '—',
-                        weight: isTimer(idx) ? '—' : (exerciseWeights[idx]?.[setIdx] ? `${exerciseWeights[idx][setIdx]}kg` : (isBodyweight(idx) ? '0kg' : '—'))
+                        weight: isTimer(idx) ? '—' : isCounts(idx) ? '—' : (exerciseWeights[idx]?.[setIdx] ? `${exerciseWeights[idx][setIdx]}kg` : (isBodyweight(idx) ? '0kg' : '—'))
                     })),
                     notes: exerciseNotes?.[idx] || '',
                     media: exerciseMedia?.[idx] || []
@@ -1139,8 +1162,9 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
                                 {xpFlash.type === 'weight-pr' && <Flame size={18} className='text-orange-400' />}
                                 {xpFlash.type === 'extra-rep' && <Zap size={18} className='text-orange-400' />}
                                 {xpFlash.type === 'timer-record' && <Timer size={18} className='text-orange-400' />}
+                                {xpFlash.type === 'count-pr' && <Hash size={18} className='text-orange-400' />}
                                 <span className='font-bold text-orange-300/80 text-2xl leading-none'>
-                                    {xpFlash.type === 'weight-pr' ? 'NEW PR' : xpFlash.type === 'extra-rep' ? 'EXTRA REPS' : 'DURATION RECORD'}
+                                    {xpFlash.type === 'weight-pr' ? 'NEW PR' : xpFlash.type === 'extra-rep' ? 'EXTRA REPS' : xpFlash.type === 'count-pr' ? 'NEW COUNT RECORD' : 'DURATION RECORD'}
                                 </span>
                                 <span className='font-bold text-orange-400 text-2xl tracking-wide leading-none drop-shadow-[0_0_12px_rgba(249,115,22,0.6)]'>+{xpFlash.points} XP</span>
                             </div>

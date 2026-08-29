@@ -11,11 +11,13 @@ import {
     beginnerTarget,
     nextWeightTarget,
     nextTimeTarget,
+    nextCountTarget,
     applySessionToLadders,
     seedLaddersFromHistory,
     ladderView,
     computeExerciseLadders,
     buildHistoryIndex,
+    projectExerciseLadder,
     parseDurationSeconds,
     weekKeyFor,
     planFreezeProtection,
@@ -36,6 +38,9 @@ import {
     saveChallengePicks,
     parseChallengeTime,
     formatChallengeTime,
+    parseChallengeStep,
+    formatChallengeStep,
+    formatChallengeValue,
     DEFAULT_CHALLENGE_PICKS
 } from '../progression'
 import { createSession, saveUserProfile } from '../storage'
@@ -172,7 +177,7 @@ describe('analyzeSession', () => {
         expect(out.xp).toBe(30)
         expect(out.bonuses).toHaveLength(1)
         expect(out.bonuses[0]).toMatchObject({ type: 'weight-pr', points: 10, name: 'Bench', value: 65, reps: 10 })
-        expect(out.newPrs).toEqual([{ name: 'Bench', weight: '65', reps: '10' }])
+        expect(out.newPrs).toEqual([{ name: 'Bench', kind: 'weight', value: 65, reps: 10 }])
     })
 
     it('returns no PRs for extra-rep bonuses', () => {
@@ -181,6 +186,19 @@ describe('analyzeSession', () => {
         const out = analyzeSession(now, [prev])
         expect(out.bonuses[0].type).toBe('extra-rep')
         expect(out.newPrs).toEqual([])
+    })
+
+    it('reports timer and counts records as PRs too', () => {
+        const prev = timerSession('Plank', 60)
+        const now = timerSession('Plank', 90)
+        const out = analyzeSession(now, [prev])
+        expect(out.newPrs).toEqual([{ name: 'Plank', kind: 'timer', value: 90 }])
+        const priorCounts = { name: 'W', exercises: [{ name: 'Squat Jumps', mode: 'counts', sets: [{ reps: '20', weight: '—' }] }] }
+        const counts = analyzeSession(
+            { name: 'W', exercises: [{ name: 'Squat Jumps', mode: 'counts', sets: [{ reps: '25', weight: '—' }] }] },
+            [priorCounts]
+        )
+        expect(counts.newPrs).toEqual([{ name: 'Squat Jumps', kind: 'counts', value: 25 }])
     })
 })
 
@@ -192,8 +210,19 @@ describe('computePrsFromSessions', () => {
             weightSession('Deadlift', 180, 5, 'c')
         ]
         expect(computePrsFromSessions(sessions)).toEqual([
-            { name: 'Bench', weight: '65', reps: '8' },
-            { name: 'Deadlift', weight: '180', reps: '5' }
+            { name: 'Bench', kind: 'weight', value: 65, reps: 8 },
+            { name: 'Deadlift', kind: 'weight', value: 180, reps: 5 }
+        ])
+    })
+
+    it('derives duration and counts PRs from timer and counts sessions', () => {
+        const sessions = [
+            { id: 'a', name: 'W', exercises: [{ name: 'Plank', mode: 'timer', sets: [{ reps: '1:30', weight: '—' }] }] },
+            { id: 'b', name: 'W', exercises: [{ name: 'Squat Jumps', mode: 'counts', sets: [{ reps: '25', weight: '—' }] }] }
+        ]
+        expect(computePrsFromSessions(sessions)).toEqual([
+            { name: 'Plank', kind: 'timer', value: 90 },
+            { name: 'Squat Jumps', kind: 'counts', value: 25 }
         ])
     })
 
@@ -298,6 +327,26 @@ describe('exercise badge ladders', () => {
     it('mirrors the ladder in time for timer exercises (~10%, 5s steps)', () => {
         expect(nextTimeTarget(30)).toBe(35)
         expect(nextTimeTarget(90)).toBe(100)
+    })
+
+    it('gives each built-in cardio exercise its own time preset', () => {
+        // Sprint is a short burst — starts tiny, climbs +5s
+        expect(beginnerTarget({ category: 'Cardio', mode: 'timer', name: 'Sprint' })).toBe(20)
+        expect(nextTimeTarget(20, 'Sprint')).toBe(25)
+        // Skipping sits at 2:30 sets — climbs +30s
+        expect(beginnerTarget({ category: 'Cardio', mode: 'timer', name: 'Skipping' })).toBe(150)
+        expect(nextTimeTarget(150, 'Skipping')).toBe(180)
+        // Jump rope runs long — 5 min start, climbs +1 min
+        expect(beginnerTarget({ category: 'Cardio', mode: 'timer', name: 'Jump Rope' })).toBe(300)
+        expect(nextTimeTarget(300, 'Jump Rope')).toBe(360)
+        // Names without a preset keep the ~10% time ladder
+        expect(beginnerTarget({ category: 'Core', mode: 'timer', name: 'Plank' })).toBe(25)
+        expect(nextTimeTarget(25, 'Plank')).toBe(30)
+    })
+
+    it('uses a custom exercise challenge time as its level-1 badge target', () => {
+        expect(beginnerTarget({ category: 'Cardio', mode: 'timer', name: 'Battle Ropes', challengeTime: 5 })).toBe(300)
+        expect(beginnerTarget({ category: 'Cardio', mode: 'timer', name: 'Battle Ropes', challengeTime: 2.5 })).toBe(150)
     })
 
     it('case 1+6: first-session weight lands at the level the lift earns', () => {
@@ -466,6 +515,19 @@ describe('exercise badge ladders', () => {
         expect(ladders.Plank.nextTarget).toBe(95)
     })
 
+    it('anchors a custom cardio ladder at its challenge time (minutes)', () => {
+        const { ladders } = applySessionToLadders({}, {
+            exercises: [{ name: 'Battle Ropes', mode: 'timer', category: 'Cardio', challengeTime: 5, sets: [{ reps: '5:00' }] }]
+        }, 60)
+        expect(ladders['Battle Ropes'].startTarget).toBe(300)
+        expect(ladders['Battle Ropes'].successes).toBe(1)
+        expect(ladders['Battle Ropes'].nextTarget).toBe(330)
+        const live = projectExerciseLadder(null, [{ reps: '6:00', weight: '—' }], 'timer', 'Cardio', 60, 'Battle Ropes', 5)
+        expect(live.entry.successes).toBe(2)
+        expect(live.entry.nextTarget).toBe(365)
+        expect(live.didLevelUp).toBe(true)
+    })
+
     it('orders the badge list alphabetically', () => {
         const seeded = seedLaddersFromHistory([
             bench([{ reps: '10', weight: '80' }]),
@@ -597,6 +659,80 @@ describe('computeProgress / refreshProgress', () => {
     })
 })
 
+describe('counts mode', () => {
+    const countsSession = (name, counts, id) => ({
+        id: id || `c-${++idCounter}`,
+        name: 'Workout',
+        exercises: [{ name, mode: 'counts', category: 'Legs', sets: counts.map((c) => ({ reps: String(c), weight: '—' })) }]
+    })
+
+    it('starts counts exercises at 12 with a flat +3 step (10% past 50)', () => {
+        expect(beginnerTarget({ category: 'Legs', mode: 'counts', name: 'Squat Jumps' })).toBe(12)
+        // 12 → 15 → 18 → 21 … exactly +3 per level up to 50
+        expect(nextCountTarget(12)).toBe(15)
+        expect(nextCountTarget(15)).toBe(18)
+        expect(nextCountTarget(49)).toBe(52)
+        expect(nextCountTarget(50)).toBe(53)
+        // past 50 counts the step becomes ~10% so big counts stay meaningful
+        expect(nextCountTarget(51)).toBe(56)
+        expect(nextCountTarget(75)).toBe(82)
+    })
+
+    it('awards +10 XP when a set beats the best count record', () => {
+        const prev = countsSession('Squat Jumps', [20])
+        const now = countsSession('Squat Jumps', [25, 25])
+        expect(sessionXp(now, [prev])).toBe(30)
+        expect(sessionXp(countsSession('Squat Jumps', [20]), [])).toBe(20)
+    })
+
+    it('tracks bestCount in the history index', () => {
+        const index = buildHistoryIndex([{ id: 'c1', name: 'W', exercises: [{ name: 'Squat Jumps', mode: 'counts', sets: [{ reps: '10', weight: '—' }, { reps: '30', weight: '—' }] }] }])
+        expect(index['Squat Jumps'].bestCount).toBe(30)
+        expect(index['Squat Jumps'].bestWeight).toBe(-Infinity)
+    })
+
+    it('places the counts ladder from a first session and promotes past it', () => {
+        const first = applySessionToLadders({}, { id: 'c1', name: 'W', exercises: [{ name: 'Squat Jumps', mode: 'counts', category: 'Legs', sets: [{ reps: '12', weight: '—' }] }] }, 60)
+        const entry = first.ladders['Squat Jumps']
+        expect(entry.mode).toBe('counts')
+        expect(entry.successes).toBe(1)
+        const nextT = entry.nextTarget
+        const second = applySessionToLadders(first.ladders, { id: 'c2', name: 'W', exercises: [{ name: 'Squat Jumps', mode: 'counts', category: 'Legs', sets: [{ reps: String(nextT), weight: '—' }] }] }, 60)
+        expect(second.promotions).toHaveLength(1)
+        expect(second.ladders['Squat Jumps'].successes).toBe(2)
+        expect(second.ladders['Squat Jumps'].lastSuccess).toBe(nextT)
+    })
+
+    it('seeds existing counts history at Level 1', () => {
+        const seeded = seedLaddersFromHistory([{ id: 'c1', name: 'W', exercises: [{ name: 'Squat Jumps', mode: 'counts', sets: [{ reps: '30', weight: '—' }] }] }], 60, {})
+        const entry = seeded['Squat Jumps']
+        expect(entry.mode).toBe('counts')
+        expect(entry.successes).toBe(1)
+        expect(entry.nextTarget).toBe(nextCountTarget(30))
+    })
+
+    it('projects a live counts level from in-progress sets', () => {
+        const proj = projectExerciseLadder(null, [{ reps: '12', weight: '—' }], 'counts', 'Legs', 60, 'Squat Jumps')
+        expect(proj.entry.successes).toBe(1)
+        expect(proj.entry.nextTarget).toBe(nextCountTarget(12))
+        expect(proj.didLevelUp).toBe(true)
+    })
+
+    it('resolves a picked counts exercise to the counts challenge ladder', () => {
+        const custom = [{ name: 'Squat Jumps', mode: 'counts', category: 'Legs' }]
+        const ch = challengesForLevel({ legs: 'Squat Jumps' }, custom, 1).find((c) => c.key === 'legs')
+        expect(ch.kind).toBe('counts')
+        expect(ch.value).toBe(12)
+        const status = challengeStatusForLevel(
+            [{ id: 'c1', name: 'W', exercises: [{ name: 'Squat Jumps', mode: 'counts', category: 'Legs', sets: [{ reps: '20', weight: '—' }] }] }],
+            1,
+            { legs: 'Squat Jumps' },
+            custom
+        )
+        expect(status.find((c) => c.key === 'legs').done).toBe(true)
+    })
+})
+
 describe('rank challenges', () => {
     const session = (exercises) => ({ name: 'W', exercises })
     const lift = (name, weight, reps = 8) => ({ name, sets: [{ reps: String(reps), weight: `${weight}kg` }] })
@@ -619,7 +755,7 @@ describe('rank challenges', () => {
         expect(level1[1]).toMatchObject({ kind: 'weight', value: 20 })  // deadlift ladder
         expect(level1[2]).toMatchObject({ kind: 'weight', value: 5 })   // curl ladder
         expect(level1[3]).toMatchObject({ kind: 'weight', value: 20 })  // squat ladder
-        expect(level1[4]).toMatchObject({ kind: 'duration', value: 2 }) // cardio ladder
+        expect(level1[4]).toMatchObject({ kind: 'duration', value: 20 / 60 }) // cardio anchor = Sprint's 20s preset
         expect(challengesForLevel({}, [], 12)[0].value).toBe(120)
         // deadlift tail grows by 20kg per rank after 110
         expect(challengesForLevel({}, [], 8)[1].value).toBe(130)
@@ -665,8 +801,9 @@ describe('rank challenges', () => {
     })
 
     it('scores cardio picks on duration', () => {
-        expect(challengeStatusForLevel([session([timer('Sprint', '2:00')])], 1, DEFAULTS, []).find((c) => c.key === 'cardio').done).toBe(true)
-        expect(challengeStatusForLevel([session([timer('Sprint', '0:30')])], 1, DEFAULTS, []).find((c) => c.key === 'cardio').done).toBe(false)
+        // Default cardio pick (Sprint) challenge ladder anchors on its 20s preset
+        expect(challengeStatusForLevel([session([timer('Sprint', '0:30')])], 1, DEFAULTS, []).find((c) => c.key === 'cardio').done).toBe(true)
+        expect(challengeStatusForLevel([session([timer('Sprint', '0:10')])], 1, DEFAULTS, []).find((c) => c.key === 'cardio').done).toBe(false)
     })
 
     it('cascades eligibility only when all 5 challenges are cleared', () => {
@@ -700,11 +837,53 @@ describe('rank challenges', () => {
     it('scales the cardio ladder from a custom challenge time', () => {
         const custom = [{ name: 'Battle Ropes', mode: 'timer', challengeTime: 5 }]
         const at = (level) => challengesForLevel({ cardio: 'Battle Ropes' }, custom, level).find((c) => c.key === 'cardio')
+        // Without an increment a custom timer exercise only clears Rookie —
+        // higher ranks are unreachable.
         expect(at(1).value).toBe(5)
-        expect(at(8).value).toBe(45)
-        expect(at(12).value).toBe(87.5)
-        // exercises without a custom time keep the default ladder
-        expect(challengesForLevel({}, [], 1).find((c) => c.key === 'cardio').value).toBe(2)
+        expect(at(2).value).toBe(Infinity)
+        expect(at(12).value).toBe(Infinity)
+        // the default cardio pick (Sprint) anchors on its 20s time preset
+        expect(challengesForLevel({}, [], 1).find((c) => c.key === 'cardio').value).toBeCloseTo(20 / 60, 6)
+    })
+
+    it('builds an accelerating challenge ladder steeper than the badge ladder', () => {
+        const custom = [{ name: 'Battle Ropes', mode: 'timer', challengeTime: 5, challengeStep: 10 }]
+        const at = (level) => challengesForLevel({ cardio: 'Battle Ropes' }, custom, level).find((c) => c.key === 'cardio')
+        // The badge ladder climbs +10s flat (5:00 → 5:10 → 5:20); the challenge
+        // pulls ahead with 1×, 2×, 3× of the increment: 5:00, 5:10, 5:30, 6:00…
+        expect(at(1).value).toBe(5)
+        expect(at(2).value).toBeCloseTo(5 + 10 / 60, 6)
+        expect(at(3).value).toBeCloseTo(5 + 30 / 60, 6)
+        expect(at(4).value).toBeCloseTo(5 + 60 / 60, 6)
+        expect(at(12).value).toBeCloseTo(5 + 66 * 10 / 60, 6)
+        // a 1-minute step lands on clean minutes and built-in presets accelerate too
+        const big = [{ name: 'Row Machine', mode: 'timer', challengeTime: 5, challengeStep: 60 }]
+        expect(challengesForLevel({ cardio: 'Row Machine' }, big, 3).find((c) => c.key === 'cardio').value).toBe(8)
+        expect(challengesForLevel({}, [], 3).find((c) => c.key === 'cardio').value).toBeCloseTo((20 + 5 * 3) / 60, 6)
+    })
+
+    it('lets a step-equipped challenge clear its rank, and caps the rankless one', () => {
+        const stepped = [{ name: 'Battle Ropes', mode: 'timer', challengeTime: 5, challengeStep: 10 }]
+        const ok = challengeStatusForLevel([session([timer('Battle Ropes', '5:10')])], 2, { cardio: 'Battle Ropes' }, stepped)
+        expect(ok.find((c) => c.key === 'cardio').done).toBe(true)
+        const blocked = [{ name: 'Battle Ropes', mode: 'timer', challengeTime: 5 }]
+        const capped = challengeStatusForLevel([session([timer('Battle Ropes', '60:00')])], 2, { cardio: 'Battle Ropes' }, blocked)
+        expect(capped.find((c) => c.key === 'cardio').done).toBe(false)
+    })
+
+    it('parses per-level increments and formats challenge values', () => {
+        expect(parseChallengeStep('10s')).toBe(10)
+        expect(parseChallengeStep('30')).toBe(30)
+        expect(parseChallengeStep('1m')).toBe(60)
+        expect(parseChallengeStep('1:30')).toBe(90)
+        expect(parseChallengeStep('abc')).toBe(null)
+        expect(formatChallengeStep(10)).toBe('10s')
+        expect(formatChallengeStep(60)).toBe('1m')
+        expect(formatChallengeStep(null)).toBe('')
+        expect(formatChallengeValue(5)).toBe('5m')
+        expect(formatChallengeValue(5 + 10 / 60)).toBe('5:10')
+        expect(formatChallengeValue(2.5)).toBe('2:30')
+        expect(formatChallengeValue(Infinity)).toBe('∞')
     })
 
     it('clears a custom-time cardio challenge at its own pace', () => {
