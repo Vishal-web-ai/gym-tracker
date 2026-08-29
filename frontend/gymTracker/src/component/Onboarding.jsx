@@ -6,7 +6,7 @@ import ScheduleEditor from './ScheduleEditor'
 import ChallengePicker from './ChallengePicker'
 import { setName, saveUserProfile, saveSchedule } from '../services/storage'
 import { imageFileToDataUrl } from '../services/photo'
-import { saveStartRank, saveProgressionState, saveChallengePicks } from '../services/progression'
+import { saveStartRank, saveProgressionState, saveChallengePicks, DEFAULT_CHALLENGE_PICKS } from '../services/progression'
 
 const inputClass =
     'bg-black/50 border border-orange-500/30 rounded-xl text-white font-mono text-center outline-none focus:border-orange-500 placeholder-neutral-600'
@@ -40,7 +40,7 @@ const Onboarding = ({ onDone }) => {
     const [inch, setInch] = useState('')
     const [photoUri, setPhotoUri] = useState(null)
     const [schedule, setSchedule] = useState({})
-    const [challengePicks, setChallengePicks] = useState({})
+    const [challengePicks, setChallengePicks] = useState(() => ({ ...DEFAULT_CHALLENGE_PICKS, cardio: null }))
     const [experience, setExperience] = useState(null)
     const photoInputRef = useRef(null)
 

@@ -81,6 +81,16 @@ const ChallengePicker = ({ schedule = {}, customExercises = [], picks = {}, onCh
                                 </button>
                             )}
                         </div>
+                        {g.key === 'cardio' && skipped && (
+                            <button
+                                onClick={() => select('cardio', DEFAULT_CHALLENGE_PICKS.cardio)}
+                                className='mb-1.5 w-full flex items-center justify-between rounded-lg border border-dashed border-orange-500/40 px-3 py-2 font-mono transition-all cursor-pointer hover:bg-orange-500/10'
+                                style={{ fontSize: 11 }}
+                            >
+                                <span className='text-white/50'>Want cardio? Suggested: <span className='text-orange-400'>{DEFAULT_CHALLENGE_PICKS.cardio}</span></span>
+                                <Check size={13} className='text-orange-400 shrink-0 ml-2' />
+                            </button>
+                        )}
                         <div className={`flex gap-2 overflow-x-auto scroll pb-1 -mx-1 px-1 ${skipped ? 'pointer-events-none' : ''}`}>
                             {list.map((name) => {
                                 const active = selected === name
