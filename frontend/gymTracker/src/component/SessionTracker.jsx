@@ -658,7 +658,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
                 {/* Set input rows — scrollable when they don't fit */}
                 <div
                     ref={setsScrollRef}
-                    className='flex-1 min-h-0 overflow-y-auto scroll mt-1.5'
+                    className='flex-1 min-h-0 overflow-y-auto scroll mt-1.5 touch-pan-y'
                 >
                     <div className='flex flex-col gap-6 pt-3'>
                         {Array.from({ length: setCount }, (_, setIdx) => {
