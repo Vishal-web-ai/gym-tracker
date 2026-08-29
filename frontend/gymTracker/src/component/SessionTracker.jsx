@@ -8,6 +8,7 @@ import { createSession, getRestSound, getSessions } from '../services/storage'
 import { addMedia } from '../services/media'
 import { getErrorMessage } from '../services/errors'
 import { buildHistoryIndex, parseDurationSeconds, formatDuration, ladderView, projectExerciseLadder } from '../services/progression'
+import { useDevice } from './DeviceContext'
 
 const XP_BURST = Array.from({ length: 12 }, (_, i) => {
     const angle = (i / 12) * Math.PI * 2
@@ -62,6 +63,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const glowRef = useRef(null)
     const [busy, setBusy] = useState(false)
     const [menuFor, setMenuFor] = useState(null)
+    const { lite } = useDevice()
     const rewardedRef = useRef(new Set())
     const nameRef = useRef(null)
     const setsScrollRef = useRef(null)
@@ -87,6 +89,7 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const SNAP_MS = 170
     const EXIT_MS = 240
     const ENTER_MS = 190
+    const SWIPE_THRESHOLD = 6
 
     const setCardTransform = (px, ms = 0) => {
         const el = cardRef.current
@@ -107,17 +110,18 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         if (px !== 0) {
             // backdrop-blur is very expensive on weak devices while a layer is
             // moving (it re-samples the backdrop every frame). Drop it during
-            // motion and restore once the card settles.
+            // motion. On lite devices it stays off permanently; elsewhere it is
+            // restored once the card settles.
             el.style.backdropFilter = 'none'
         } else if (ms > 0) {
             settleTimerRef.current = setTimeout(() => {
                 el.style.willChange = ''
-                el.style.backdropFilter = ''
+                if (!lite) el.style.backdropFilter = ''
                 if (glowRef.current) glowRef.current.style.opacity = '0'
             }, ms + 50)
         } else {
             el.style.willChange = ''
-            el.style.backdropFilter = ''
+            if (!lite) el.style.backdropFilter = ''
             if (glowRef.current) glowRef.current.style.opacity = '0'
         }
     }
@@ -142,12 +146,29 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     }
 
     const handlePointerDown = (e) => {
-        if (e.target.closest('button, input, textarea')) return
         const el = cardRef.current
         if (!el) return
         clearTimeout(snapTimerRef.current)
         clearTimeout(settleTimerRef.current)
-        dragRef.current = { id: e.pointerId, startX: e.clientX, lastX: e.clientX, lastT: performance.now(), vx: 0 }
+        // Start tracking from anywhere on the card, including set/weight/reps
+        // inputs and buttons. Focus is deferred to pointerup so a horizontal
+        // swipe over an input still slides the card instead of typing.
+        const onInput = !!e.target.closest('input, textarea')
+        if (onInput) e.preventDefault()
+        dragRef.current = {
+            id: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            lastX: e.clientX,
+            lastY: e.clientY,
+            lastT: performance.now(),
+            vx: 0,
+            dx: 0,
+            dy: 0,
+            axis: null,       // 'x' (card swipe) or 'y' (vertical scroll)
+            active: false,    // once horizontal swipe confirmed
+            onInput
+        }
         try { el.setPointerCapture(e.pointerId) } catch { /* pointer capture is optional */ }
         el.style.transition = 'none'
         el.style.backdropFilter = 'none'
@@ -160,8 +181,24 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         const dt = Math.max(1, now - d.lastT)
         d.vx = 0.6 * d.vx + 0.4 * ((e.clientX - d.lastX) / dt * 1000)
         d.lastX = e.clientX
+        d.lastY = e.clientY
         d.lastT = now
         d.dx = e.clientX - d.startX
+        d.dy = e.clientY - d.startY
+
+        // Axis lock: decide once, then stick. Horizontal intent = card swipe.
+        if (!d.axis) {
+            if (Math.abs(d.dx) > SWIPE_THRESHOLD && Math.abs(d.dx) > Math.abs(d.dy)) d.axis = 'x'
+            else if (Math.abs(d.dy) > SWIPE_THRESHOLD && Math.abs(d.dy) > Math.abs(d.dx)) d.axis = 'y'
+            else return
+        }
+        if (d.axis === 'y') return // let the card scroll vertically, no drag
+
+        // Horizontal card swipe confirmed.
+        if (!d.active) {
+            d.active = true
+            if (d.onInput && document.activeElement) document.activeElement.blur()
+        }
         if (rafRef.current) return
         rafRef.current = requestAnimationFrame(() => {
             rafRef.current = null
@@ -179,6 +216,22 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         dragRef.current = null
         if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
         const dx = e.clientX - d.startX
+        const dy = e.clientY - d.startY
+
+        // Clean tap on an input with no horizontal drag: hand focus back so
+        // the user can type. Buttons/links fall through to their click.
+        if (!d.active && d.onInput && Math.abs(dx) < 7 && Math.abs(dy) < 7) {
+            const target = e.target.closest('input, textarea')
+            if (target) {
+                target.focus()
+                const len = target.value?.length ?? 0
+                if (typeof target.setSelectionRange === 'function') target.setSelectionRange(len, len)
+            }
+        }
+        if (!d.active || d.axis !== 'x') {
+            snapBack()
+            return
+        }
         if ((dx < -40 || d.vx < -350) && canNext) {
             buzz(12)
             flyOut(-1)
@@ -213,11 +266,11 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         })
         const settle = setTimeout(() => {
             el.style.willChange = ''
-            el.style.backdropFilter = ''
+            if (!lite) el.style.backdropFilter = ''
             if (glowRef.current) glowRef.current.style.opacity = '0'
         }, ENTER_MS + 60)
         return () => { cancelAnimationFrame(raf); clearTimeout(settle) }
-    }, [enterOffset, enterDir])
+    }, [enterOffset, enterDir, lite])
 
     useLayoutEffect(() => {
         const el = setsScrollRef.current
