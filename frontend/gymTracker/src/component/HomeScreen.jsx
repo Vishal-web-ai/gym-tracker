@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RiMenuLine, RiCloseLine } from '@remixicon/react'
-import { Check, Zap, BicepsFlexed, User, CalendarDays, RotateCcw } from 'lucide-react'
+import { Check, Zap, BicepsFlexed, User, CalendarDays, RotateCcw, Search } from 'lucide-react'
 import ExercisesList from './ExercisesList'
 import SessionTracker from './SessionTracker'
 import ExerciseDetail from './ExerciseDetail'
@@ -141,6 +141,8 @@ const HomeScreen = () => {
     const [monthlyCount, setMonthlyCount] = useState(0)
     const [statKey, setStatKey] = useState(0)
     const [prs, setPrs] = useState([])
+    const [prSearchOpen, setPrSearchOpen] = useState(false)
+    const [prQuery, setPrQuery] = useState('')
     const [photoData, setPhotoData] = useState('')
     const [bodyweight, setBodyweight] = useState(0)
     const [sessions, setSessions] = useState([])
@@ -767,12 +769,34 @@ const HomeScreen = () => {
                                 <div className='flex items-center gap-1.5'>
                                     <span className='text-orange-500 font-bebas tracking-[2px] text-sm'>PRs</span>
                                 </div>
+                                <button
+                                    onClick={() => { setPrSearchOpen(v => !v); if (prSearchOpen) setPrQuery('') }}
+                                    title='Search PRs'
+                                    aria-label={prSearchOpen ? 'Close search' : 'Search PRs'}
+                                    className='p-1 rounded-md hover:bg-white/10 transition-colors cursor-pointer text-orange-400'
+                                >
+                                    <Search size={13} />
+                                </button>
                             </div>
+                            {prSearchOpen && (
+                                <div className='flex items-center gap-1 border border-orange-500/30 rounded-lg px-2 py-1 mb-1.5'>
+                                    <Search size={11} className='text-orange-500/60 shrink-0' />
+                                    <input
+                                        value={prQuery}
+                                        onChange={e => setPrQuery(e.target.value)}
+                                        placeholder='Search PRs...'
+                                        autoFocus
+                                        className='bg-transparent text-white font-mono text-[10px] outline-none placeholder-orange-500/40 w-full'
+                                    />
+                                </div>
+                            )}
                             {prs.length === 0 ? (
                                 <p className='font-inter text-white/30 italic text-center w-full text-xs'>Complete workouts to earn PRs</p>
                             ) : (
                                 <div className='max-h-20 overflow-y-auto scroll flex flex-col gap-1'>
-                                    {prs.map((pr, i) => (
+                                    {prs
+                                        .filter(pr => !prSearchOpen || !prQuery.trim() || pr.name.toLowerCase().includes(prQuery.trim().toLowerCase()))
+                                        .map((pr, i) => (
                                         <div key={i} className='flex justify-between items-center w-full'>
                                             <p className='font-mono text-gray-300 flex-1 truncate text-[10px]'>{pr.name}</p>
                                             <p className='font-mono text-gray-300 text-[10px]'>{pr.weight}kg × {pr.reps}</p>
