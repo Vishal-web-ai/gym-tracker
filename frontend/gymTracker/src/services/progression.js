@@ -16,9 +16,9 @@ export const RANKS = [
     { name: 'Pro', color: '#f97316', icon: '/badge/pro.png' },
     { name: 'Elite', color: '#f43f5e', icon: '/badge/elite.png' },
     { name: 'Master', color: '#a855f7', icon: '/badge/master.png' },
-    { name: 'Grandmaster', color: '#e879f9', icon: '/badge/grandmaster.png' },
-    { name: 'Champion', color: '#facc15', icon: '/badge/champion.png' },
-    { name: 'Legend', color: '#fde047', icon: '/badge/legend.png' }
+    { name: 'Grandmaster', color: '#e879f9', icon: '/badge/grandmaster.png', landscape: true },
+    { name: 'Champion', color: '#facc15', icon: '/badge/champion.png', landscape: true },
+    { name: 'Legend', color: '#fde047', icon: '/badge/legend.png', landscape: true }
 ]
 
 export const MAX_LEVEL = RANKS.length

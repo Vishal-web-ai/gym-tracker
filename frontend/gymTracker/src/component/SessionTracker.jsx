@@ -87,8 +87,8 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
     const EXIT_EASE = 'cubic-bezier(0.5, 0, 0.9, 0.4)'     // accelerate off-screen
     const ENTER_EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
     const SNAP_MS = 170
-    const EXIT_MS = 240
-    const ENTER_MS = 190
+    const EXIT_MS = 150
+    const ENTER_MS = 160
     const SWIPE_THRESHOLD = 6
 
     const setCardTransform = (px, ms = 0) => {

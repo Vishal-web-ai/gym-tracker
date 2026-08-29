@@ -668,7 +668,6 @@ const HomeScreen = () => {
         { label: 'My Ranks', ariaLabel: 'Open my ranks', onClick: () => { setIsHamburgerOpen(false); setShowRanks(true) } },
         { label: 'Workout History', ariaLabel: 'Open workout history', onClick: () => { setIsHamburgerOpen(false); setShowHistory(true) } },
         { label: 'Gym Memories', ariaLabel: 'Open gym memories gallery', onClick: () => { setIsHamburgerOpen(false); setShowGallery(true) } },
-        { label: 'My Exercises', ariaLabel: 'Open my exercises', onClick: () => { setIsHamburgerOpen(false); setShowMyExercises(true) } },
         { label: 'Settings', ariaLabel: 'Open settings', onClick: () => { setIsHamburgerOpen(false); setShowSettings(true) } }
     ]
 
@@ -1233,11 +1232,21 @@ const HomeScreen = () => {
             {showSettings && (
                 <Settings
                     onClose={() => setShowSettings(false)}
-                    name={userName}
-                    onNameChange={setUserName}
                     onScheduleSaved={refreshTodaysSchedule}
                     onChallengesSaved={() => { refreshTodaysSchedule(); refreshProgress() }}
                     onOpenMyExercises={() => { setShowSettings(false); setShowMyExercises(true) }}
+                    onOpenProfileEditor={() => {
+                        setProfileName(userName)
+                        getUserProfile().then(p => {
+                            setProfileAge(p.age || '')
+                            setProfileWeight(p.weight || '')
+                            const h = parseInt(p.height, 10) || 0
+                            setProfileFeet(String(Math.floor(h / 30.48)))
+                            setProfileInch(String(Math.round((h % 30.48) / 2.54)))
+                        }).catch(() => {})
+                        setShowSettings(false)
+                        setShowPhotoModal(true)
+                    }}
                 />
             )}
         </div>

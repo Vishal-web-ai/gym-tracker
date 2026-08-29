@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { ArrowLeft, Volume2, Play, X } from 'lucide-react'
-import { RiEditLine, RiCalendarLine, RiTrophyLine, RiVolumeUpLine, RiDownloadLine, RiUploadLine, RiDumbbellLine } from '@remixicon/react'
+import { ArrowLeft, Volume2, Play, X, Dumbbell } from 'lucide-react'
+import { RiEditLine, RiCalendarLine, RiTrophyLine, RiVolumeUpLine, RiDownloadLine, RiUploadLine } from '@remixicon/react'
 import ScheduleEditor from './ScheduleEditor'
 import ChallengePicker from './ChallengePicker'
 import { playBeep } from '../services/audio'
-import { setName, getSchedule, saveSchedule, getRestSound, saveRestSound, getCustomExercises } from '../services/storage'
+import { getSchedule, saveSchedule, getRestSound, saveRestSound, getCustomExercises } from '../services/storage'
 import { getChallengePicks, saveChallengePicks } from '../services/progression'
 import { exportBackup, importBackup } from '../services/backup'
 import { getErrorMessage } from '../services/errors'
@@ -14,10 +14,7 @@ function formatBytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSaved, onOpenMyExercises }) => {
-    const [showNameModal, setShowNameModal] = useState(false)
-    const [newName, setNewName] = useState('')
-    const [saving, setSaving] = useState(false)
+const Settings = ({ onClose, onScheduleSaved, onChallengesSaved, onOpenMyExercises, onOpenProfileEditor }) => {
     const [backupBusy, setBackupBusy] = useState(false)
     const [busyLabel, setBusyLabel] = useState('')
     const [storageInfo, setStorageInfo] = useState(null)
@@ -62,25 +59,6 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSa
         }
         return () => { cancelled = true }
     }, [])
-
-    const handleOpenNameModal = () => {
-        setNewName(name || '')
-        setShowNameModal(true)
-    }
-
-    const handleSaveName = async () => {
-        if (!newName.trim()) return
-        setSaving(true)
-        try {
-            await setName(newName.trim())
-            onNameChange(newName.trim())
-            setShowNameModal(false)
-        } catch (err) {
-            alert(getErrorMessage(err))
-        } finally {
-            setSaving(false)
-        }
-    }
 
     const handleSaveSchedule = async () => {
         try {
@@ -209,11 +187,11 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSa
                     <p className='text-orange-400 text-center font-mono text-xs'>{busyLabel}</p>
                 )}
                 <button
-                    onClick={handleOpenNameModal}
+                    onClick={onOpenProfileEditor}
                     className='w-full flex items-center justify-center gap-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 font-mono font-bold py-3 px-4 rounded-xl transition-all cursor-pointer'
                 >
                     <RiEditLine size={20} />
-                    Change Username
+                    Change User Info
                 </button>
                 <button
                     onClick={() => setShowScheduleEditor(true)}
@@ -223,18 +201,18 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSa
                     Workout Schedule
                 </button>
                 <button
+                    onClick={onOpenMyExercises}
+                    className='w-full flex items-center justify-center gap-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 font-mono font-bold py-3 px-4 rounded-xl transition-all cursor-pointer'
+                >
+                    <Dumbbell size={20} />
+                    Add Your Exercises
+                </button>
+                <button
                     onClick={() => setShowChallengePicker(true)}
                     className='w-full flex items-center justify-center gap-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 font-mono font-bold py-3 px-4 rounded-xl transition-all cursor-pointer'
                 >
                     <RiTrophyLine size={20} />
                     Challenge Exercises
-                </button>
-                <button
-                    onClick={onOpenMyExercises}
-                    className='w-full flex items-center justify-center gap-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 font-mono font-bold py-3 px-4 rounded-xl transition-all cursor-pointer'
-                >
-                    <RiDumbbellLine size={20} />
-                    My Exercises
                 </button>
                 <button
                     onClick={() => setShowSoundModal(true)}
@@ -395,40 +373,6 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSa
                 </div>
             )}
 
-            {/* Name edit modal */}
-            {showNameModal && (
-                <div className='fixed inset-0 bg-neutral-900 z-50 flex items-center justify-center p-4'>
-                    <div className='bg-neutral-800 border border-orange-500/40 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-popIn'>
-                        <h2 className='text-white text-xl font-bold font-mono mb-4'>Change Username</h2>
-                        <input
-                            type='text'
-                            value={newName}
-                            onChange={(e) => setNewName(e.target.value)}
-                            placeholder='Enter your name'
-                            className='w-full bg-neutral-900 text-white border border-orange-500/30 rounded-xl px-4 py-3 font-mono outline-none focus:border-orange-500 placeholder-neutral-500'
-                            autoFocus
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveName()
-                            }}
-                        />
-                        <div className='flex gap-3 mt-6'>
-                            <button
-                                onClick={() => setShowNameModal(false)}
-                                className='flex-1 border border-neutral-600 text-white font-semibold py-3 rounded-xl hover:bg-neutral-700 transition-all duration-300 cursor-pointer font-mono'
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSaveName}
-                                disabled={saving || !newName.trim()}
-                                className='flex-1 bg-orange-500 text-black font-bold py-3 rounded-xl hover:bg-orange-400 transition-all duration-300 cursor-pointer font-mono disabled:opacity-50'
-                            >
-                                {saving ? 'Saving...' : 'Save'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }

@@ -116,7 +116,7 @@ const MyExercises = ({ onClose }) => {
     return (
         <div className='fixed inset-0 bg-neutral-900 z-50 flex flex-col'>
             <div className='flex items-center justify-between px-5 h-16 border-b border-neutral-700 shrink-0'>
-                <h1 className='text-white text-xl font-bold font-mono'>My Exercises</h1>
+                <h1 className='text-white text-xl font-bold font-mono'>Add Your Exercises</h1>
                 <X onClick={onClose} className='text-white cursor-pointer hover:opacity-70' size={28} />
             </div>
 
