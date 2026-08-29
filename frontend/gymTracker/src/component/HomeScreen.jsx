@@ -875,18 +875,20 @@ const HomeScreen = () => {
                 </div>
             </motion.div>
 
-            {/* Session panel */}
-            <AnimatePresence>
-                {showSession && (
-                    <motion.div
-                        key='session-panel'
-                        className='absolute inset-x-0 bottom-0 top-16 sm:top-20 z-30 overflow-hidden'
-            style={{ background: '#050505' }}
-                        initial={{ x: '100%', opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: '100%', opacity: 0 }}
-                        transition={{ x: { duration: 0.5, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.4 } }}
-                    >
+            {/* Session panel — kept mounted across nav so SessionTracker's heavy
+                init (history/ladder projection) runs once, not per open/close */}
+            <motion.div
+                className='absolute inset-x-0 bottom-0 top-16 sm:top-20 z-30 overflow-hidden'
+                style={{ background: '#050505' }}
+                initial={false}
+                animate={{
+                    x: showSession ? 0 : '100%',
+                    visibility: showSession ? 'visible' : 'hidden'
+                }}
+                transition={{ x: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }}
+                inert={!showSession}
+                aria-hidden={!showSession}
+            >
                         <AnimatePresence>
                             {previewExercise && (
                                 <motion.div
@@ -955,9 +957,6 @@ const HomeScreen = () => {
                             </div>
                         )}
                     </motion.div>
-                )}
-            </AnimatePresence>
-
             {/* Success overlay */}
             <AnimatePresence>
                 {showSuccess && (

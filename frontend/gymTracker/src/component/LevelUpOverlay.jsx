@@ -49,7 +49,7 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.9, opacity: 0 }}
-                    transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+                    transition={lite ? { type: 'tween', duration: 0.28, ease: [0.22, 1, 0.36, 1] } : { type: 'spring', damping: 28, stiffness: 260 }}
                     onClick={(e) => e.stopPropagation()}
                 >
                     <button
