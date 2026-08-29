@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, CheckCircle2, Circle } from 'lucide-react'
 import RankIcon from './RankIcon'
 import { RANKS } from '../services/progression'
+import { useDevice } from './DeviceContext'
 import { buzzStrong } from '../services/haptics'
 
 const challengeTarget = (ch) => {
@@ -14,6 +15,9 @@ const challengeTarget = (ch) => {
 const stagger = (i) => ({ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.15 + i * 0.1, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } })
 
 export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = false, progress = null, onClose }) {
+    const { lite } = useDevice()
+    const dur = lite ? 0.5 : 1.4  // slower fill = more frames composited; crush on weak GPUs
+    const enterEase = lite ? [0.34, 1.3, 0.64, 1] : [0.34, 1.56, 0.64, 1]
     const xpTotal = breakdown?.xp ?? null
     const groups = progress?.challenges?.[rank.level - 1]?.groups || []
     const doneCount = groups.filter((g) => g.done).length
@@ -62,17 +66,21 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
                             className='flex flex-col items-center'
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: 0.15, duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
+                            transition={{ delay: 0.15, duration: 0.5, ease: enterEase }}
                         >
                             <div className='relative mb-3'>
-                                <div
-                                    className='absolute inset-[-20px] rounded-full opacity-40 blur-2xl'
-                                    style={{ background: `radial-gradient(circle, ${rank.color}, transparent 70%)` }}
-                                />
-                                <div
-                                    className='absolute inset-[-10px] rounded-full opacity-20 blur-xl'
-                                    style={{ background: rank.color }}
-                                />
+                                {!lite && (
+                                    <>
+                                        <div
+                                            className='absolute inset-[-20px] rounded-full opacity-40 blur-2xl'
+                                            style={{ background: `radial-gradient(circle, ${rank.color}, transparent 70%)` }}
+                                        />
+                                        <div
+                                            className='absolute inset-[-10px] rounded-full opacity-20 blur-xl'
+                                            style={{ background: rank.color }}
+                                        />
+                                    </>
+                                )}
                                 <RankIcon rank={rank} size={120} />
                             </div>
 
@@ -105,32 +113,36 @@ export default function LevelUpOverlay({ rank, breakdown = null, isLevelUp = fal
                                 </span>
                             </div>
                             <div className='relative h-4 rounded-full bg-white/[0.07] overflow-hidden'>
-                                <motion.div
-                                    className='absolute inset-0 rounded-full opacity-30 blur-sm'
-                                    style={{ background: rank.color }}
-                                    initial={{ width: '0%' }}
-                                    animate={{ width: `${Math.round(totalFraction * 100)}%` }}
-                                    transition={{ delay: 0.6, duration: 1.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-                                />
+                                {!lite && (
+                                    <motion.div
+                                        className='absolute inset-0 rounded-full opacity-30 blur-sm'
+                                        style={{ background: rank.color }}
+                                        initial={{ width: '0%' }}
+                                        animate={{ width: `${Math.round(totalFraction * 100)}%` }}
+                                        transition={{ delay: 0.6, duration: dur, ease: [0.25, 0.46, 0.45, 0.94] }}
+                                    />
+                                )}
                                 <motion.div
                                     className='absolute inset-0 h-full rounded-full'
                                     style={{
                                         background: `linear-gradient(90deg, ${rank.color}cc, ${rank.color})`,
-                                        boxShadow: `0 0 18px ${rank.color}66, inset 0 1px 0 rgba(255,255,255,0.15)`
+                                        boxShadow: lite ? 'none' : `0 0 18px ${rank.color}66, inset 0 1px 0 rgba(255,255,255,0.15)`
                                     }}
                                     initial={{ width: '0%' }}
                                     animate={{ width: `${Math.round(totalFraction * 100)}%` }}
-                                    transition={{ delay: 0.6, duration: 1.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+                                    transition={{ delay: 0.6, duration: dur, ease: [0.25, 0.46, 0.45, 0.94] }}
                                 />
-                                <motion.div
-                                    className='absolute top-0 left-0 h-full w-12 rounded-full'
-                                    style={{
-                                        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)',
-                                    }}
-                                    initial={{ left: '0%' }}
-                                    animate={{ left: `${Math.round(totalFraction * 100)}%` }}
-                                    transition={{ delay: 2.0, duration: 0.6, ease: 'easeOut' }}
-                                />
+                                {!lite && (
+                                    <motion.div
+                                        className='absolute top-0 left-0 h-full w-12 rounded-full'
+                                        style={{
+                                            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)',
+                                        }}
+                                        initial={{ left: '0%' }}
+                                        animate={{ left: `${Math.round(totalFraction * 100)}%` }}
+                                        transition={{ delay: 2.0, duration: 0.6, ease: 'easeOut' }}
+                                    />
+                                )}
                             </div>
                             {!isMaxRank && (
                                 <motion.p
