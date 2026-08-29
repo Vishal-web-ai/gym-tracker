@@ -153,8 +153,18 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         // Start tracking from anywhere on the card, including set/weight/reps
         // inputs and buttons. Focus is deferred to pointerup so a horizontal
         // swipe over an input still slides the card instead of typing.
+        const target = e.target.closest('input, textarea') || e.target.closest('button')
         const onInput = !!e.target.closest('input, textarea')
+        // Disable the browser's own native gesture handling on the touched
+        // control for the duration of the drag, so it can't hijack the move
+        // (e.g. text selection on focused inputs) and send us a pointercancel.
+        if (target) {
+            target.style.touchAction = 'none'
+            target.style.userSelect = 'none'
+            target.style.webkitUserSelect = 'none'
+        }
         if (onInput) e.preventDefault()
+        const onButton = !!e.target.closest('button')
         dragRef.current = {
             id: e.pointerId,
             startX: e.clientX,
@@ -167,7 +177,8 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
             dy: 0,
             axis: null,       // 'x' (card swipe) or 'y' (vertical scroll)
             active: false,    // once horizontal swipe confirmed
-            onInput
+            inputTarget: onInput ? target : null,
+            button: onButton ? target : null
         }
         try { el.setPointerCapture(e.pointerId) } catch { /* pointer capture is optional */ }
         el.style.transition = 'none'
@@ -217,16 +228,23 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
         const dx = e.clientX - d.startX
         const dy = e.clientY - d.startY
-
-        // Clean tap on an input with no horizontal drag: hand focus back so
-        // the user can type. Buttons/links fall through to their click.
-        if (!d.active && d.onInput && Math.abs(dx) < 7 && Math.abs(dy) < 7) {
-            const target = e.target.closest('input, textarea')
-            if (target) {
-                target.focus()
-                const len = target.value?.length ?? 0
-                if (typeof target.setSelectionRange === 'function') target.setSelectionRange(len, len)
+        const restoreControl = () => {
+            if (d.inputTarget) {
+                d.inputTarget.style.touchAction = ''
+                d.inputTarget.style.userSelect = ''
+                d.inputTarget.style.webkitUserSelect = ''
             }
+        }
+        // Clean tap on an input with no horizontal drag: hand focus back so
+        // the user can type.
+        if (!d.active && d.inputTarget && Math.abs(dx) < 7 && Math.abs(dy) < 7) {
+            restoreControl()
+            const t = d.inputTarget
+            t.focus()
+            const len = t.value?.length ?? 0
+            if (typeof t.setSelectionRange === 'function') t.setSelectionRange(len, len)
+        } else {
+            restoreControl()
         }
         if (!d.active || d.axis !== 'x') {
             snapBack()
