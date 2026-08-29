@@ -349,7 +349,7 @@ const Onboarding = ({ onDone }) => {
                         />
                     )}
 
-                    <div className='flex gap-4 mt-6'>
+                    <div className='sticky bottom-0 flex gap-4 mt-6 pt-3 bg-gradient-to-b from-transparent to-[#050505] -mx-4 px-4 pb-2'>
                         {step < STEP_TITLES.length - 1 ? (
                             <>
                                 <button
