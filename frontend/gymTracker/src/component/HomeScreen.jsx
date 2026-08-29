@@ -882,10 +882,11 @@ const HomeScreen = () => {
                 style={{ background: '#050505' }}
                 initial={false}
                 animate={{
-                    x: showSession ? 0 : '100%',
+                    opacity: showSession ? 1 : 0,
+                    y: showSession ? 0 : 40,
                     visibility: showSession ? 'visible' : 'hidden'
                 }}
-                transition={{ x: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }}
+                transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
                 inert={!showSession}
                 aria-hidden={!showSession}
             >
