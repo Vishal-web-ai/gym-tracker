@@ -1237,6 +1237,7 @@ const HomeScreen = () => {
                     onNameChange={setUserName}
                     onScheduleSaved={refreshTodaysSchedule}
                     onChallengesSaved={() => { refreshTodaysSchedule(); refreshProgress() }}
+                    onOpenMyExercises={() => { setShowSettings(false); setShowMyExercises(true) }}
                 />
             )}
         </div>

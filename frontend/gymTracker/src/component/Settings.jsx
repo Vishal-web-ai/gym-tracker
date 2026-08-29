@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { ArrowLeft, Volume2, Play, X } from 'lucide-react'
-import { RiEditLine, RiCalendarLine, RiTrophyLine, RiVolumeUpLine, RiDownloadLine, RiUploadLine } from '@remixicon/react'
+import { RiEditLine, RiCalendarLine, RiTrophyLine, RiVolumeUpLine, RiDownloadLine, RiUploadLine, RiDumbbellLine } from '@remixicon/react'
 import ScheduleEditor from './ScheduleEditor'
 import ChallengePicker from './ChallengePicker'
 import { playBeep } from '../services/audio'
@@ -14,7 +14,7 @@ function formatBytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSaved }) => {
+const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSaved, onOpenMyExercises }) => {
     const [showNameModal, setShowNameModal] = useState(false)
     const [newName, setNewName] = useState('')
     const [saving, setSaving] = useState(false)
@@ -228,6 +228,13 @@ const Settings = ({ onClose, name, onNameChange, onScheduleSaved, onChallengesSa
                 >
                     <RiTrophyLine size={20} />
                     Challenge Exercises
+                </button>
+                <button
+                    onClick={onOpenMyExercises}
+                    className='w-full flex items-center justify-center gap-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 font-mono font-bold py-3 px-4 rounded-xl transition-all cursor-pointer'
+                >
+                    <RiDumbbellLine size={20} />
+                    My Exercises
                 </button>
                 <button
                     onClick={() => setShowSoundModal(true)}
