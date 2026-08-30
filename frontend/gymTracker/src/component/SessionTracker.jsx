@@ -103,12 +103,13 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         el.style.transform = `translate3d(${px}px, 0, 0) rotate(${rot}deg) scale(${1 - 0.04 * prog})`
         el.style.willChange = 'transform'
         // Glow opacity is a separate layer paint every frame; leave it at a
-        // fixed mid-state while dragging and let it snap on release.
-        if (glowRef.current && glowRef.current.style.opacity === '0') {
-            glowRef.current.style.opacity = '0.28'
-        }
+        // fixed mid-state while dragging and let it snap on release. Only light
+        // it on a real drag (px !== 0) so a plain tap never flashes it.
         clearTimeout(settleTimerRef.current)
         if (px !== 0) {
+            if (glowRef.current && glowRef.current.style.opacity === '0') {
+                glowRef.current.style.opacity = '0.28'
+            }
             // backdrop-blur is very expensive on weak devices while a layer is
             // moving (it re-samples the backdrop every frame). Drop it during
             // motion. On lite devices it stays off permanently; elsewhere it is
@@ -337,6 +338,13 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
         return buildHistoryIndex([...(sessions || []), ...synthetic])[exercise.name]
     }, [sessions, exercise.name, exercise.mode, exerciseDone, exerciseSets, exerciseWeights, idx, setCount, isTimer, isCounts])
     const ladder = ladders?.[exercise.name] ? ladderView(ladders[exercise.name], bodyweight) : null
+    const customProfile = !isTimer && exercise.incrementWeight > 0 && exercise.startWeight > 0
+        && !(isBodyweight && !(bodyweight > 0))
+    if (ladder && customProfile) {
+        const start = isBodyweight ? Number(bodyweight) + Number(exercise.startWeight) : Number(exercise.startWeight)
+        ladder.startTarget = start
+        ladder.nextTarget = start + (ladder.successes || 0) * Number(exercise.incrementWeight)
+    }
     let livePerf = 0
     for (let si = 0; si < setCount; si++) {
         if (!exerciseDone[idx]?.[si]) continue
@@ -376,9 +384,11 @@ const ExerciseCard = ({ exercise, idx, enterDir, onRemove, exerciseWeights, exer
             bodyweight,
             exercise.name,
             exercise.challengeTime,
-            exercise.challengeStep
+            exercise.challengeStep,
+            exercise.startWeight,
+            exercise.incrementWeight
         )
-    }, [completedSets, ladders, exercise.name, exercise.mode, exercise.category, bodyweight, exercise.challengeTime, exercise.challengeStep])
+    }, [completedSets, ladders, exercise.name, exercise.mode, exercise.category, bodyweight, exercise.challengeTime, exercise.challengeStep, exercise.startWeight, exercise.incrementWeight])
 
     const prevLevelRef = useRef(projected?.projectedLevel ?? 0)
     const levelUpTimerRef = useRef(null)

@@ -349,6 +349,33 @@ describe('exercise badge ladders', () => {
         expect(beginnerTarget({ category: 'Cardio', mode: 'timer', name: 'Battle Ropes', challengeTime: 2.5 })).toBe(150)
     })
 
+    it('uses a custom exercise start weight + increment for the weight ladder', () => {
+        expect(beginnerTarget({ category: 'Chest', mode: 'weight', name: 'My Lift', startWeight: 20 })).toBe(20)
+        expect(nextWeightTarget(20, 'My Lift', 5)).toBe(25)
+        const proj = projectExerciseLadder(null, [], 'weight', 'Chest', 60, 'My Lift', null, null, 20, 5)
+        expect(proj.entry.nextTarget).toBe(20)
+        expect(proj.entry.startTarget).toBe(20)
+        const done = projectExerciseLadder(null, [{ reps: '8', weight: '20' }], 'weight', 'Chest', 60, 'My Lift', null, null, 20, 5)
+        expect(done.entry.successes).toBe(1)
+        expect(done.entry.nextTarget).toBe(25)
+    })
+
+    it('uses custom start + increment for a counts exercise ladder', () => {
+        const fresh = projectExerciseLadder(null, [], 'counts', 'Cardio', 60, 'My Counts', null, null, 12, 3)
+        expect(fresh.entry.nextTarget).toBe(12)
+        const done = projectExerciseLadder(null, [{ reps: '12' }], 'counts', 'Cardio', 60, 'My Counts', null, null, 12, 3)
+        expect(done.entry.successes).toBe(1)
+        expect(done.entry.nextTarget).toBe(15)
+    })
+
+    it('uses custom added load + increment for a bodyweight exercise ladder', () => {
+        const fresh = projectExerciseLadder(null, [], 'bodyweight', 'Chest', 70, 'My Body', null, null, 0, 5)
+        expect(fresh.entry.nextTarget).toBe(12)
+        const done = projectExerciseLadder(null, [{ reps: '12', weight: '70' }], 'bodyweight', 'Chest', 70, 'My Body', null, null, 0, 5)
+        expect(done.entry.successes).toBe(1)
+        expect(done.entry.nextTarget).toBe(75)
+    })
+
     it('case 1+6: first-session weight lands at the level the lift earns', () => {
         const { ladders, promotions } = applySessionToLadders({}, bench([{ reps: '8', weight: '18' }]), 60)
         const entry = ladders['Flat Bench Press']

@@ -431,9 +431,9 @@ function roundTo(value, step) {
 //   Lateral Raises: 5 → 6.25 → 7.5 → 8.75 (step 1.25)
 //   Bench Press:    20 → 22.5 → 25 → 27.5  (step 2.5)
 //   Leg Press:      50 → 60 → 70 → 80      (step 10)
-export function nextWeightTarget(lastSuccess, exerciseName) {
-    const preset = exerciseName ? EXERCISE_PRESETS[exerciseName] : null
-    const step = preset?.step || 2.5
+export function nextWeightTarget(lastSuccess, exerciseName, increment) {
+    const step = increment > 0 ? Number(increment) : (exerciseName ? EXERCISE_PRESETS[exerciseName]?.step : null) || 2.5
+    if (increment > 0) return lastSuccess + step
     return Math.max(lastSuccess + step, roundTo(lastSuccess * 1.08, step))
 }
 
@@ -454,7 +454,8 @@ export function nextRepTarget(lastSuccess) {
 // Counts target: every level costs a flat +3 counts so 12 → 15 → 18 → 21 is
 // easy to read. Past 50 counts the step switches to ~10% so huge counts like
 // jump rope don't rank up on the back of a trivial +3.
-export function nextCountTarget(lastSuccess) {
+export function nextCountTarget(lastSuccess, increment) {
+    if (increment > 0) return lastSuccess + Number(increment)
     if (lastSuccess > 50) return roundTo(lastSuccess * 1.1, 2)
     return lastSuccess + 3
 }
@@ -462,7 +463,7 @@ export function nextCountTarget(lastSuccess) {
 // Initial placement for a new exercise. Uses exercise-specific presets from
 // research data — e.g. lateral raises start at 5 kg (tiny muscle), leg press
 // starts at 50 kg (large muscle group). Falls back to category defaults.
-export function beginnerTarget({ category, mode, name, challengeTime }) {
+export function beginnerTarget({ category, mode, name, challengeTime, startWeight }) {
     if (mode === 'timer') {
         if (challengeTime > 0) return challengeTime * 60
         const preset = name ? TIME_PRESETS[name] : null
@@ -471,7 +472,8 @@ export function beginnerTarget({ category, mode, name, challengeTime }) {
         return Math.max(15, roundTo(cat * 0.3, 5))
     }
     if (mode === 'bodyweight') return 12
-    if (mode === 'counts') return 12
+    if (mode === 'counts') return startWeight > 0 ? Number(startWeight) : 12
+    if (startWeight > 0) return Number(startWeight)
     const preset = presetForExercise(name)
     return preset.start ?? 2.5
 }
@@ -640,8 +642,8 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
                     // the live session projection uses — so a strong first
                     // session lands at its real level instead of always starting
                     // at Level 1.
-                    const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isCounts ? 'counts' : 'weight', name: ex.name, challengeTime: ex.challengeTime })
-                    const stepFn = isTimer ? (p) => nextTimeTarget(p, ex.name, ex.challengeStep) : isCounts ? nextCountTarget : (p) => nextWeightTarget(p, ex.name)
+                    const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isCounts ? 'counts' : 'weight', name: ex.name, challengeTime: ex.challengeTime, startWeight: ex.startWeight })
+                    const stepFn = isTimer ? (p) => nextTimeTarget(p, ex.name, ex.challengeStep) : isCounts ? (p) => nextCountTarget(p, ex.incrementWeight) : (p) => nextWeightTarget(p, ex.name, ex.incrementWeight)
                     let successes = 0
                     let target = start
                     while (successes < 1000) {
@@ -668,7 +670,7 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
                 continue
             }
 
-            const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isCounts ? 'counts' : isBodyweight ? 'bodyweight' : 'weight', name: ex.name, challengeTime: ex.challengeTime })
+            const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isCounts ? 'counts' : isBodyweight ? 'bodyweight' : 'weight', name: ex.name, challengeTime: ex.challengeTime, startWeight: ex.startWeight })
             entry = {
                 mode: ex.mode || (isTimer ? 'timer' : isCounts ? 'counts' : isBodyweight ? 'bodyweight' : 'weight'),
                 category,
@@ -711,6 +713,13 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
             }
         if (perf > (entry.personalBest || 0)) entry.personalBest = perf
         const prevTier = entry.successes || 0
+        const customProfile = !isTimer && ex.incrementWeight > 0
+            && !(isBodyweight && !(bodyweight > 0))
+        if (customProfile) {
+            const start = isBodyweight ? Number(bodyweight) + (Number(ex.startWeight) || 0) : Number(ex.startWeight)
+            entry.startTarget = start
+            entry.nextTarget = start + (entry.successes || 0) * Number(ex.incrementWeight)
+        }
         if (perf > 0 && perf >= entry.nextTarget) {
             const prevLevel = entry.successes || 0
             let levelUps = 0
@@ -718,18 +727,19 @@ export function applySessionToLadders(ladders, session, bodyweight = 0, now = ne
                 // Rep gate: 12 bodyweight reps clears Level 1; beyond that the
                 // ladder runs on total load (bodyweight + plates) like weights.
                 entry.successes = 1
-                entry.lastSuccess = bodyweightTargetForLevel(1, bodyweight) || perf
-                entry.nextTarget = bodyweightTargetForLevel(2, bodyweight)
+                entry.lastSuccess = customProfile ? bodyweightTargetForLevel(1, bodyweight) + Number(ex.startWeight) : (bodyweightTargetForLevel(1, bodyweight) || perf)
+                entry.nextTarget = customProfile ? bodyweightTargetForLevel(1, bodyweight) + Number(ex.startWeight) + Number(ex.incrementWeight) : bodyweightTargetForLevel(2, bodyweight)
             } else if (isBodyweight) {
                 // Total-load progression, exactly like a weighted exercise.
+                const bwStep = customProfile ? Number(ex.incrementWeight) : BODYWEIGHT_STEP
                 while (perf >= entry.nextTarget) {
                     levelUps++
-                    entry.nextTarget += BODYWEIGHT_STEP
+                    entry.nextTarget += bwStep
                 }
                 entry.successes = (entry.successes || 0) + levelUps
                 entry.lastSuccess = perf
             } else {
-                const stepFn = isTimer ? (p) => nextTimeTarget(p, ex.name, ex.challengeStep) : isCounts ? nextCountTarget : (p) => nextWeightTarget(p, ex.name)
+                const stepFn = isTimer ? (p) => nextTimeTarget(p, ex.name, ex.challengeStep) : isCounts ? (p) => nextCountTarget(p, ex.incrementWeight) : (p) => nextWeightTarget(p, ex.name, ex.incrementWeight)
                 let target = entry.nextTarget
                 while (perf >= target) {
                     levelUps++
@@ -795,15 +805,29 @@ export async function recordSessionLadders(session, bodyweight = 0) {
 // Projects the ladder state for a single exercise based on in-progress sets.
 // Used for live level display during active sessions. Returns the projected
 // ladder entry (or null if no data) and whether a level-up occurred.
-export function projectExerciseLadder(persistedEntry, sets, mode, category, bodyweight = 0, exerciseName = '', challengeTime, challengeStep) {
+export function projectExerciseLadder(persistedEntry, sets, mode, category, bodyweight = 0, exerciseName = '', challengeTime, challengeStep, startWeight, incrementWeight) {
     const isTimer = mode === 'timer'
     const isBodyweight = mode === 'bodyweight'
     const isCounts = mode === 'counts'
     let entry = persistedEntry ? { ...persistedEntry } : null
 
+    // A custom weight/counts/bodyweight exercise with its own increment defines
+    // a fully deterministic ladder: level 1 = startWeight (for bodyweight that
+    // is added load on top of the user's bodyweight), each level beyond adds
+    // the increment. Ignore any persisted entry (it may hold targets from
+    // earlier category presets) and rebuild from scratch off this session's
+    // sets. Bodyweight needs the user's bodyweight to place the base.
+    if (
+        !isTimer
+        && incrementWeight > 0
+        && !(isBodyweight && !(bodyweight > 0))
+    ) {
+        entry = null
+    }
+
     // If no persisted entry, create a beginner entry
     if (!entry) {
-        const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isCounts ? 'counts' : isBodyweight ? 'bodyweight' : 'weight', name: exerciseName, challengeTime })
+        const start = beginnerTarget({ bodyweight, category, mode: isTimer ? 'timer' : isCounts ? 'counts' : isBodyweight ? 'bodyweight' : 'weight', name: exerciseName, challengeTime, startWeight })
         entry = {
             mode: mode || (isTimer ? 'timer' : isCounts ? 'counts' : isBodyweight ? 'bodyweight' : 'weight'),
             category,
@@ -841,6 +865,11 @@ export function projectExerciseLadder(persistedEntry, sets, mode, category, body
     const prevTier = entry.successes || 0
     let levelUps = 0
 
+    const customBw = isBodyweight && incrementWeight > 0
+    const bwStep = customBw ? Number(incrementWeight) : BODYWEIGHT_STEP
+    const startAdded = Number(startWeight) || 0
+    const bwLevel1 = isBodyweight && incrementWeight > 0 ? Number(bodyweight) + startAdded : (bodyweightTargetForLevel(1, bodyweight) || parseFloat(bodyweight) || 0)
+
     if (isBodyweight) {
         // Level 0 → Level 1 rep gate (12 reps), then fall through into the
         // total-load ladder once the entry is at Level 1+, so a single session
@@ -849,8 +878,8 @@ export function projectExerciseLadder(persistedEntry, sets, mode, category, body
         let repGatePassed = false
         if (prevTier === 0 && maxReps > 0 && maxReps >= entry.nextTarget) {
             entry.successes = 1
-            entry.lastSuccess = bodyweightTargetForLevel(1, bodyweight) || maxReps
-            entry.nextTarget = bodyweightTargetForLevel(2, bodyweight)
+            entry.lastSuccess = bwLevel1 || maxReps
+            entry.nextTarget = bwLevel1 + bwStep
             entry.personalBest = Math.max(entry.personalBest || 0, entry.lastSuccess)
             levelUps = 1
             repGatePassed = true
@@ -858,7 +887,7 @@ export function projectExerciseLadder(persistedEntry, sets, mode, category, body
         if (prevTier >= 1 || repGatePassed) {
             while (maxWeight > 0 && maxWeight >= entry.nextTarget) {
                 weightLevelUps++
-                entry.nextTarget += BODYWEIGHT_STEP
+                entry.nextTarget += bwStep
             }
             if (weightLevelUps > 0) {
                 entry.successes = (entry.successes || 0) + weightLevelUps
@@ -885,7 +914,7 @@ export function projectExerciseLadder(persistedEntry, sets, mode, category, body
             let target = entry.nextTarget
             while (perf >= target) {
                 levelUps++
-                target = nextCountTarget(target)
+                target = nextCountTarget(target, incrementWeight)
             }
             entry.successes = (entry.successes || 0) + levelUps
             entry.lastSuccess = perf
@@ -897,7 +926,7 @@ export function projectExerciseLadder(persistedEntry, sets, mode, category, body
             let target = entry.nextTarget
             while (maxWeight >= target) {
                 levelUps++
-                target = nextWeightTarget(target, exerciseName)
+                target = nextWeightTarget(target, exerciseName, incrementWeight)
             }
             entry.successes = (entry.successes || 0) + levelUps
             entry.lastSuccess = maxWeight

@@ -432,7 +432,9 @@ const HomeScreen = () => {
             mode: exercise.mode,
             category: exercise.category || exerciseMetaByName(exercise.name)?.category,
             challengeTime: exercise.challengeTime || null,
-            challengeStep: exercise.challengeStep || null
+            challengeStep: exercise.challengeStep || null,
+            startWeight: exercise.startWeight || null,
+            incrementWeight: exercise.incrementWeight || null
         }
         setSelectedExercises(prev => {
             const next = [...prev, newExercise]
@@ -502,7 +504,9 @@ const HomeScreen = () => {
                     mode: e.mode,
                     category: e.category || exerciseMetaByName(e.name)?.category,
                     challengeTime: custom?.challengeTime || null,
-                    challengeStep: custom?.challengeStep || null
+                    challengeStep: custom?.challengeStep || null,
+                    startWeight: custom?.startWeight || null,
+                    incrementWeight: custom?.incrementWeight || null
                 }
             })
             setPlannedExercises(list)
@@ -882,15 +886,21 @@ const HomeScreen = () => {
                             style={{ marginTop: 17 }}
                         >
                             <button
+                                disabled={workoutCompletedToday}
                                 onClick={selectedExercises.length > 0 ? handleResumeSession : handleStartClick}
-                                className='flex items-center gap-3 rounded-2xl bg-[#f97316] border border-[#c2410c] px-6 py-2 cursor-pointer'
+                                className={[
+                                    'flex items-center gap-3 rounded-2xl border px-6 py-2',
+                                    workoutCompletedToday
+                                        ? 'bg-white/10 border-white/10 cursor-not-allowed'
+                                        : 'bg-[#f97316] border-[#c2410c] cursor-pointer'
+                                ].join(' ')}
                             >
                                 {selectedExercises.length > 0 ? (
-                                    <RotateCcw size={20} color="black" className='w-5 h-5' />
+                                    <RotateCcw size={20} color={workoutCompletedToday ? '#888' : 'black'} className='w-5 h-5' />
                                 ) : (
-                                    <Zap size={24} color="black" className='w-5 h-5' />
+                                    <Zap size={24} color={workoutCompletedToday ? '#888' : 'black'} className='w-5 h-5' />
                                 )}
-                                <span className='font-bebas tracking-[2px] text-black text-2xl'>
+                                <span className={`font-bebas tracking-[2px] text-2xl ${workoutCompletedToday ? 'text-white/50' : 'text-black'}`}>
                                     {selectedExercises.length > 0 ? 'Resume Session' : 'Start Session'}
                                 </span>
                             </button>

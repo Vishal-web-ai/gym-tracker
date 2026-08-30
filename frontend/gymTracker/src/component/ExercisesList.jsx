@@ -28,7 +28,7 @@ const ModeTag = ({ mode }) => (
     </span>
 )
 
-const formInitial = { name: '', category: 'Chest', mode: 'weight', muscle: '', challengeTime: '', challengeStep: '' }
+const formInitial = { name: '', category: 'Chest', mode: 'weight', muscle: '', challengeTime: '', challengeStep: '', startWeight: '', incrementWeight: '' }
 
 const ExercisesList = ({ onSelectExercise, onClose }) => {
     const [customExercises, setCustomExercises] = useState([])
@@ -83,7 +83,9 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
             mode: 'weight',
             muscle: '',
             challengeTime: '',
-            challengeStep: ''
+            challengeStep: '',
+            startWeight: '',
+            incrementWeight: ''
         })
         setSaveError('')
         setShowForm(true)
@@ -97,7 +99,9 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
             mode: ex.mode === 'timer' ? 'timer' : ex.mode === 'bodyweight' ? 'bodyweight' : ex.mode === 'counts' ? 'counts' : 'weight',
             muscle: ex.muscle || '',
             challengeTime: formatChallengeTime(ex.challengeTime),
-            challengeStep: formatChallengeStep(ex.challengeStep)
+            challengeStep: formatChallengeStep(ex.challengeStep),
+            startWeight: ex.startWeight ?? '',
+            incrementWeight: ex.incrementWeight ?? ''
         })
         setSaveError('')
         setShowForm(true)
@@ -136,7 +140,12 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
         setSaving(true)
         setSaveError('')
         try {
-            const payload = { ...formData, challengeTime, challengeStep }
+            const payload = {
+                ...formData,
+                startWeight: formData.startWeight === '' ? '' : Number(formData.startWeight),
+                incrementWeight: formData.incrementWeight === '' ? '' : Number(formData.incrementWeight),
+                challengeTime, challengeStep
+            }
             if (editingId) {
                 await updateExercise(editingId, payload)
             } else {
@@ -343,6 +352,42 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
                                 className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2.5 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
                             />
                         </div>
+                        {(formData.mode === 'weight' || formData.mode === 'bodyweight' || formData.mode === 'counts') && (
+                            <>
+                                <div>
+                                    <p className='text-[10px] font-mono tracking-widest text-orange-500/50 mb-1'>
+                                        {formData.mode === 'weight' ? 'START WEIGHT (KG)' : formData.mode === 'bodyweight' ? 'START ADDED LOAD (KG)' : 'START COUNT (REPS)'}
+                                    </p>
+                                    <input
+                                        type='text'
+                                        inputMode='decimal'
+                                        value={formData.startWeight}
+                                        onChange={e => {
+                                            const v = e.target.value
+                                            if (v === '' || /^\d*\.?\d*$/.test(v)) setFormData(p => ({ ...p, startWeight: v }))
+                                        }}
+                                        placeholder='Optional'
+                                        className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2.5 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
+                                    />
+                                </div>
+                                <div>
+                                    <p className='text-[10px] font-mono tracking-widest text-orange-500/50 mb-1'>
+                                        {formData.mode === 'weight' ? 'INCREMENT (KG)' : formData.mode === 'bodyweight' ? 'INCREMENT LOAD (KG)' : 'INCREMENT (REPS)'}
+                                    </p>
+                                    <input
+                                        type='text'
+                                        inputMode='decimal'
+                                        value={formData.incrementWeight}
+                                        onChange={e => {
+                                            const v = e.target.value
+                                            if (v === '' || /^\d*\.?\d*$/.test(v)) setFormData(p => ({ ...p, incrementWeight: v }))
+                                        }}
+                                        placeholder='Optional'
+                                        className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2.5 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
+                                    />
+                                </div>
+                            </>
+                        )}
                         {(formData.mode === 'timer' || (formData.category === 'Cardio' && formData.mode !== 'counts')) && (
                             <div>
                                 <p className='text-[10px] font-mono tracking-widest text-teal-400/60 mb-1'>CHALLENGE TIME — RANK 1 TARGET</p>
