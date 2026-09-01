@@ -949,6 +949,7 @@ describe('rank challenges', () => {
         const progress = computeProgress({ sessions: [], frozenDays: [], now: new Date('2026-08-10T12:00:00'), startRank: 4 })
         expect(progress.rank.level).toBe(4)
         expect(progress.rank.name).toBe('Intermediate')
+        // The start rank seeds its threshold XP as a bank.
         expect(progress.xp).toBe(xpThresholdForLevel(4))
         // Ranks strictly below the start rank are granted...
         expect(progress.challenges[0].groups.every((g) => g.done)).toBe(true)
@@ -956,6 +957,25 @@ describe('rank challenges', () => {
         // ...but the start rank itself is a real checklist, never pre-filled.
         expect(progress.challenges[3].groups.every((g) => g.done)).toBe(false)
         expect(progress.challenges[4].groups.every((g) => g.done)).toBe(false)
+    })
+
+    it('adds every saved session XP on top of the seeded start-rank bank', () => {
+        const one = computeProgress({
+            sessions: [{ id: 'a', name: 'W', createdAt: '2026-08-10T09:00:00', exercises: [lift('Flat Bench Press', 20)] }],
+            frozenDays: [],
+            now: new Date('2026-08-10T12:00:00'),
+            startRank: 4
+        })
+        expect(one.xp).toBe(xpThresholdForLevel(4) + 20)
+        expect(one.rank.xp).toBe(xpThresholdForLevel(4) + 20)
+        const two = computeProgress({
+            sessions: [{ id: 'a', name: 'W', createdAt: '2026-08-10T09:00:00', exercises: [lift('Flat Bench Press', 20)] }, { id: 'b', name: 'W', createdAt: '2026-08-11T09:00:00', exercises: [lift('Deadlift', 35)] }],
+            frozenDays: [],
+            now: new Date('2026-08-11T12:00:00'),
+            startRank: 4
+        })
+        expect(two.xp).toBe(xpThresholdForLevel(4) + 40)
+        expect(two.rank.xp).toBe(xpThresholdForLevel(4) + 40)
     })
 
     it('does not pre-fill the Rookie checklist for a fresh beginner', () => {

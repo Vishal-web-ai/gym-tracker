@@ -1360,7 +1360,12 @@ export function computeStreakWithFreezes(sessions, frozenDays = [], now = new Da
 // ---------------------------------------------------------------------------
 
 export function computeProgress({ sessions, frozenDays = [], now = new Date(), startRank = 1, bodyweight = 0, picks = {}, customExercises = [], ladders = {} }) {
-    const xp = Math.max(totalXp(sessions), xpThresholdForLevel(startRank))
+    // The start rank grants a one-time XP bank equal to its threshold, so a
+    // user who starts as Intermediate begins at 600 XP and every saved session
+    // adds its earned XP on top of that bank. Without the bank, a new session's
+    // +XP would appear to vanish until session XP overtook the start floor.
+    const earnedXp = totalXp(sessions)
+    const xp = earnedXp + xpThresholdForLevel(startRank)
     const xpRank = rankForXp(xp)
     const eligible = Math.max(startRank, challengeEligibleLevel(sessions, picks, customExercises))
     const level = Math.min(xpRank.level, eligible)
@@ -1373,9 +1378,10 @@ export function computeProgress({ sessions, frozenDays = [], now = new Date(), s
         rank: {
             ...xpRank,
             level,
+            xp,
             threshold,
             nextThreshold,
-            progress: nextThreshold ? Math.min((xp - threshold) / (nextThreshold - threshold), 1) : 1
+            progress: nextThreshold ? Math.min(Math.max((xp - threshold) / (nextThreshold - threshold), 0), 1) : 1
         },
         streak,
         exerciseRanks,
