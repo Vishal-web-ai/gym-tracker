@@ -205,6 +205,87 @@ export function computeStreak(sessions, now = new Date()) {
     return streak
 }
 
+// Consecutive "consistent" days: how many days the user has kept training,
+// counting backwards from today (or yesterday). Any scheduled workout day that
+// was skipped breaks the run and resets the counter to 0, while scheduled rest
+// days (weekdays with no exercises in the schedule) never break it. Today is
+// never treated as a miss because the workout may still be in progress. With no
+// schedule to define rest days, every missed day breaks the run.
+export function computeConsistencyStreak(sessions, schedule = {}, now = new Date()) {
+    const dayKeys = [...new Set(sessions.map(s => toDayKey(s.createdAt)).filter(Boolean))].sort()
+    if (!dayKeys.length) return 0
+    const attended = new Set(dayKeys)
+
+    // Weekday names that carry at least one scheduled exercise.
+    const workDays = new Set(
+        Object.entries(schedule || {})
+            .filter(([, list]) => Array.isArray(list) && list.length > 0)
+            .map(([day]) => day)
+    )
+    if (!workDays.size) return computeStreak(sessions, now)
+
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const last = new Date(`${dayKeys[dayKeys.length - 1]}T00:00:00`)
+
+    // A scheduled workout day missed AFTER the last attendance ends the run —
+    // today is excluded because it may still be in progress.
+    for (let d = new Date(last); d.getTime() < today.getTime(); d.setDate(d.getDate() + 1)) {
+        const key = toDayKey(d)
+        if (workDays.has(getDayKey(d)) && !attended.has(key)) return 0
+    }
+
+    // Count backwards from the last attendance. Every attended day counts; an
+    // unattended scheduled workout day breaks the run; rest days are skipped.
+    let streak = 0
+    let cursor = new Date(last)
+    while (true) {
+        if (attended.has(toDayKey(cursor))) streak += 1
+        else if (workDays.has(getDayKey(cursor))) break
+        cursor.setDate(cursor.getDate() - 1)
+    }
+    return streak
+}
+
+// All previous consistency runs (schedule-aware, same rule as
+// computeConsistencyStreak). Returns runs in chronological order as
+// { start, end, days, current }. Rest days never split a run; a missed
+// scheduled workout day closes it; today's pending workout day never closes it.
+export function computeConsistencyRuns(sessions, schedule = {}, now = new Date()) {
+    const attended = new Set(sessions.map(s => toDayKey(s.createdAt)).filter(Boolean))
+    if (!attended.size) return []
+
+    let workDays = new Set(
+        Object.entries(schedule || {})
+            .filter(([, list]) => Array.isArray(list) && list.length > 0)
+            .map(([day]) => day)
+    )
+    if (!workDays.size) workDays = new Set(DAY_KEYS)
+
+    const first = new Date(`${[...attended].sort()[0]}T00:00:00`)
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const todayKey = toDayKey(today)
+    const runs = []
+    let open = null
+    for (let d = new Date(first); d <= today; d.setDate(d.getDate() + 1)) {
+        const key = toDayKey(d)
+        const isWork = workDays.has(getDayKey(d))
+        const did = attended.has(key)
+        if (isWork && !did && key !== todayKey) {
+            open = null
+        } else if (did) {
+            if (!open) {
+                open = { start: key, end: key, days: 1 }
+                runs.push(open)
+            } else {
+                open.end = key
+                open.days += 1
+            }
+        }
+    }
+    if (open && runs.length) runs[runs.length - 1].current = true
+    return runs
+}
+
 // Check whether at least one session was saved today.
 export async function hasWorkoutToday() {
     const sessions = await getSessions()

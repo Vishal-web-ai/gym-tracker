@@ -17,7 +17,9 @@ import {
     getDayKey,
     getTodaysExercises,
     computeMonthlyCount,
-    computeStreak
+    computeStreak,
+    computeConsistencyStreak,
+    computeConsistencyRuns
 } from '../storage'
 import { dbPut } from '../idb'
 import { resetDb } from '../../test/resetDb'
@@ -166,5 +168,86 @@ describe('stats', () => {
 
     it('returns 0 for an empty history', () => {
         expect(computeStreak([], new Date('2026-03-10T12:00:00'))).toBe(0)
+    })
+
+    it('keeps the consistency count alive across scheduled rest days', () => {
+        // Mon, Tue, Thu, Fri are workdays (Wed + weekend rest).
+        const schedule = { monday: [{}], tuesday: [{}], thursday: [{}], friday: [{}] }
+        const now = new Date('2026-03-12T12:00:00') // Thursday
+        const sessions = [
+            at('2026-03-09T09:00:00'), // Mon
+            at('2026-03-10T09:00:00'), // Tue
+            at('2026-03-12T09:00:00')  // Thu
+        ]
+        expect(computeConsistencyStreak(sessions, schedule, now)).toBe(3)
+    })
+
+    it('resets to 0 when a scheduled workday before today was missed', () => {
+        const schedule = { monday: [{}], tuesday: [{}], thursday: [{}], friday: [{}] }
+        const now = new Date('2026-03-13T12:00:00') // Friday
+        const sessions = [
+            at('2026-03-09T09:00:00'), // Mon
+            at('2026-03-10T09:00:00')  // Tue — Thu was skipped
+        ]
+        expect(computeConsistencyStreak(sessions, schedule, now)).toBe(0)
+    })
+
+    it('keeps the count alive while todays workday is still pending', () => {
+        const schedule = { monday: [{}], tuesday: [{}], thursday: [{}], friday: [{}] }
+        const now = new Date('2026-03-13T12:00:00') // Friday
+        const sessions = [
+            at('2026-03-09T09:00:00'), // Mon
+            at('2026-03-10T09:00:00'), // Tue
+            at('2026-03-12T09:00:00')  // Thu
+        ]
+        expect(computeConsistencyStreak(sessions, schedule, now)).toBe(3)
+    })
+
+    it('fallbacks to strict consecutive days when no schedule is set', () => {
+        const now = new Date('2026-03-12T12:00:00')
+        const sessions = [at('2026-03-10T09:00:00'), at('2026-03-12T09:00:00')]
+        expect(computeConsistencyStreak(sessions, {}, now)).toBe(computeStreak(sessions, now))
+    })
+
+    it('returns runs that keep rest days inside one run', () => {
+        const schedule = { monday: [{}], tuesday: [{}], thursday: [{}], friday: [{}] }
+        const now = new Date('2026-03-13T12:00:00') // Friday
+        const sessions = [
+            at('2026-03-09T09:00:00'), // Mon
+            at('2026-03-10T09:00:00'), // Tue
+            at('2026-03-12T09:00:00')  // Thu
+        ]
+        const runs = computeConsistencyRuns(sessions, schedule, now)
+        expect(runs).toHaveLength(1)
+        expect(runs[0]).toMatchObject({ start: '2026-03-09', end: '2026-03-12', days: 3, current: true })
+    })
+
+    it('splits runs at a missed scheduled workday', () => {
+        const schedule = { monday: [{}], tuesday: [{}], wednesday: [{}], thursday: [{}], friday: [{}] }
+        const now = new Date('2026-03-13T12:00:00') // Friday
+        const sessions = [
+            at('2026-03-09T09:00:00'), // Mon
+            at('2026-03-10T09:00:00'), // Tue
+            at('2026-03-12T09:00:00')  // Thu — Wed was skipped
+        ]
+        const runs = computeConsistencyRuns(sessions, schedule, now)
+        expect(runs).toHaveLength(2)
+        expect(runs[0]).toMatchObject({ start: '2026-03-09', end: '2026-03-10', days: 2 })
+        expect(runs[0].current).toBeUndefined()
+        expect(runs[1]).toMatchObject({ start: '2026-03-12', end: '2026-03-12', days: 1, current: true })
+    })
+
+    it('splits strictly consecutive runs when no schedule is set', () => {
+        const now = new Date('2026-03-11T12:00:00') // Wednesday
+        const sessions = [at('2026-03-08T09:00:00'), at('2026-03-09T09:00:00'), at('2026-03-11T09:00:00')]
+        const runs = computeConsistencyRuns(sessions, {}, now)
+        expect(runs).toHaveLength(2)
+        expect(runs[0]).toMatchObject({ start: '2026-03-08', end: '2026-03-09', days: 2 })
+        expect(runs[0].current).toBeUndefined()
+        expect(runs[1]).toMatchObject({ start: '2026-03-11', end: '2026-03-11', days: 1, current: true })
+    })
+
+    it('returns no runs for an empty history', () => {
+        expect(computeConsistencyRuns([], {}, new Date('2026-03-11T12:00:00'))).toEqual([])
     })
 })

@@ -29,7 +29,8 @@ import {
     getSchedule,
     getCustomExercises,
     getTodaysExercises,
-    computeMonthlyCount,
+    computeConsistencyStreak,
+    computeConsistencyRuns,
     hasWorkoutToday
 } from '../services/storage'
 import { deleteMedia } from '../services/media'
@@ -138,7 +139,9 @@ const HomeScreen = () => {
     const challengeToastTimer = useRef(null)
     const [liveLevelUp, setLiveLevelUp] = useState(null)
     const [ladders, setLadders] = useState(null)
-    const [monthlyCount, setMonthlyCount] = useState(0)
+    const [consistencyDays, setConsistencyDays] = useState(0)
+    const [consistencyRuns, setConsistencyRuns] = useState([])
+    const [showStreaks, setShowStreaks] = useState(false)
     const [statKey, setStatKey] = useState(0)
     const [prs, setPrs] = useState([])
     const [prSearchOpen, setPrSearchOpen] = useState(false)
@@ -178,18 +181,20 @@ const HomeScreen = () => {
     }, [])
 
     const refreshStats = useCallback(() => {
-        getSessions()
-            .then(sessions => {
-                setMonthlyCount(computeMonthlyCount(sessions))
+        Promise.all([getSessions(), getSchedule()])
+            .then(([sessions, schedule]) => {
+                setConsistencyDays(computeConsistencyStreak(sessions, schedule))
+                setConsistencyRuns(computeConsistencyRuns(sessions, schedule))
             })
             .catch(() => {})
     }, [])
 
     const refreshSessionsAndPrs = useCallback(() => {
-        getSessions()
-            .then(list => {
+        Promise.all([getSessions(), getSchedule()])
+            .then(([list, schedule]) => {
                 setSessions(list)
-                setMonthlyCount(computeMonthlyCount(list))
+                setConsistencyDays(computeConsistencyStreak(list, schedule))
+                setConsistencyRuns(computeConsistencyRuns(list, schedule))
                 setPrs(computePrsFromSessions(list))
             })
             .catch(() => {})
@@ -206,10 +211,11 @@ const HomeScreen = () => {
     }, [])
 
     const handleDeletedSession = useCallback(() => {
-        getSessions()
-            .then(list => {
+        Promise.all([getSessions(), getSchedule()])
+            .then(([list, schedule]) => {
                 setSessions(list)
-                setMonthlyCount(computeMonthlyCount(list))
+                setConsistencyDays(computeConsistencyStreak(list, schedule))
+                setConsistencyRuns(computeConsistencyRuns(list, schedule))
                 setPrs(computePrsFromSessions(list))
                 return rebuildLadders(list, bodyweight)
             })
@@ -237,10 +243,11 @@ const HomeScreen = () => {
             setUserName(name)
             setProfileName(name)
         }).catch(() => {})
-        getSessions()
-            .then(sess => {
+        Promise.all([getSessions(), getSchedule()])
+            .then(([sess, schedule]) => {
                 setSessions(sess)
-                setMonthlyCount(computeMonthlyCount(sess))
+                setConsistencyDays(computeConsistencyStreak(sess, schedule))
+                setConsistencyRuns(computeConsistencyRuns(sess, schedule))
                 setPrs(computePrsFromSessions(sess))
             })
             .catch(() => {})
@@ -760,17 +767,16 @@ const HomeScreen = () => {
                         </motion.div>
 
                         <motion.div variants={cardVariants} initial="hidden" animate="show" className='w-full flex gap-3 max-w-lg h-[105px]'>
-                            <div className='flex-[0.4] border border-orange-500/30 rounded-2xl bg-[rgba(10,10,10,0.85)] px-4 py-2.5 flex flex-col items-center justify-center gap-1'>
+                            <div role="button" tabIndex={0} onClick={() => setShowStreaks(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowStreaks(true) } }} className='flex-[0.4] border border-orange-500/30 rounded-2xl bg-[rgba(10,10,10,0.85)] px-4 py-2.5 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-orange-500/10 transition-colors'>
                                 <div className='flex items-center gap-3'>
-                                    <div className='border border-orange-500/50 rounded-full w-7 h-7 flex items-center justify-center'>
-                                        <BicepsFlexed size={16} className='text-orange-500' fill='#f97316' />
+                                    <div className='border border-orange-500/50 rounded-full w-6 h-6 flex items-center justify-center'>
+                                        <BicepsFlexed size={13} className='text-orange-500' fill='#f97316' />
                                     </div>
                                     <div>
-                                        <p className='font-inter text-white/40 tracking-[1px] text-[6px]'>WORKOUT IN</p>
-                                        <p className='font-inter text-white/40 tracking-[1px] text-[6px]'>THIS MONTH</p>
+                                        <p className='font-inter text-white/40 tracking-[1px] text-[8px] whitespace-nowrap'>CURRENT STREAK</p>
                                     </div>
                                 </div>
-                                <p className='font-bebas text-orange-500 tracking-[2px] text-4xl leading-none'>{monthlyCount}</p>
+                                <p className='font-bebas text-orange-500 tracking-[2px] text-4xl leading-none'>{consistencyDays}</p>
                                 <p className='font-inter font-bold text-white/50 tracking-[1px] text-[11px] -mt-1'>Days</p>
                             </div>
 
@@ -1265,6 +1271,56 @@ const HomeScreen = () => {
                         setShowPhotoModal(true)
                     }}
                 />
+            )}
+
+            {/* Streak history modal */}
+            {showStreaks && (
+                <div
+                    className='fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4'
+                    onClick={() => setShowStreaks(false)}
+                >
+                    <div
+                        className='bg-[#1a1a1a] border border-orange-500/40 rounded-2xl p-5 w-full max-w-sm animate-popIn max-h-[85vh] overflow-y-auto'
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className='flex items-center justify-between mb-4'>
+                            <p className='font-bebas text-orange-500 tracking-[2px] text-xl'>STREAK HISTORY</p>
+                            <button
+                                onClick={() => setShowStreaks(false)}
+                                className='text-white/50 hover:text-white transition-colors cursor-pointer'
+                                aria-label='Close streak history'
+                            >
+                                <RiCloseLine size={20} />
+                            </button>
+                        </div>
+                        {consistencyRuns.length === 0 ? (
+                            <p className='font-mono text-white/40 text-xs text-center py-6'>No workouts logged yet.</p>
+                        ) : (
+                            <div className='flex flex-col gap-2.5'>
+                                {(consistencyRuns.length > 0 ? [...consistencyRuns].reverse() : []).map((run, i) => {
+                                    const label = `${run.start} to ${run.end}`
+                                    return (
+                                        <div key={`${run.start}-${run.end}-${i}`} className='border border-orange-500/25 rounded-xl px-3 py-2.5'>
+                                            <div className='flex items-center justify-between mb-1'>
+                                                <p className='font-mono text-white/70 text-xs'>{label}</p>
+                                                <span className='flex items-center gap-1'>
+                                                    {run.current && <p className='font-mono text-orange-400 text-[10px] tracking-widest'>CURRENT</p>}
+                                                    <p className='font-bebas text-orange-500 text-xl tracking-[2px]'>{run.days}</p>
+                                                    <p className='font-mono text-white/40 text-[10px]'>day{run.days === 1 ? '' : 's'}</p>
+                                                </span>
+                                            </div>
+                                            <div className='flex items-center gap-1'>
+                                                {Array.from({ length: Math.min(run.days, 50) }, (_, d) => (
+                                                    <div key={d} className={`h-2 rounded-sm flex-1 ${d < Math.min(run.days, 50) ? 'bg-orange-500' : ''}`} />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
             )}
         </div>
     )
