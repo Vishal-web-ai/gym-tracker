@@ -22,6 +22,14 @@ const XP_BURST = Array.from({ length: 12 }, (_, i) => {
     }
 })
 
+// Per-bonus display config: distinct accent color + copy for each reward type.
+const XP_BONUS_CONFIG = {
+    'extra-rep': { color: '#a78bfa', icon: 'zap', title: 'EXTRA REPS', glow: 'rgba(167,139,250,0.6)' },
+    'weight-pr': { color: '#ef4444', icon: 'flame', title: 'NEW PR', glow: 'rgba(239,68,68,0.6)' },
+    'timer-record': { color: '#22d3ee', icon: 'timer', title: 'DURATION RECORD', glow: 'rgba(34,211,238,0.6)' },
+    'count-pr': { color: '#fbbf24', icon: 'hash', title: 'NEW COUNT RECORD', glow: 'rgba(251,191,36,0.6)' }
+}
+
 const WeightCell = ({ value, onChange, disabled = false, suffix = '', bodyweight = 0 }) => {
     const inputRef = useRef(null)
     const showSuffix = suffix && bodyweight > 0 && (value === '' || String(bodyweight) === String(value))
@@ -860,16 +868,6 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
         onLiveLevelUp?.(info)
     }, [onLiveLevelUp])
 
-    useEffect(() => {
-        getRestSound().then(s => { if (s) setRestSound(s) }).catch(() => {})
-    }, [])
-
-    useEffect(() => {
-        if (!xpFlash) return
-        const t = setTimeout(() => setXpFlash(null), 1700)
-        return () => clearTimeout(t)
-    }, [xpFlash])
-
     const current = exercises.length === 0 ? 0 : Math.min(currentIndex, exercises.length - 1)
     const isLast = current === exercises.length - 1
     const selectedCount = plannedExercises.filter(ex => exercises.some(e => e.id === ex.id)).length
@@ -1148,40 +1146,58 @@ const SessionTracker = ({ exercises = [], plannedExercises = [], onRemove, onAdd
             )}
 
             {/* Full-screen dim + XP flash */}
-            {xpFlash && (
-                <div key={xpFlash.id} className='fixed inset-0 z-[70] pointer-events-none'>
-                    <motion.div
-                        className='absolute inset-0 bg-black/70'
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: [0, 1, 1, 0] }}
-                        transition={{ duration: 1.7, times: [0, 0.15, 0.65, 1] }}
-                    />
-                    <div className='absolute right-4 top-[28%] rotate-[20deg] animate-xpFlash'>
-                        <div className='relative flex items-center gap-1.5'>
-                            {XP_BURST.map(p => (
-                                <motion.span
-                                    key={p.id}
-                                    className='absolute rounded-sm'
-                                    style={{ width: p.size, height: p.size, background: p.color, top: '50%', left: '50%' }}
-                                    initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-                                    animate={{ x: p.x, y: p.y, opacity: 0, scale: 0.5, rotate: 180 }}
-                                    transition={{ duration: 0.7, delay: p.delay, ease: 'easeOut' }}
+            {xpFlash && (() => {
+                const cfg = XP_BONUS_CONFIG[xpFlash.type] || XP_BONUS_CONFIG['extra-rep']
+                const Icon = xpFlash.type === 'weight-pr' ? Flame : xpFlash.type === 'timer-record' ? Timer : xpFlash.type === 'count-pr' ? Hash : Zap
+                return (
+                    <div key={xpFlash.id} className='fixed inset-0 z-[70] pointer-events-none'>
+                        <motion.div
+                            className='absolute inset-0 bg-black/70'
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: [0, 1, 1, 0] }}
+                            transition={{ duration: 1.7, times: [0, 0.15, 0.65, 1] }}
+                        />
+                        <div className='absolute right-4 top-[28%] rotate-[20deg] animate-xpFlash'>
+                            <div className='relative flex items-center gap-1.5'>
+                                <motion.div
+                                    className='absolute rounded-full blur-xl'
+                                    style={{ background: cfg.glow }}
+                                    initial={{ opacity: 0, scale: 0.4 }}
+                                    animate={{ opacity: [0, 0.9, 0.5, 0], scale: [0.4, 1.4, 1.2, 1.6] }}
+                                    transition={{ duration: 0.9, ease: 'easeOut' }}
                                 />
-                            ))}
-                            <div className='flex items-center gap-2'>
-                                {xpFlash.type === 'weight-pr' && <Flame size={18} className='text-orange-400' />}
-                                {xpFlash.type === 'extra-rep' && <Zap size={18} className='text-orange-400' />}
-                                {xpFlash.type === 'timer-record' && <Timer size={18} className='text-orange-400' />}
-                                {xpFlash.type === 'count-pr' && <Hash size={18} className='text-orange-400' />}
-                                <span className='font-bold text-orange-300/80 text-2xl leading-none'>
-                                    {xpFlash.type === 'weight-pr' ? 'NEW PR' : xpFlash.type === 'extra-rep' ? 'EXTRA REPS' : xpFlash.type === 'count-pr' ? 'NEW COUNT RECORD' : 'DURATION RECORD'}
-                                </span>
-                                <span className='font-bold text-orange-400 text-2xl tracking-wide leading-none drop-shadow-[0_0_12px_rgba(249,115,22,0.6)]'>+{xpFlash.points} XP</span>
+                                {XP_BURST.map((p, i) => (
+                                    <motion.span
+                                        key={p.id}
+                                        className='absolute rounded-sm'
+                                        style={{ width: p.size + 2, height: p.size + 2, background: cfg.color, top: '50%', left: '50%' }}
+                                        initial={{ x: 0, y: 0, opacity: 1, scale: cfg.color === p.color ? 1 : 0.2 }}
+                                        animate={{ x: p.x, y: p.y, opacity: 0, scale: 0.5, rotate: 180 }}
+                                        transition={{ duration: 0.7, delay: i * 0.03, ease: 'easeOut' }}
+                                    />
+                                ))}
+                                <motion.div
+                                    className='relative flex flex-col items-center gap-1.5'
+                                    initial={{ scale: 0.6 }}
+                                    animate={{ scale: [0.6, 1.15, 1] }}
+                                    transition={{ duration: 0.4, times: [0, 0.6, 1], ease: 'easeOut' }}
+                                    style={{ opacity: 1 }}
+                                >
+                                    <div className='flex items-center gap-1.5'>
+                                        <Icon size={18} style={{ color: cfg.color }} />
+                                        <span className='font-bold text-2xl leading-none' style={{ color: cfg.color, opacity: 0.9 }}>
+                                            {cfg.title}
+                                        </span>
+                                    </div>
+                                    <span className='font-bold text-3xl tracking-wide leading-none text-white' style={{ textShadow: `0 0 12px ${cfg.glow}` }}>
+                                        +{xpFlash.points} XP
+                                    </span>
+                                </motion.div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            })()}
         </div>
     )
 }
