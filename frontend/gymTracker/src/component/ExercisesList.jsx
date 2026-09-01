@@ -355,7 +355,7 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
                         {(formData.mode === 'weight' || formData.mode === 'bodyweight' || formData.mode === 'counts') && (
                             <>
                                 <div>
-                                    <p className='text-[10px] font-mono tracking-widest text-orange-500/50 mb-1'>
+                                    <p className='text-[10px] font-mono tracking-widest text-teal-400/60 mb-1'>
                                         {formData.mode === 'weight' ? 'START WEIGHT (KG)' : formData.mode === 'bodyweight' ? 'START ADDED LOAD (KG)' : 'START COUNT (REPS)'}
                                     </p>
                                     <input
@@ -367,11 +367,11 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
                                             if (v === '' || /^\d*\.?\d*$/.test(v)) setFormData(p => ({ ...p, startWeight: v }))
                                         }}
                                         placeholder='Optional'
-                                        className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2.5 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
+                                        className='w-full bg-black/50 border border-teal-500/30 rounded-lg px-3 py-2.5 text-white placeholder-teal-500/50 outline-none focus:border-teal-500 font-mono text-sm'
                                     />
                                 </div>
                                 <div>
-                                    <p className='text-[10px] font-mono tracking-widest text-orange-500/50 mb-1'>
+                                    <p className='text-[10px] font-mono tracking-widest text-teal-400/60 mb-1'>
                                         {formData.mode === 'weight' ? 'INCREMENT (KG)' : formData.mode === 'bodyweight' ? 'INCREMENT LOAD (KG)' : 'INCREMENT (REPS)'}
                                     </p>
                                     <input
@@ -383,7 +383,7 @@ const ExercisesList = ({ onSelectExercise, onClose }) => {
                                             if (v === '' || /^\d*\.?\d*$/.test(v)) setFormData(p => ({ ...p, incrementWeight: v }))
                                         }}
                                         placeholder='Optional'
-                                        className='w-full bg-black/50 border border-orange-500/30 rounded-lg px-3 py-2.5 text-white placeholder-orange-500/50 outline-none focus:border-orange-500 font-mono text-sm'
+                                        className='w-full bg-black/50 border border-teal-500/30 rounded-lg px-3 py-2.5 text-white placeholder-teal-500/50 outline-none focus:border-teal-500 font-mono text-sm'
                                     />
                                 </div>
                             </>
